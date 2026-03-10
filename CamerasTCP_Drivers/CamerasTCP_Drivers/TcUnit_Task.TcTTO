@@ -2,7 +2,7 @@
 <TcPlcObject Version="1.1.0.1">
   <Task Name="TcUnit_Task" Id="{e86f526a-c22e-446a-8a14-b9866f0d2395}">
     <!--CycleTime in micro seconds.-->
-    <CycleTime>10000</CycleTime>
+    <CycleTime>1000</CycleTime>
     <Priority>25</Priority>
     <PouCall>
       <Name>PRG_TEST</Name>

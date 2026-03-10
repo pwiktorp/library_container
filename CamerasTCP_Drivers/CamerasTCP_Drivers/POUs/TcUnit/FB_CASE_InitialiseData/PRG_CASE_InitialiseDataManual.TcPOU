@@ -25,7 +25,7 @@ VAR
 	
 	
 	(* In/Out *)
-	stProductInstruction	: ST_PCM_Status := (sFieldName := 'dupa', nOutersPerCase := 50);
+	stProductInstruction	: ST_PCM_Status := (sFieldName := 'PCM_Status_name', nOutersPerCase := 50);
 	stCACData 				: ST_CAC_Data;	(* Case Queue *)
 	
 	(* Outputs *)

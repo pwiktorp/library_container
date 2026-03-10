@@ -4,7 +4,10 @@
     <Declaration><![CDATA[FUNCTION_BLOCK FB_CASE_ValidateContent
 VAR_INPUT
 	bExecute 					: BOOL;
+	bIsDuplicateOuters			: BOOL;
+	bIsDuplicatePacks			: BOOL;
 	stCTDateTime				: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	stOuterDataNotFound			: ST_RejectItems;
 END_VAR
 VAR_IN_OUT
 
@@ -78,7 +81,15 @@ CASE eState OF
 			sRejectCode 		:= '';
 			nValidationIndex	:= 0;
 
-			eState := E_CAC_VALIDATECASE;
+			IF bIsDuplicateOuters OR bIsDuplicatePacks THEN
+				bError := TRUE;
+				nErrorID := 01;
+				
+				eState := E_CAC_DONE;
+			ELSE
+				eState := E_CAC_VALIDATECASE;
+			END_IF
+			
 
 		(* bExecute has been reset *)
 		ELSIF bExecute = FALSE THEN
@@ -94,13 +105,27 @@ CASE eState OF
 	E_CAC_VALIDATECASE:
 
 		(* Outers in Case is correct *)
-		IF stCACData.NumberOfOuters = stProductInstruction.nOutersPerCase THEN
+		IF stCACData.NumberOfOuters = stProductInstruction.nOutersPerCase 	AND 
+	 		stProductInstruction.nOutersPerCase <> 0 						THEN
 
 			(* Outer aggregation enabled *)
-			IF stCACData.CodingAndTrackingMode >= 7 THEN
+			IF stCACData.CodingAndTrackingMode >= 7 		THEN 
+				
+				IF stProductInstruction.nPacksPerCase <> 0 		AND 
+					stProductInstruction.nPacksPerOuter <> 0 	THEN
 
-				eState := E_CAC_VALIDATEOUTER;
-
+					eState := E_CAC_VALIDATEOAC;
+				ELSE
+					
+					bError := TRUE;
+					eErrorState := eState;
+					nErrorID := 10;
+					
+					stCACData.CaseRejectCode 	:= stCaseRejectReasons.stCaseNoCaseData.sMetsDisplayCode;
+					stCACData.CaseRejectID 		:= stCaseRejectReasons.stCaseNoCaseData.nRejectID;
+					
+					eState := E_CAC_DONE;
+				END_IF
 			(* OAC data disabled *)
 			ELSE
 				eState := E_CAC_DONE;
@@ -114,7 +139,9 @@ CASE eState OF
 			eErrorState := eState;
 
 			(* no validation code read *)
-			IF stCACData.NumberOfOuters = -1 THEN
+			IF stCACData.NumberOfOuters = -1 			OR // Outers number exceed cMAX_OUTERS_PER_CASE 
+				stCACData.NumberOfOuters = 0  			OR 
+				stProductInstruction.nOutersPerCase = 0 THEN		
 
 				(* error code *)
 				nErrorID := 11;
@@ -142,7 +169,7 @@ CASE eState OF
 
 				(*eState := E_CAC_DONE;*)
 
-			ELSIF stCACData.NumberOfOuters = -3 THEN
+			ELSIF stCACData.NumberOfOuters = -3 THEN		//b5	Outer Code - Val Index error found
 
 				(* error code *)
 				nErrorID := 13;
@@ -183,218 +210,64 @@ CASE eState OF
 			eState := E_CAC_DONE;
 		END_IF
 
-	(* validate RetailSKU for each Outer *)
-	E_CAC_VALIDATEOUTER:
-
-		(* initialise counters *)
-		nOutGTIN		:= 0;
-		nOutBand		:= 0;
-		nRetailSKU 		:= 0;
-		nSerialCode 	:= 0;
-		nTotalInvalide	:= 0;
-
-		(* for each Outer *)
-		FOR nOuterIndex := 1 TO stCACData.NumberOfOuters DO
-
-			fbValidateOuter(	sFullCode := stCACData.Outer[nOuterIndex].Barcode,
-							stCodeInfo := stCodeInfo_Outer,
-							stProductInstruction := stProductInstruction);
-
-			IF fbValidateOuter.bGtinOK  THEN
-
-				(* Outer has valid GTIN *)
-				nOutGTIN := nOutGTIN + 1;
-			END_IF
-
-			IF fbValidateOuter.bBrandOK  THEN
-
-				(* Outer has valid GTIN *)
-				nOutBand := nOutBand + 1;
-			END_IF
-
-			IF fbValidateOuter.bSerialCodeOK  THEN
-
-				(* Outer has valid SerialCode *)
-				nSerialCode := nSerialCode + 1;
-			END_IF
-
-			IF fbValidateOuter.bRskuOK  THEN
-
-				(* Outer has valid RetailSKU *)
-				nRetailSKU := nRetailSKU + 1;
-			END_IF
-
-			IF fbValidateOuter.bValidationOK THEN
-
-				(* Total number of invalide outers - whatever reaso*)
-				nTotalInvalide := nTotalInvalide +1;
-			END_IF
-		END_FOR
-
-
-		(* all Outers have valid GTIN *)
-		IF  nOutGTIN = stProductInstruction.nOutersPerCase THEN
-			(* all Outers have valid Brand *)
-			IF  nOutBand = stProductInstruction.nOutersPerCase THEN
-				(* all Outers have valid RetailSKU *)
-				IF  nRetailSKU = stProductInstruction.nOutersPerCase  THEN
-					(* all Outers have valid SerialCode *)
-					IF  nSerialCode = stProductInstruction.nOutersPerCase THEN
-						(*If total invalide Outers inside a case*)
-						IF  nTotalInvalide = stProductInstruction.nOutersPerCase THEN
-	
-							eState := E_CAC_VALIDATEOAC;
-	
-						ELSE
-							(* RejectCode *)
-							bError := TRUE;
-							nErrorID := 16;
-							eErrorState := eState;
-
-							aStatusErrorVal[0] 		:= F_StringAddPrefix(INT_TO_STRING(stCACData.NumberOfOuters - nTotalInvalide),2,'0');
-							aRejectCodePointer[0] 	:= 'nn';
-						
-							stCACData.CaseRejectCode 	:= F_CODE_AssignValToStringWithPrefix(stCaseRejectReasons.stINVError.sMetsDisplayCode, aStatusErrorVal, aRejectCodePointer, 2, '0');
-							stCACData.CaseRejectID 		:= stCaseRejectReasons.stINVError.nRejectID;
-							
-							eState := E_CAC_DONE;
-
-						END_IF
-					(* 1 or more Outers have incorrect SerialCode *)
-					ELSE
-		
-						(* RejectCode *)
-						bError := TRUE;
-						nErrorID := 17;
-						eErrorState := eState;
-	
-						(* generate reject string *)
-	
-						aStatusErrorVal[0] 		:= F_StringAddPrefix(INT_TO_STRING(stCACData.NumberOfOuters - nSerialCode),2,'0');
-						aRejectCodePointer[0] 	:= 'nn';
-	
-						stCACData.CaseRejectCode 	:= F_CODE_AssignValToStringWithPrefix(stCaseRejectReasons.stOuterSerialError.sMetsDisplayCode, aStatusErrorVal, aRejectCodePointer, 2, '0');
-						stCACData.CaseRejectID 		:= stCaseRejectReasons.stOuterSerialError.nRejectID;
-					
-						eState := E_CAC_DONE;
-	
-					END_IF
-	
-				(* 1 or more Outers with invalid RetailSKU *)
-				ELSE
-		
-					(* RejectCode *)
-					bError := TRUE;
-					nErrorID := 18;
-					eErrorState := eState;
-		
-					(* generate reject string *)
-	
-					aStatusErrorVal[0] 		:= F_StringAddPrefix(INT_TO_STRING(stCACData.NumberOfOuters - nRetailSKU),2,'0');
-					aRejectCodePointer[0] 	:= 'nn';
-		
-					stCACData.CaseRejectCode 	:= F_CODE_AssignValToStringWithPrefix(stCaseRejectReasons.stOuterRSKUError.sMetsDisplayCode, aStatusErrorVal, aRejectCodePointer, 2, '0');
-					stCACData.CaseRejectID 		:= stCaseRejectReasons.stOuterRSKUError.nRejectID;
-					
-					eState := E_CAC_DONE;
-	
-				END_IF
-			ELSE
-				(* RejectCode *)
-				bError := TRUE;
-				nErrorID := 19;
-				eErrorState := eState;
-	
-				(* generate reject string *)
-
-				aStatusErrorVal[0] 		:= F_StringAddPrefix(INT_TO_STRING(stCACData.NumberOfOuters - nOutBand),2,'0');
-				aRejectCodePointer[0] 	:= 'nn';
-	
-				stCACData.CaseRejectCode 	:= F_CODE_AssignValToStringWithPrefix(stCaseRejectReasons.stOuterBrandError.sMetsDisplayCode, aStatusErrorVal, aRejectCodePointer, 2, '0');
-				stCACData.CaseRejectID 		:= stCaseRejectReasons.stOuterBrandError.nRejectID;
-				
-				eState := E_CAC_DONE;
-			END_IF
-		ELSE
-		(* RejectCode *)
-			bError := TRUE;
-			nErrorID := 20;
-			eErrorState := eState;
-
-			(* generate reject string *)
-
-			aStatusErrorVal[0] 		:= F_StringAddPrefix(INT_TO_STRING(stCACData.NumberOfOuters - nOutGTIN),2,'0');
-			aRejectCodePointer[0] 	:= 'nn';
-
-			stCACData.CaseRejectCode 	:= F_CODE_AssignValToStringWithPrefix(stCaseRejectReasons.stOuterGTINError.sMetsDisplayCode, aStatusErrorVal, aRejectCodePointer, 2, '0');
-			stCACData.CaseRejectID 		:= stCaseRejectReasons.stOuterGTINError.nRejectID;
-			
-			eState := E_CAC_DONE;
-
-		END_IF
-
 (* check OAC data was loaded *)
 	E_CAC_VALIDATEOAC:
 
 		(* initialise counter *)
 		nValidOACData := 0;
-
+		
 		(* for each Outer *)
 		FOR nOuterIndex := 1 TO stCACData.NumberOfOuters DO
 
-			IF stCACData.CodingAndTrackingMode = 7 THEN
-				(* OAC mode >= CAC mode, OAC data will contain all data required for CAC mode *)
-				IF  stCACData.Outer[nOuterIndex].DataSource <>  'NO_R' AND stCACData.Outer[nOuterIndex].CodingAndTrackingMode = stCACData.CodingAndTrackingMode  THEN
-					(* count Outers with valid OAC data *)
-					nValidOACData := nValidOACData + 1;
-				END_IF
-			ELSIF stCACData.CodingAndTrackingMode = 11 THEN
-			(* CAC mode -> OAC data will contain all data required for CAC mode *)
-				IF stCACData.Outer[nOuterIndex].DataSource <>  'NO_R'  AND stCACData.Outer[nOuterIndex].OuterRejectCode = 'OK'  THEN
-					(* count Outers with valid OAC data *)
-					nValidOACData := nValidOACData + 1;
-				END_IF
+			(*OAC data will contain all data required barcode validation *)
+			IF  stCACData.Outer[nOuterIndex].OuterRejectID <> stOuterDataNotFound.nRejectID AND 
+					stCACData.Outer[nOuterIndex].Barcode <> '' 								THEN
+				(* count Outers with valid OAC data *)
+				nValidOACData := nValidOACData + 1;
 			END_IF
+
 		END_FOR
 
 		(* all Outers with valid OAC data *)
-		IF (nValidOACData *100 ) / stProductInstruction.nOutersPerCase   >=  stProductInstruction.nCaseAcceptanceLevelOuters THEN
-
+		IF nValidOACData = stProductInstruction.nOutersPerCase THEN
+			
+			eState := E_CAC_VALIDATEOUTER;
+			
+		ELSIF F_SafeDIV(nValidOACData * 100 ,  stProductInstruction.nOutersPerCase)   >=  stProductInstruction.nCaseAcceptanceLevelOuters THEN
 
 			FOR nOuterIndex := 1 TO stCACData.NumberOfOuters DO
 
-				IF stCACData.CodingAndTrackingMode >= 7 THEN
-					(* CAC mode -> OAC data will contain all data required for CAC mode *)
-						IF stCACData.Outer[nOuterIndex].DataSource =  'NO_R'  THEN
+				IF stCACData.Outer[nOuterIndex].OuterRejectID = stOuterDataNotFound.nRejectID  THEN
 
-							stCACData.Outer[nOuterIndex].ProductionDate := F_StringWildcard('#YYYYMMDD#', stCTDateTime.sSystemTime);
-							stCACData.Outer[nOuterIndex].ProductionTime := F_StringWildcard('#hhmmss#', stCTDateTime.sSystemTime);
-							stCACData.Outer[nOuterIndex].ProductionTimeOffset := F_SYSTEM_SystemTimeOffsetToHHMM(stCTDateTime.nSystemTimeOffset);
-		
-							stCACData.Outer[nOuterIndex].OuterTimeStamp :=F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset );
-							stCACData.Outer[nOuterIndex].RetailSKU := stProductInstruction.sRetailSKU;
-							stCACData.Outer[nOuterIndex].OuterMachine.ProductionSite :=  stProductInstruction.sProductionSite;
-							stCACData.Outer[nOuterIndex].OuterMachine.ProductionLine := stProductInstruction.sProductionLine;
-							stCACData.Outer[nOuterIndex].BatchNumber := stProductInstruction.sBatchNumber;
-							stCACData.Outer[nOuterIndex].CodingAndTrackingMode := stProductInstruction.nOpMode;
+					stCACData.Outer[nOuterIndex].ProductionDate := F_StringWildcard('#YYYYMMDD#', stCTDateTime.sSystemTime);
+					stCACData.Outer[nOuterIndex].ProductionTime := F_StringWildcard('#hhmmss#', stCTDateTime.sSystemTime);
+					stCACData.Outer[nOuterIndex].ProductionTimeOffset := F_SYSTEM_SystemTimeOffsetToHHMM(stCTDateTime.nSystemTimeOffset);
 
-							stCACData.Outer[nOuterIndex].NumberOfPacks	:=   stProductInstruction.nPacksPerOuter;
-							stCACData.Outer[nOuterIndex].AcceptanceLevel	:= 	stProductInstruction.nAcceptanceLevel;
+					stCACData.Outer[nOuterIndex].OuterTimeStamp :=F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset );
+					stCACData.Outer[nOuterIndex].RetailSKU := stProductInstruction.sRetailSKU;
+					stCACData.Outer[nOuterIndex].OuterMachine.ProductionSite :=  stProductInstruction.sProductionSite;
+					stCACData.Outer[nOuterIndex].OuterMachine.ProductionLine := stProductInstruction.sProductionLine;
+					stCACData.Outer[nOuterIndex].BatchNumber := stProductInstruction.sBatchNumber;
+					stCACData.Outer[nOuterIndex].CodingAndTrackingMode := stProductInstruction.nOpMode;
 
-							stCACData.Outer[nOuterIndex].OuterRejectCode := 'OK';
-							stCACData.Outer[nOuterIndex].OuterRejectID := 0;
-							stCACData.Outer[nOuterIndex].DataSource :=  '3DC';
+					stCACData.Outer[nOuterIndex].NumberOfPacks	:=   stProductInstruction.nPacksPerOuter;
+					stCACData.Outer[nOuterIndex].AcceptanceLevel	:= 	stProductInstruction.nAcceptanceLevel;
 
-						ELSIF stCACData.Outer[nOuterIndex].DataSource <>  'NO_R'  AND stCACData.Outer[nOuterIndex].OuterRejectCode <> 'OK' THEN
+					stCACData.Outer[nOuterIndex].OuterRejectCode := 'OK';
+					stCACData.Outer[nOuterIndex].OuterRejectID := 0;
+					stCACData.Outer[nOuterIndex].DataSource :=  '3DC';
 
-							stCACData.Outer[nOuterIndex].OuterRejectCode := 'OK';
-							stCACData.Outer[nOuterIndex].OuterRejectID := 0;
-							stCACData.Outer[nOuterIndex].DataSource :=  '3DCR';
-						END_IF
+				ELSIF stCACData.Outer[nOuterIndex].OuterRejectID <> stOuterDataNotFound.nRejectID 	AND 
+						stCACData.Outer[nOuterIndex].OuterRejectCode <> 'OK' 						THEN
+
+					stCACData.Outer[nOuterIndex].OuterRejectCode := 'OK';
+					stCACData.Outer[nOuterIndex].OuterRejectID := 0;
+					stCACData.Outer[nOuterIndex].DataSource :=  '3DCR';
 				END_IF
+	
 			END_FOR
 
-			eState := E_CAC_VALIDATEPACK;
+			eState := E_CAC_VALIDATEOUTER;
 
 		(* 1 or more Outers with missing OAC data *)
 		ELSE
@@ -414,6 +287,156 @@ CASE eState OF
 
 			eState := E_CAC_DONE;
 		END_IF
+		
+		
+	(* validate RetailSKU for each Outer *)
+	E_CAC_VALIDATEOUTER:
+
+		(* initialise counters *)
+		nOutGTIN		:= 0;
+		nOutBand		:= 0;
+		nRetailSKU 		:= 0;
+		nSerialCode 	:= 0;
+		nTotalInvalide	:= 0;
+
+		(* for each Outer *)
+		FOR nOuterIndex := 1 TO stCACData.NumberOfOuters DO
+
+			fbValidateOuter(	sFullCode := stCACData.Outer[nOuterIndex].Barcode,
+							stCodeInfo := stCodeInfo_Outer,
+							stProductInstruction := stProductInstruction);
+
+			IF fbValidateOuter.bGtinOK OR stCACData.Outer[nOuterIndex].DataSource =  '3DC'  THEN
+
+				(* Outer has valid GTIN *)
+				nOutGTIN := nOutGTIN + 1;
+			END_IF
+
+			IF fbValidateOuter.bBrandOK OR stCACData.Outer[nOuterIndex].DataSource =  '3DC'  THEN
+
+				(* Outer has valid GTIN *)
+				nOutBand := nOutBand + 1;
+			END_IF
+
+			IF fbValidateOuter.bSerialCodeOK OR stCACData.Outer[nOuterIndex].DataSource =  '3DC'  THEN
+
+				(* Outer has valid SerialCode *)
+				nSerialCode := nSerialCode + 1;
+			END_IF
+
+			IF fbValidateOuter.bRskuOK OR stCACData.Outer[nOuterIndex].DataSource =  '3DC'  THEN
+
+				(* Outer has valid RetailSKU *)
+				nRetailSKU := nRetailSKU + 1;
+			END_IF
+
+			IF fbValidateOuter.bValidationOK OR stCACData.Outer[nOuterIndex].DataSource =  '3DC' THEN
+
+				(* Total number of invalide outers - whatever reaso*)
+				nTotalInvalide := nTotalInvalide +1;
+			END_IF
+		END_FOR
+
+		(* all Outers have valid GTIN *)
+		IF  nOutGTIN = stProductInstruction.nOutersPerCase THEN
+			(* all Outers have valid Brand *)
+			IF  nOutBand = stProductInstruction.nOutersPerCase THEN
+				(* all Outers have valid RetailSKU *)
+				IF  nRetailSKU = stProductInstruction.nOutersPerCase  THEN
+					(* all Outers have valid SerialCode *)
+					IF  nSerialCode = stProductInstruction.nOutersPerCase THEN
+						(*If total invalide Outers inside a case*)
+						IF  nTotalInvalide = stProductInstruction.nOutersPerCase THEN
+	
+							eState := E_CAC_VALIDATEPACK;
+	
+						ELSE
+							(* RejectCode *)
+							bError := TRUE;
+							nErrorID := 31;
+							eErrorState := eState;
+
+							aStatusErrorVal[0] 		:= F_StringAddPrefix(INT_TO_STRING(stCACData.NumberOfOuters - nTotalInvalide),2,'0');
+							aRejectCodePointer[0] 	:= 'nn';
+						
+							stCACData.CaseRejectCode 	:= F_CODE_AssignValToStringWithPrefix(stCaseRejectReasons.stINVError.sMetsDisplayCode, aStatusErrorVal, aRejectCodePointer, 2, '0');
+							stCACData.CaseRejectID 		:= stCaseRejectReasons.stINVError.nRejectID;
+							
+							eState := E_CAC_DONE;
+
+						END_IF
+					(* 1 or more Outers have incorrect SerialCode *)
+					ELSE
+		
+						(* RejectCode *)
+						bError := TRUE;
+						nErrorID := 32;
+						eErrorState := eState;
+	
+						(* generate reject string *)
+	
+						aStatusErrorVal[0] 		:= F_StringAddPrefix(INT_TO_STRING(stCACData.NumberOfOuters - nSerialCode),2,'0');
+						aRejectCodePointer[0] 	:= 'nn';
+	
+						stCACData.CaseRejectCode 	:= F_CODE_AssignValToStringWithPrefix(stCaseRejectReasons.stOuterSerialError.sMetsDisplayCode, aStatusErrorVal, aRejectCodePointer, 2, '0');
+						stCACData.CaseRejectID 		:= stCaseRejectReasons.stOuterSerialError.nRejectID;
+					
+						eState := E_CAC_DONE;
+	
+					END_IF
+	
+				(* 1 or more Outers with invalid RetailSKU *)
+				ELSE
+		
+					(* RejectCode *)
+					bError := TRUE;
+					nErrorID := 33;
+					eErrorState := eState;
+		
+					(* generate reject string *)
+	
+					aStatusErrorVal[0] 		:= F_StringAddPrefix(INT_TO_STRING(stCACData.NumberOfOuters - nRetailSKU),2,'0');
+					aRejectCodePointer[0] 	:= 'nn';
+		
+					stCACData.CaseRejectCode 	:= F_CODE_AssignValToStringWithPrefix(stCaseRejectReasons.stOuterRSKUError.sMetsDisplayCode, aStatusErrorVal, aRejectCodePointer, 2, '0');
+					stCACData.CaseRejectID 		:= stCaseRejectReasons.stOuterRSKUError.nRejectID;
+					
+					eState := E_CAC_DONE;
+	
+				END_IF
+			ELSE
+				(* RejectCode *)
+				bError := TRUE;
+				nErrorID := 34;
+				eErrorState := eState;
+	
+				(* generate reject string *)
+
+				aStatusErrorVal[0] 		:= F_StringAddPrefix(INT_TO_STRING(stCACData.NumberOfOuters - nOutBand),2,'0');
+				aRejectCodePointer[0] 	:= 'nn';
+	
+				stCACData.CaseRejectCode 	:= F_CODE_AssignValToStringWithPrefix(stCaseRejectReasons.stOuterBrandError.sMetsDisplayCode, aStatusErrorVal, aRejectCodePointer, 2, '0');
+				stCACData.CaseRejectID 		:= stCaseRejectReasons.stOuterBrandError.nRejectID;
+				
+				eState := E_CAC_DONE;
+			END_IF
+		ELSE
+		(* RejectCode *)
+			bError := TRUE;
+			nErrorID := 35;
+			eErrorState := eState;
+
+			(* generate reject string *)
+
+			aStatusErrorVal[0] 		:= F_StringAddPrefix(INT_TO_STRING(stCACData.NumberOfOuters - nOutGTIN),2,'0');
+			aRejectCodePointer[0] 	:= 'nn';
+
+			stCACData.CaseRejectCode 	:= F_CODE_AssignValToStringWithPrefix(stCaseRejectReasons.stOuterGTINError.sMetsDisplayCode, aStatusErrorVal, aRejectCodePointer, 2, '0');
+			stCACData.CaseRejectID 		:= stCaseRejectReasons.stOuterGTINError.nRejectID;
+			
+			eState := E_CAC_DONE;
+
+		END_IF
 
 	(* check that PackCode data is included with OAC data *)
 	E_CAC_VALIDATEPACK:
@@ -425,13 +448,19 @@ CASE eState OF
 		FOR nOuterIndex := 1 TO stCACData.NumberOfOuters DO
 
 			(* count Outers with PackCode data - assume- outer reject station working fine and only good outers in case, NumberOfLinkedPacks= good pack  *)
-			nValidPackData := nValidPackData + stCACData.Outer[nOuterIndex].NumberOfLinkedPacks ;
+			//nValidPackData := nValidPackData + stCACData.Outer[nOuterIndex].NumberOfLinkedPacks ;
 
 			FOR nPackIndex := 1 TO stCACData.Outer[nOuterIndex].NumberOfPacks DO
 
-				IF stCACData.Outer[nOuterIndex].PackCodeStatus[nPackIndex].1
-					AND stCACData.Outer[nOuterIndex].PackCodeStatus[nPackIndex].2
-					AND stCACData.Outer[nOuterIndex].PackCodeStatus[nPackIndex].3	THEN
+				IF stCACData.Outer[nOuterIndex].PackCodeStatus[nPackIndex].5 	OR 
+					stCACData.Outer[nOuterIndex].PackCodeStatus[nPackIndex].6	THEN
+					
+					nValidPackData	:= nValidPackData + 1;
+				END_IF
+				
+				IF stCACData.Outer[nOuterIndex].PackCodeStatus[nPackIndex].1	AND
+					stCACData.Outer[nOuterIndex].PackCodeStatus[nPackIndex].2	AND
+					stCACData.Outer[nOuterIndex].PackCodeStatus[nPackIndex].3	THEN
 
 					nValidPackData := -1;
 					EXIT;
@@ -441,11 +470,10 @@ CASE eState OF
 			IF nValidPackData = -1 THEN
 				EXIT;
 			END_IF
-
 		END_FOR
 
 		(* Outers with PackCode data is correct *)
-		IF (nValidPackData *100 ) /  stProductInstruction.nPacksPerCase  >=   stProductInstruction.nCaseAcceptanceLevelPacks   THEN
+		IF F_SafeDIV(nValidPackData * 100 ,  stProductInstruction.nPacksPerCase)  >=   stProductInstruction.nCaseAcceptanceLevelPacks   THEN
 
 			FOR nOuterIndex := 1 TO stCACData.NumberOfOuters DO
 
@@ -478,7 +506,7 @@ CASE eState OF
 
 			(* RejectCode *)
 			bError := TRUE;
-			nErrorID := 23;
+			nErrorID := 41;
 			eErrorState := eState;
 	
 			aStatusErrorVal[0] 		:= 'PK';
@@ -495,12 +523,11 @@ CASE eState OF
 
 			(* update status *)
 			bError := TRUE;
-			nErrorID := 24;
+			nErrorID := 42;
 			eErrorState := eState;
 
-			(* generate reject string *)			(* generate reject string *)
-			(*stCACData.RejectCode := F_CONCAT3('XXXPACK', F_StringAddPrefix(INT_TO_STRING(stCACData.NumberOfOuters - nValidPackData), 2, '0'), 'XXX');*)
-
+	
+			// return number of stCACData.Outer[nOuterIndex].PackCodeStatus[nPackIndex].0 packs inside case, like XXXPACKnn
 			aStatusErrorVal[0] 		:= F_StringAddPrefix(INT_TO_STRING(stProductInstruction.nPacksPerCase - nValidPackData),2,'0');
 			aRejectCodePointer[0] 	:= 'nn';
 

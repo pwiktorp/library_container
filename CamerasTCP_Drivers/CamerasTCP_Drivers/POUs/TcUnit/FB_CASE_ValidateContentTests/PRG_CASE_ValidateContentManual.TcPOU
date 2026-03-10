@@ -18,6 +18,10 @@ VAR
 	(* Inputs *)
 	bExecute 					: BOOL;
 	stCTDateTime				: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	bIsDuplicateOuters			: BOOL;
+	bIsDuplicatePacks			: BOOL;
+	stOuterDataNotFound			: ST_RejectItems;
+	stRejectReasonsForOuter		: ST_RejectReasonsForOuter;
 	
 	(* In/Out *)
 	stProductInstruction		: ST_PCM_Status;
@@ -56,7 +60,7 @@ END_VAR
                   <v n="OutCommented">false</v>
                   <l2 n="NetworkItems" cet="BoxTreeBox">
                     <o>
-                      <v n="BoxType">"Init"</v>
+                      <v n="BoxType">"Init_new"</v>
                       <o n="Instance" t="Operand">
                         <n n="Operand" />
                         <v n="Type">""</v>
@@ -71,7 +75,7 @@ END_VAR
                         <v n="LValue">false</v>
                         <v n="Boolean">false</v>
                         <v n="IsInstance">true</v>
-                        <v n="Id">36L</v>
+                        <v n="Id">42L</v>
                       </o>
                       <o n="OutputItems" t="OutputItemList">
                         <l2 n="OutputItems" />
@@ -97,7 +101,7 @@ END_VAR
                       <n n="STSnippet" />
                       <v n="ContainsExtensibleInputs">false</v>
                       <v n="ProvidesSTSnippet">false</v>
-                      <v n="Id">37L</v>
+                      <v n="Id">43L</v>
                     </o>
                   </l2>
                   <l2 n="Connectors" />
@@ -155,7 +159,7 @@ END_VAR
                           <v n="LValue">false</v>
                           <v n="Boolean">false</v>
                           <v n="IsInstance">true</v>
-                          <v n="Id">31L</v>
+                          <v n="Id">46L</v>
                         </o>
                         <o n="OutputItems" t="OutputItemList">
                           <l2 n="OutputItems" cet="Operand">
@@ -270,8 +274,8 @@ END_VAR
                           </o>
                           <o>
                             <o n="Operand" t="Operand">
-                              <v n="Operand">"stCTDateTime"</v>
-                              <v n="Type">"ST_SYSTEM_DateTime"</v>
+                              <v n="Operand">"bIsDuplicateOuters"</v>
+                              <v n="Type">"BOOL"</v>
                               <v n="Comment">""</v>
                               <v n="SymbolComment">""</v>
                               <v n="Address">""</v>
@@ -289,8 +293,8 @@ END_VAR
                           </o>
                           <o>
                             <o n="Operand" t="Operand">
-                              <v n="Operand">"stProductInstruction"</v>
-                              <v n="Type">"ST_PCM_Status"</v>
+                              <v n="Operand">"bIsDuplicatePacks"</v>
+                              <v n="Type">"BOOL"</v>
                               <v n="Comment">""</v>
                               <v n="SymbolComment">""</v>
                               <v n="Address">""</v>
@@ -308,8 +312,8 @@ END_VAR
                           </o>
                           <o>
                             <o n="Operand" t="Operand">
-                              <v n="Operand">"nSecquentionalCounter"</v>
-                              <v n="Type">"UDINT"</v>
+                              <v n="Operand">"stCTDateTime"</v>
+                              <v n="Type">"ST_SYSTEM_DateTime"</v>
                               <v n="Comment">""</v>
                               <v n="SymbolComment">""</v>
                               <v n="Address">""</v>
@@ -327,8 +331,8 @@ END_VAR
                           </o>
                           <o>
                             <o n="Operand" t="Operand">
-                              <v n="Operand">"stCodeInfo_Outer"</v>
-                              <v n="Type">"ST_CodeInfo"</v>
+                              <v n="Operand">"stRejectReasonsForOuter.stOuterDataNotFound"</v>
+                              <v n="Type">"ST_RejectItems"</v>
                               <v n="Comment">""</v>
                               <v n="SymbolComment">""</v>
                               <v n="Address">""</v>
@@ -346,8 +350,8 @@ END_VAR
                           </o>
                           <o>
                             <o n="Operand" t="Operand">
-                              <v n="Operand">"stCaseRejectReasons"</v>
-                              <v n="Type">"ST_RejectReasonsForCase"</v>
+                              <v n="Operand">"stProductInstruction"</v>
+                              <v n="Type">"ST_PCM_Status"</v>
                               <v n="Comment">""</v>
                               <v n="SymbolComment">""</v>
                               <v n="Address">""</v>
@@ -365,8 +369,8 @@ END_VAR
                           </o>
                           <o>
                             <o n="Operand" t="Operand">
-                              <v n="Operand">"stCACData"</v>
-                              <v n="Type">"ST_CAC_Data"</v>
+                              <v n="Operand">"nSecquentionalCounter"</v>
+                              <v n="Type">"UDINT"</v>
                               <v n="Comment">""</v>
                               <v n="SymbolComment">""</v>
                               <v n="Address">""</v>
@@ -382,11 +386,71 @@ END_VAR
                             </o>
                             <v n="Id">29L</v>
                           </o>
+                          <o>
+                            <o n="Operand" t="Operand">
+                              <v n="Operand">"stCodeInfo_Outer"</v>
+                              <v n="Type">"ST_CodeInfo"</v>
+                              <v n="Comment">""</v>
+                              <v n="SymbolComment">""</v>
+                              <v n="Address">""</v>
+                              <o n="Flags" t="Flags">
+                                <v n="Flags">0</v>
+                                <v n="Fixed">false</v>
+                                <v n="Extensible">false</v>
+                              </o>
+                              <v n="LValue">false</v>
+                              <v n="Boolean">false</v>
+                              <v n="IsInstance">false</v>
+                              <v n="Id">49L</v>
+                            </o>
+                            <v n="Id">48L</v>
+                          </o>
+                          <o>
+                            <o n="Operand" t="Operand">
+                              <v n="Operand">"stCaseRejectReasons"</v>
+                              <v n="Type">"ST_RejectReasonsForCase"</v>
+                              <v n="Comment">""</v>
+                              <v n="SymbolComment">""</v>
+                              <v n="Address">""</v>
+                              <o n="Flags" t="Flags">
+                                <v n="Flags">0</v>
+                                <v n="Fixed">false</v>
+                                <v n="Extensible">false</v>
+                              </o>
+                              <v n="LValue">false</v>
+                              <v n="Boolean">false</v>
+                              <v n="IsInstance">false</v>
+                              <v n="Id">51L</v>
+                            </o>
+                            <v n="Id">50L</v>
+                          </o>
+                          <o>
+                            <o n="Operand" t="Operand">
+                              <v n="Operand">"stCACData"</v>
+                              <v n="Type">"ST_CAC_Data"</v>
+                              <v n="Comment">""</v>
+                              <v n="SymbolComment">""</v>
+                              <v n="Address">""</v>
+                              <o n="Flags" t="Flags">
+                                <v n="Flags">0</v>
+                                <v n="Fixed">false</v>
+                                <v n="Extensible">false</v>
+                              </o>
+                              <v n="LValue">false</v>
+                              <v n="Boolean">false</v>
+                              <v n="IsInstance">false</v>
+                              <v n="Id">53L</v>
+                            </o>
+                            <v n="Id">52L</v>
+                          </o>
                         </l2>
                         <o n="InputParam" t="ParamList">
                           <l2 n="Names" cet="String">
                             <v>bExecute</v>
+                            <v>bIsDuplicateOuters</v>
+                            <v>bIsDuplicatePacks</v>
                             <v>stCTDateTime</v>
+                            <v>stOuterDataNotFound</v>
                             <v>stProductInstruction</v>
                             <v>nSecquentionalCounter</v>
                             <v>stCodeInfo_Outer</v>
@@ -395,7 +459,10 @@ END_VAR
                           </l2>
                           <l2 n="Types" cet="String">
                             <v>BOOL</v>
+                            <v>BOOL</v>
+                            <v>BOOL</v>
                             <v>ST_SYSTEM_DateTime</v>
+                            <v>ST_RejectItems</v>
                             <v>ST_PCM_Status[REF]</v>
                             <v>UDINT[REF]</v>
                             <v>ST_CodeInfo[REF]</v>
@@ -427,7 +494,7 @@ END_VAR
                         <n n="STSnippet" />
                         <v n="ContainsExtensibleInputs">false</v>
                         <v n="ProvidesSTSnippet">false</v>
-                        <v n="Id">32L</v>
+                        <v n="Id">47L</v>
                       </o>
                       <v n="Id">34L</v>
                     </o>
@@ -461,19 +528,34 @@ END_VAR
     </Implementation>
     <Action Name="Init" Id="{a36de12f-b054-405c-a8cb-ac1230cd4e58}">
       <Implementation>
-        <ST><![CDATA[
-rTrigDataInit(CLK := bDataInit);
+        <ST><![CDATA[rTrigDataInit(CLK := bDataInit);
 
 IF rTrigDataInit.Q THEN
-	
-stProductInstruction.nOutersPerCase		:= 50;
-stProductInstruction.nPacksPerOuter 	:= 10;
+		
+	stProductInstruction.nOutersPerCase		:= 50;
+	stProductInstruction.nPacksPerOuter 	:= 10;
+
+
+
+
+
+
+
+
+
+
 
 	FOR iOuter := 1 TO stProductInstruction.nOutersPerCase DO
 		(* Ustaw outer *)
 		stCACData.Outer[iOuter].Barcode    := CONCAT('OUTER', INT_TO_STRING(iOuter));
 		stCACData.Outer[iOuter].OuterCodeStatus := 5;
 		
+
+
+
+
+
+
 		FOR iPack := 1 TO stProductInstruction.nPacksPerOuter DO
 			(* Pack number z zerami *)
 			sPackNum := CONCAT('0', INT_TO_STRING(iPack));  (* dla 1-9: '01'-'09' *)
@@ -494,9 +576,87 @@ stProductInstruction.nPacksPerOuter 	:= 10;
 			stCACData.Outer[iOuter].PackCode[iPack]			:= sPackCode;
 			stCACData.Outer[iOuter].PackCodeStatus[iPack]	:= 5;
 			stCACData.Outer[iOuter].PackRejectID[iPack]		:= 0;
+
+
 			
 		END_FOR;
 	END_FOR;	
+
+
+
+
+
+
+
+
+
+
+	
+END_IF
+]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="Init_new" Id="{907ed0a9-63d3-498c-b872-2e22bfbcd3c4}">
+      <Implementation>
+        <ST><![CDATA[
+rTrigDataInit(CLK := bDataInit);
+
+IF rTrigDataInit.Q THEN
+	
+	MEMSET(ADR(stCACData), 16#00, SIZEOF(stCACData));	
+	
+	stProductInstruction.nOutersPerCase 	:= 50;
+	stProductInstruction.nPacksPerOuter		:= 10;	
+	// jezeli tej wartosci nie ma, jest na 0 i czytaj ponizej
+	stProductInstruction.nPacksPerCase		:= 500;
+	stProductInstruction.nOpMode			:= 11;
+	stProductInstruction.sRetailSKU			:= '1234567';
+	stProductInstruction.nAcceptanceLevel 	:= 10;
+
+	// jezeli stCACData.NumberOfOuters=0 , czyli usune te linie ponizej to nie wejdzie do warunku linia 40 FB_CASE_ValidateContent i wywali
+	// jakis error z elsifa ktoregos
+	stCACData.NumberOfOuters			:= stProductInstruction.nOutersPerCase;
+	stCACData.CodingAndTrackingMode		:= stProductInstruction.nOpMode;
+	stCACData.RetailSKU					:= stProductInstruction.sRetailSKU;
+
+	FOR iOuter := 1 TO stProductInstruction.nOutersPerCase DO
+		(* Outer number z zerami *)
+		sOuterNum := F_StringAddPrefix(INT_TO_STRING(iOuter),2,'0');
+	
+		stCACData.Outer[iOuter].Barcode    				:= CONCAT('OUTER', sOuterNum);
+		stCACData.Outer[iOuter].NumberOfPacks 			:= stProductInstruction.nPacksPerOuter;
+		stCACData.Outer[iOuter].NumberOfLinkedPacks 	:= stProductInstruction.nPacksPerOuter;
+		stCACData.Outer[iOuter].AcceptanceLevel 		:= stProductInstruction.nAcceptanceLevel;
+		stCACData.Outer[iOuter].CodingAndTrackingMode	:= stProductInstruction.nOpMode;
+		stCACData.Outer[iOuter].OuterRejectCode			:= 'OK';
+	
+		FOR iPack := 1 TO stProductInstruction.nPacksPerOuter DO
+			(* Pack number dwucyfrowy z zerami *)
+			sPackNum := F_StringAddPrefix(INT_TO_STRING(iPack),2,'0');			
+			(* Sklej pack code *)
+			sPackCode := CONCAT(CONCAT('PACK', sPackNum), CONCAT('OUTER', sOuterNum));
+			
+			(* Write Pack Barcodes / Data*)
+			stCACData.Outer[iOuter].PackCode[iPack]				:= sPackCode;
+			stCACData.Outer[iOuter].PackCodeStatus[iPack]		:= 5;
+			stCACData.Outer[iOuter].PackRejectID[iPack]			:= 0;			
+			stCACData.Outer[iOuter].PackRejectCode[iPack]		:= 'OK';			
+			stCACData.Outer[iOuter].PackCodeStatus[iPack].5 	:= TRUE;
+			
+			
+			IF iPack = 1 THEN
+				stCACData.Outer[iOuter].AggregationCodes[1]	:= stCACData.Outer[iOuter].PackCode[iPack];
+			END_IF
+			IF iPack = 2 THEN
+				stCACData.Outer[iOuter].AggregationCodes[2]	:= stCACData.Outer[iOuter].PackCode[iPack];
+			END_IF
+		END_FOR
+	END_FOR	
+	
+	stCACData.Outer[3].OuterCodeStatus.5 	:= TRUE;
+	stCACData.Outer[4].OuterCodeStatus.5	:= TRUE;
+	
+	stCACData.NumberOfOuters 				:= 55;
 	
 END_IF
 ]]></ST>

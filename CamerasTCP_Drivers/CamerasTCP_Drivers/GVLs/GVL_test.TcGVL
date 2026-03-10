@@ -20,6 +20,9 @@ VAR_GLOBAL
 // 	['PACK01OUTER3', 'PACK02OUTER3', 'PACK03OUTER3']
 // 	];
 
+
+	stFBinside		: ST_FBinside;
+
 END_VAR]]></Declaration>
   </GVL>
 </TcPlcObject>

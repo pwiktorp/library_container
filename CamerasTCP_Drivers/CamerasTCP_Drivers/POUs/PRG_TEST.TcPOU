@@ -6,8 +6,8 @@ VAR
 	//fbCaseDuplicatCheckTests			: FB_CASE_DuplicatCheckTests;
 	//fbCaseDuplicateUpdateToDBTests	: FB_CASE_DuplicateUpdateToDBTests;
 	//fbCaseFinaliseDataTests				: FB_CASE_FinaliseDataTests;
-	fbCaseInitialiseData_Test 			: FB_CASE_InitialiseDataTests;
-	//fbCaseValidateContentTests		: FB_CASE_ValidateContentTests;
+	//fbCaseInitialiseData_Test 			: FB_CASE_InitialiseDataTests;
+	fbCaseValidateContentTests		: FB_CASE_ValidateContentTests;
 	
 END_VAR
 ]]></Declaration>
@@ -24,7 +24,13 @@ PRG_CASE_DuplicatCheckManual();
 PRG_CASE_DuplicateUpdateToDBManual();
 PRG_CASE_FinaliseDataManual();
 PRG_CASE_InitialiseDataManual();
-PRG_CASE_ValidateContentManual();]]></ST>
+PRG_CASE_ValidateContentManual();
+
+
+
+//===================================================
+//TESTS for FB references
+//PRG_Reference_POU();]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

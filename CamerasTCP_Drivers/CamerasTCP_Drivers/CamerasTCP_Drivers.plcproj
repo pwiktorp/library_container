@@ -16,6 +16,7 @@
     <Implicit_KindOfTask>{0ae93d8d-2076-4528-93f6-c00a2ab4daf6}</Implicit_KindOfTask>
     <Implicit_Jitter_Distribution>{246b981d-fe2a-4839-9782-c55221277b9e}</Implicit_Jitter_Distribution>
     <LibraryReferences>{ebe1cb54-1db0-4f0a-895b-c53fe8e647d5}</LibraryReferences>
+    <Released>false</Released>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="DUTs\E_TCPIP_RequescCommand.TcDUT">
@@ -1142,6 +1143,9 @@
     <Compile Include="DUTs\Test_DUTs\ST_DuplicateInfo.TcDUT">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="DUTs\Test_DUTs\ST_FBinside.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="DUTs\Test_DUTs\ST_LAB_CaseData.TcDUT">
       <SubType>Code</SubType>
     </Compile>
@@ -1173,6 +1177,12 @@
     <Compile Include="PlcTask.TcTTO">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="POUs\FBReferenceTest\FB_TimersTEST.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FBReferenceTest\PRG_Reference_POU.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="POUs\FinaliseCaseData\FB_CASE_DuplicatCheck.TcPOU">
       <SubType>Code</SubType>
     </Compile>
@@ -1183,6 +1193,9 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\FinaliseCaseData\FB_CASE_InitialiseData.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\FinaliseCaseData\FB_CASE_MovePackerToCase.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\FinaliseCaseData\FB_CASE_ValidateContent.TcPOU">
@@ -1221,6 +1234,9 @@
     <Compile Include="POUs\TcUnit\FB_CASE_DuplicateUpdateToDBTests\FB_CASE_DuplicateUpdateToDBTests.TcPOU">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="POUs\TcUnit\F_CODE_GetItemAITests\PRG_CODE_GetItemAIManual.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="POUs\_Utilites\Addtionals\FB_PulseGenerator_Sync.TcPOU">
       <SubType>Code</SubType>
     </Compile>
@@ -1231,6 +1247,27 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\_Utilites\CAMERAS\F_CREATE_MESSAGE.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\_Utilites\METS\Common LIB\08_SOFTWARE LIB\AI Codes And Validation FBs\FB_CODE_ClearCodeInfo.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\_Utilites\METS\Common LIB\08_SOFTWARE LIB\AI Codes And Validation FBs\FB_CODE_ValidateExplicitCode.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\_Utilites\METS\Common LIB\08_SOFTWARE LIB\AI Codes And Validation FBs\F_CODE_AssignValToStringWithPrefix.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\_Utilites\METS\Common LIB\08_SOFTWARE LIB\AI Codes And Validation FBs\F_CODE_GetItemAI.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\_Utilites\METS\Common LIB\08_SOFTWARE LIB\AI GS1 Codes And Validation FBs\FB_GS1_ClearCodeInfo.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\_Utilites\METS\Common LIB\08_SOFTWARE LIB\AI GS1 Codes And Validation FBs\FB_GS1_ValidateExplicitCode.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\_Utilites\METS\Common LIB\08_SOFTWARE LIB\AI GS1 Codes And Validation FBs\F_GS1_GetItem.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\_Utilites\METS\Concat Function\F_CONCAT3.TcPOU">
@@ -1254,9 +1291,6 @@
     <Compile Include="POUs\_Utilites\METS\Concat Function\F_CONCAT9.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="POUs\_Utilites\METS\FB_CODE_ValidateExplicitCode.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="POUs\_Utilites\METS\FB_ExtractString.TcPOU">
       <SubType>Code</SubType>
     </Compile>
@@ -1264,9 +1298,6 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\_Utilites\METS\F_CodeToHex.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="POUs\_Utilites\METS\F_CODE_AssignValToStringWithPrefix.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\_Utilites\METS\F_CODE_BATSerializator.TcPOU">
@@ -1282,6 +1313,9 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\_Utilites\METS\F_ReplaceSingleChar.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\_Utilites\METS\F_SafeDIV.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\_Utilites\METS\F_StringAddPrefix.TcPOU">
@@ -1414,6 +1448,8 @@
     <Folder Include="DUTs\Test_DUTs" />
     <Folder Include="GVLs" />
     <Folder Include="POUs\FinaliseCaseData" />
+    <Folder Include="POUs\FBReferenceTest" />
+    <Folder Include="POUs\TcUnit\F_CODE_GetItemAITests" />
     <Folder Include="POUs\_Utilites" />
     <Folder Include="POUs\TcUnit" />
     <Folder Include="POUs\TcUnit\FB_CASE_DuplicatCheckTests" />
@@ -1424,14 +1460,24 @@
     <Folder Include="POUs\_Utilites\Addtionals" />
     <Folder Include="POUs\_Utilites\CAMERAS" />
     <Folder Include="POUs\_Utilites\METS" />
+    <Folder Include="POUs\_Utilites\METS\Common LIB\08_SOFTWARE LIB" />
+    <Folder Include="POUs\_Utilites\METS\Common LIB\08_SOFTWARE LIB\AI Codes And Validation FBs" />
+    <Folder Include="POUs\_Utilites\METS\Common LIB\08_SOFTWARE LIB\AI GS1 Codes And Validation FBs" />
     <Folder Include="POUs\_Utilites\METS\Concat Function" />
+    <Folder Include="POUs\_Utilites\METS\Common LIB" />
     <Folder Include="POUs\_Utilites\StringFBs" />
     <Folder Include="POUs\_Utilites\TCP_FB" />
     <Folder Include="POUs\_Utilites\Tests" />
     <Folder Include="VISUs" />
-    <Folder Include="POUs" />
+    <Folder Include="POUs">
+      <ExcludeFromBuild>false</ExcludeFromBuild>
+    </Folder>
   </ItemGroup>
   <ItemGroup>
+    <PlaceholderReference Include="CODE">
+      <DefaultResolution>AI Codes And Validation, * (Marden Edwards)</DefaultResolution>
+      <Namespace>CODE</Namespace>
+    </PlaceholderReference>
     <PlaceholderReference Include="Tc2_SerialCom">
       <DefaultResolution>Tc2_SerialCom, * (Beckhoff Automation GmbH)</DefaultResolution>
       <Namespace>Tc2_SerialCom</Namespace>
@@ -1470,8 +1516,8 @@
   <ProjectExtensions>
     <PlcProjectOptions>
       <XmlArchive>
-  <Data>
-    <o xml:space="preserve" t="OptionKey">
+        <Data>
+          <o xml:space="preserve" t="OptionKey">
       <v n="Name">"&lt;ProjectRoot&gt;"</v>
       <d n="SubKeys" t="Hashtable" ckt="String" cvt="OptionKey">
         <v>{192FAD59-8248-4824-A8DE-9177C94C195A}</v>
@@ -1541,14 +1587,14 @@
       </d>
       <d n="Values" t="Hashtable" />
     </o>
-  </Data>
-  <TypeList>
-    <Type n="Boolean">System.Boolean</Type>
-    <Type n="Hashtable">System.Collections.Hashtable</Type>
-    <Type n="OptionKey">{54dd0eac-a6d8-46f2-8c27-2f43c7e49861}</Type>
-    <Type n="String">System.String</Type>
-  </TypeList>
-</XmlArchive>
+        </Data>
+        <TypeList>
+          <Type n="Boolean">System.Boolean</Type>
+          <Type n="Hashtable">System.Collections.Hashtable</Type>
+          <Type n="OptionKey">{54dd0eac-a6d8-46f2-8c27-2f43c7e49861}</Type>
+          <Type n="String">System.String</Type>
+        </TypeList>
+      </XmlArchive>
     </PlcProjectOptions>
   </ProjectExtensions>
 </Project>

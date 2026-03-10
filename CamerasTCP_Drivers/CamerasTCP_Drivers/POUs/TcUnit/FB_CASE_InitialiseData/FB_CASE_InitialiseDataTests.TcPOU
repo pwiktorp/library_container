@@ -252,6 +252,7 @@ TestInit(stProductInstruction_tests,stCACData_tests);
 
 //Change some data for test scenario below
 stCACData_tests.CaseRejectID := stRejectReasonsForCase_tets.stDoorGuardReject.nRejectID;
+stProductInstruction_tests.nOpMode := 5;
 
 
 fbCaseTest(

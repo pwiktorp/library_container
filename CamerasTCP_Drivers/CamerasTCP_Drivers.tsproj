@@ -14,7 +14,7 @@
 				<Task Id="3" Disabled="true" Priority="20" CycleTime="200000" AmsPort="350" AdtTasks="true">
 					<Name>PlcTask</Name>
 				</Task>
-				<Task Id="6" Priority="25" CycleTime="100000" AmsPort="351" AdtTasks="true">
+				<Task Id="6" Priority="25" CycleTime="10000" AmsPort="351" AdtTasks="true">
 					<Name>TcUnit_Task</Name>
 				</Task>
 			</Tasks>

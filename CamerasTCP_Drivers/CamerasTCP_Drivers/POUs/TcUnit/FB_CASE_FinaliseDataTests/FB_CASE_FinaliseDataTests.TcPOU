@@ -976,7 +976,7 @@ TEST_FINISHED();]]></ST>
       </Implementation>
     </Method>
     <Method Name="main07_FBExecuted_bReadyToValidateFALSE" Id="{54f456b9-ee8b-4229-b977-1bf54355d3fb}" FolderPath="01.Main\">
-      <Declaration><![CDATA[METHOD INTERNAL main07_FBExecuted_bReadyToValidateFALSE
+      <Declaration><![CDATA[METHOD PUBLIC main07_FBExecuted_bReadyToValidateFALSE
 VAR
 	fbCase_tests		: FB_CASE_FinaliseData;
 	
@@ -989,6 +989,7 @@ VAR
 
 	bCheckDuplicates	: BOOL;
 	bReadyToValidate	: BOOL;
+	
 		
 END_VAR
 ]]></Declaration>
