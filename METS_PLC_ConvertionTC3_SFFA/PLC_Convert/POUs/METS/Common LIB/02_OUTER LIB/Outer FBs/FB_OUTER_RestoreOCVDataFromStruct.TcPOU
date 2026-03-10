@@ -1,0 +1,252 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_OUTER_RestoreOCVDataFromStruct" Id="{da671f7f-57d2-452a-bccb-83b107abf862}" SpecialFunc="None">
+    <Declaration><![CDATA[(* scan for and validate Outers marked as requiring validation *)
+FUNCTION_BLOCK FB_OUTER_RestoreOCVDataFromStruct
+VAR_INPUT
+	bExecute				: BOOL;			(* scan for completed Outer *)
+	bEnableRestoreOCV		: BOOL;
+	bReset				: BOOL;
+END_VAR
+VAR_IN_OUT
+	arrOCVPackStatus		: ARRAY[1..cMAX_OUTER_STATUS_QUEUE] OF ST_OUTER_Status;	(* Outer status register - would be nice to call it PACK Status and remove unnecesary stuff*)
+	arrOuterStatus			: ARRAY[1..cMAX_OUTER_STATUS_QUEUE] OF ST_OUTER_Status;	(* Outer status array *)
+	sProductInstruction		: ST_PCM_Status;					(* Product Instruction *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;			(* TRUE = validation complete *)
+	bBusy				: BOOL;			(* TRUE = validation in progress *)
+
+	nOutersRestored		: UDINT;		(* Outers restored *)
+	nOutersProcessed 		: UDINT;
+
+END_VAR
+VAR
+	fbExecute				: R_TRIG;
+	eState				: E_OUTER_State;
+
+	sOuterStatus			: ST_OUTER_Status;	(* Outer status *)
+	nMaxOuterIndex		: INT;
+	nOuterIndex			: INT;
+	nSourceIndex			: INT;
+
+	nOuterIndex1			: INT;
+	nOuterIndex2			: INT;
+
+	nPrevOuterIndex		: INT;
+	nNextOuterIndex		: INT;
+
+	sPrevOuterStatus		: ST_OUTER_Status;
+	sNextOuterStatus		: ST_OUTER_Status;
+
+	(*aNullPackCode		: ARRAY[1..cMAX_PACKS_PER_OUTER] OF T_PACK_Barcode;*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF bReset THEN
+
+	nOutersRestored		:= 0;
+	nOutersProcessed 		:= 0;
+END_IF
+
+(* monitor rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+(* rising edge of bExecute *)
+CASE eState OF
+
+	(* idle *)
+	E_OUTER_IDLE:
+
+		(* scan for completed Outers when validation is active *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+
+
+			(* reset outputs *)
+
+			(*nPrevOuterIndex 	:= 0;
+			nNextOuterIndex 	:= 0;*)
+
+			(* max Outer index *)
+			nMaxOuterIndex := UDINT_TO_INT(SIZEOF(arrOuterStatus) / SIZEOF(arrOuterStatus[1]));
+			(*nSourceIndex := 0;*)
+
+			eState := E_OUTER_SCAN;
+
+		(* no action required *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+
+		END_IF
+
+
+	(* scan for completed Outer *)
+	E_OUTER_SCAN:
+
+		(* preset target state, will be over-written if an Outer requiringvalidation is found *)
+		eState := E_OUTER_DONE;
+
+		(* initialise source index *)
+		nSourceIndex 		:= 0;
+		nPrevOuterIndex 	:= 0;
+		nNextOuterIndex 	:= 0;
+
+		(* reset Outers Structures *)
+		MEMSET(ADR(sPrevOuterStatus), 16#00, SIZEOF(sPrevOuterStatus));
+		MEMSET(ADR(sOuterStatus), 16#00, SIZEOF(sOuterStatus));
+		MEMSET(ADR(sNextOuterStatus), 16#00, SIZEOF(sNextOuterStatus));
+
+		IF bEnableRestoreOCV AND sProductInstruction.nOpMode = 11 THEN
+			(* for each Outer in Outer Status array *)
+			FOR nOuterIndex := nMaxOuterIndex  TO 2 BY -1  DO
+				(* Outer data ready for validation and not marked as passed or failed *)
+				IF arrOuterStatus[nOuterIndex].nStatus.9 AND  arrOuterStatus[nOuterIndex].nStatus.16  AND  arrOuterStatus[nOuterIndex].nStatus.17  THEN
+					(* index of Outer to be processed *)
+					nSourceIndex := nOuterIndex;
+					EXIT;
+				END_IF
+			END_FOR
+		END_IF
+
+		(* Outer found that requires validation *)
+		IF nSourceIndex > 2 THEN
+
+			(* copy Outer data from Outer Status array and extract SerialCode *)
+			sPrevOuterStatus	:= arrOuterStatus[nSourceIndex - 1];
+			sOuterStatus		:= arrOuterStatus[nSourceIndex];
+			sNextOuterStatus	:= arrOuterStatus[nSourceIndex + 1];
+
+			nOutersProcessed 		:= nOutersProcessed 	+ 1;
+
+			sOuterStatus.stOACData.DataSource		:= 'NO_R';
+			sOuterStatus.nStatus.16 := FALSE;
+
+			eState := E_OUTER_VALIDATE;
+		END_IF
+
+
+	(* restore OAC data *)
+	E_OUTER_VALIDATE:
+
+		FOR nOuterIndex1 := nMaxOuterIndex  TO 1 BY -1  DO
+
+			(*IF MEMCMP(ADR(arrOCVPackStatus[nOuterIndex].stOACData.PackCode), ADR(sPrevOuterStatus.stOACData.PackCode), SIZEOF(sPrevOuterStatus.stOACData.PackCode)) = 0 	AND
+				MEMCMP(ADR(sPrevOuterStatus.stOACData.PackCode), ADR(aNullPackCode), SIZEOF(sPrevOuterStatus.stOACData.PackCode)) <> 0 							THEN;
+				nPrevOuterIndex := nOuterIndex;
+			END_IF
+
+			IF MEMCMP(ADR(arrOCVPackStatus[nOuterIndex].stOACData.PackCode), ADR(sNextOuterStatus.stOACData.PackCode), SIZEOF(sNextOuterStatus.stOACData.PackCode)) = 0 	AND
+				MEMCMP(ADR(sNextOuterStatus.stOACData.PackCode), ADR(aNullPackCode) , SIZEOF(sNextOuterStatus.stOACData.PackCode)) <> 0 							THEN;
+
+				nNextOuterIndex := nOuterIndex;
+			END_IF*)
+
+(*********************condition expilitly one by one - MEMCMP had non consistent behaviour with table of strng************************************************************************)
+
+			IF arrOCVPackStatus[nOuterIndex1].stOACData.PackCode[1] = sPrevOuterStatus.stOACData.PackCode[1] 		AND
+				arrOCVPackStatus[nOuterIndex1].stOACData.PackCode[2] = sPrevOuterStatus.stOACData.PackCode[2] 	AND
+				arrOCVPackStatus[nOuterIndex1].stOACData.PackCode[3] = sPrevOuterStatus.stOACData.PackCode[3] 	AND
+				arrOCVPackStatus[nOuterIndex1].stOACData.PackCode[4] = sPrevOuterStatus.stOACData.PackCode[4] 	AND
+				arrOCVPackStatus[nOuterIndex1].stOACData.PackCode[5] = sPrevOuterStatus.stOACData.PackCode[5] 	AND
+				arrOCVPackStatus[nOuterIndex1].stOACData.PackCode[6] = sPrevOuterStatus.stOACData.PackCode[6] 	AND
+				arrOCVPackStatus[nOuterIndex1].stOACData.PackCode[7] = sPrevOuterStatus.stOACData.PackCode[7] 	AND
+				arrOCVPackStatus[nOuterIndex1].stOACData.PackCode[8] = sPrevOuterStatus.stOACData.PackCode[8] 	AND
+				arrOCVPackStatus[nOuterIndex1].stOACData.PackCode[9] = sPrevOuterStatus.stOACData.PackCode[9] 	AND
+ 				arrOCVPackStatus[nOuterIndex1].stOACData.PackCode[10] = sPrevOuterStatus.stOACData.PackCode[10]	AND
+				sPrevOuterStatus.stOACData.NumberOfLinkedPacks > 0										THEN
+
+				nPrevOuterIndex := nOuterIndex1;
+				EXIT;
+			END_IF
+		END_FOR
+
+		FOR nOuterIndex2 := nMaxOuterIndex  TO 1 BY -1  DO
+			IF arrOCVPackStatus[nOuterIndex2].stOACData.PackCode[1] = sNextOuterStatus.stOACData.PackCode[1] 		AND
+				arrOCVPackStatus[nOuterIndex2].stOACData.PackCode[2] = sNextOuterStatus.stOACData.PackCode[2] 	AND
+				arrOCVPackStatus[nOuterIndex2].stOACData.PackCode[3] = sNextOuterStatus.stOACData.PackCode[3] 	AND
+				arrOCVPackStatus[nOuterIndex2].stOACData.PackCode[4] = sNextOuterStatus.stOACData.PackCode[4] 	AND
+				arrOCVPackStatus[nOuterIndex2].stOACData.PackCode[5] = sNextOuterStatus.stOACData.PackCode[5] 	AND
+				arrOCVPackStatus[nOuterIndex2].stOACData.PackCode[6] = sNextOuterStatus.stOACData.PackCode[6] 	AND
+				arrOCVPackStatus[nOuterIndex2].stOACData.PackCode[7] = sNextOuterStatus.stOACData.PackCode[7] 	AND
+				arrOCVPackStatus[nOuterIndex2].stOACData.PackCode[8] = sNextOuterStatus.stOACData.PackCode[8] 	AND
+				arrOCVPackStatus[nOuterIndex2].stOACData.PackCode[9] = sNextOuterStatus.stOACData.PackCode[9] 	AND
+ 				arrOCVPackStatus[nOuterIndex2].stOACData.PackCode[10] = sNextOuterStatus.stOACData.PackCode[10]	AND
+				sNextOuterStatus.stOACData.NumberOfLinkedPacks > 0										THEN
+
+				nNextOuterIndex := nOuterIndex2;
+				EXIT;
+			END_IF
+		END_FOR
+
+		IF nPrevOuterIndex > 0 AND nNextOuterIndex > 0 THEN
+			IF nNextOuterIndex - nPrevOuterIndex = 2 THEN
+
+				sOuterStatus.aOACPackStatus				 := arrOCVPackStatus[nPrevOuterIndex + 1].aOACPackStatus;
+				sOuterStatus.aPackCodes						:= arrOCVPackStatus[nPrevOuterIndex + 1].aPackCodes;
+
+				sOuterStatus.stOACData.AggregationCodes[1]			:= 'RESTORED';
+				sOuterStatus.stOACData.AggregationCodes[2]			:= 'RESTORED';
+
+
+				sOuterStatus.stOACData.NumberOfLinkedPacks 	:= arrOCVPackStatus[nPrevOuterIndex + 1].stOACData.NumberOfLinkedPacks;
+				sOuterStatus.stOACData.PackCode				:= arrOCVPackStatus[nPrevOuterIndex + 1].stOACData.PackCode;
+				sOuterStatus.stOACData.PackRejectCode 			:= arrOCVPackStatus[nPrevOuterIndex + 1].stOACData.PackRejectCode;
+				sOuterStatus.stOACData.PackRejectID 			:= arrOCVPackStatus[nPrevOuterIndex + 1].stOACData.PackRejectID;
+				sOuterStatus.stOACData.PackTimeStamp 			:= arrOCVPackStatus[nPrevOuterIndex + 1].stOACData.PackTimeStamp;
+				sOuterStatus.stOACData.DataSource		:= 'REST';
+
+				nOutersRestored 		:= nOutersRestored 	+ 1;
+				sOuterStatus.nStatus.17	:= TRUE;
+
+			END_IF
+		END_IF
+
+		eState := E_OUTER_STATUS;
+
+	(* update Outer status *)
+	E_OUTER_STATUS:
+
+
+		(* move sOuterStatus data back to shift reg *)
+		FOR nOuterIndex := 1 TO nMaxOuterIndex DO
+
+			(* matching nTriggerID found *)
+			IF arrOuterStatus[nOuterIndex].nTriggerID = sOuterStatus.nTriggerID THEN
+
+				(* move updated Outer data to shift reg *)
+				arrOuterStatus[nOuterIndex] := sOuterStatus;
+
+				EXIT;
+			END_IF
+		END_FOR
+
+		eState := E_OUTER_SCAN;
+
+
+	(* OAC file complete *)
+	E_OUTER_DONE:
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_OUTER_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_OUTER_IDLE;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_OUTER_RestoreOCVDataFromStruct">
+      <LineId Id="40" Count="201" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

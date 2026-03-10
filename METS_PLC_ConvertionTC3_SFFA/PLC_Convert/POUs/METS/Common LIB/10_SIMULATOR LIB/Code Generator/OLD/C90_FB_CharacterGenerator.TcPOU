@@ -1,0 +1,46 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="C90_FB_CharacterGenerator" Id="{51f23e8c-55cf-44ae-afe4-46a48ed7d803}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK C90_FB_CharacterGenerator
+VAR_INPUT
+	nMinAsciiRange:REAL;
+	nMaxAsciiRange:REAL;
+END_VAR
+
+VAR_OUTPUT
+	sAsciiSymbol:STRING(1);
+END_VAR
+VAR
+	fbDrand:DRAND;
+	nGeneratedVariable:REAL;
+	nScaling:REAL;
+	nOffset:REAL;
+	nAsciiCode:BYTE;
+END_VAR
+
+
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Character Generator *)
+	fbDrand(seed:=0, num=> nGeneratedVariable);
+	
+	nScaling:=nMaxAsciiRange-nMinAsciiRange;
+	nOffset:=nMinAsciiRange;
+	
+	nAsciiCode:=REAL_TO_BYTE((nGeneratedVariable*nScaling) + nOffset);
+	
+	IF nAsciiCode=16#27 THEN
+		sAsciiSymbol:='$'';
+	ELSIF nAsciiCode=16#24 THEN
+		sAsciiSymbol:='$$';
+	ELSE
+		sAsciiSymbol:=F_ToCHR(nAsciiCode);
+	END_IF
+]]></ST>
+    </Implementation>
+    <LineIds Name="C90_FB_CharacterGenerator">
+      <LineId Id="20" Count="15" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

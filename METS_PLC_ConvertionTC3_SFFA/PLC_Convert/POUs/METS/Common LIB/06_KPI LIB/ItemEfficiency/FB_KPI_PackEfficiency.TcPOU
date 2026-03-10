@@ -1,0 +1,308 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_KPI_PackEfficiency" Id="{83366bcf-9537-494b-9166-4b57418110ac}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_KPI_PackEfficiency
+VAR_INPUT
+	ePackAggregationMode							: E_SYSTEM_PackAggregationMode ;
+	nTotalOutersProcessingByPackAggregCameras	: UDINT;
+	bUseInterimCode									: BOOL;
+END_VAR
+VAR_IN_OUT
+	sOuterStatus							: ST_OUTER_Status;	(* Outer status *)
+	aPacksRead							: ARRAY[0..cMAX_PACKS_PER_OUTER] OF UDINT;
+	aPackPosEfficiency						: ARRAY[1..cMAX_PACKS_PER_OUTER] OF ST_KPI_CodePos;
+	stPackAggregationEfficiency				: ST_KPI_InspectionEfficency;
+	stMainItemProduced					: ST_KPI_ItemsProduced;
+	stShiftItemProduced						: ST_KPI_ItemsProduced;
+	stProdItemProduced					: ST_KPI_ItemsProduced;
+END_VAR
+VAR
+	nPackPositionIndex						: INT;
+	bValidOuter							: BOOL;
+	nTestCountPLAS			: INT;
+	nTestCountPAOL			: INT;
+	nTestCount2CAM			: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CASE ePackAggregationMode OF
+
+	E_SYSTEM_PAOL_2CAM:
+
+		CAM2();
+
+	E_SYSTEM_PAOL_3CAM:
+
+		PAOL();
+
+	E_SYSTEM_PLAS_T01, E_SYSTEM_PLAS_T02, E_SYSTEM_PLAS_T03, E_SYSTEM_PLAS_T04:
+
+		PLAS();
+
+END_CASE]]></ST>
+    </Implementation>
+    <Action Name="CAM2" Id="{bc221168-6786-44ed-9b68-1aba3b085e52}">
+      <Implementation>
+        <ST><![CDATA[nTestCount2CAM := nTestCount2CAM + 1;
+
+bValidOuter := TRUE;
+
+IF sOuterStatus.stOACData.NumberOfLinkedPacks <= cMAX_PACKS_PER_OUTER AND
+	sOuterStatus.stOACData.NumberOfLinkedPacks >=0 THEN
+
+	aPacksRead[sOuterStatus.stOACData.NumberOfLinkedPacks] := aPacksRead[sOuterStatus.stOACData.NumberOfLinkedPacks] +1;
+END_IF
+
+IF sOuterStatus.stOACData.NumberOfPacks <= cMAX_PACKS_PER_OUTER AND
+	sOuterStatus.stOACData.NumberOfPacks >=0 THEN
+
+	FOR nPackPositionIndex := 1 TO sOuterStatus.stOACData.NumberOfPacks DO
+		(* Pack code is valid *)
+		IF sOuterStatus.aOACPackStatus[nPackPositionIndex] = 5  THEN
+	
+			aPackPosEfficiency[nPackPositionIndex].ReadOK := aPackPosEfficiency[nPackPositionIndex].ReadOK + 1;
+	
+			stMainItemProduced.Passed:= stMainItemProduced.Passed + 1;
+			stShiftItemProduced.Passed:= stShiftItemProduced.Passed + 1;
+			stProdItemProduced.Passed:= stProdItemProduced.Passed + 1;
+		ELSE
+	
+			bValidOuter := FALSE;
+	
+			stMainItemProduced.Rejected := stMainItemProduced.Rejected + 1;
+			stShiftItemProduced.Rejected := stShiftItemProduced.Rejected + 1;
+			stProdItemProduced.Rejected := stProdItemProduced.Rejected + 1;
+		END_IF
+	
+		stMainItemProduced.Total := stMainItemProduced.Total+ 1;
+		stShiftItemProduced.Total := stShiftItemProduced.Total+ 1;
+		stProdItemProduced.Total := stProdItemProduced.Total+ 1;
+	
+		(* update read efficiency for indyvidual Pack position *)
+		aPackPosEfficiency[nPackPositionIndex].Efficiency := F_SafeDIV(UDINT_TO_LREAL(aPackPosEfficiency[nPackPositionIndex].ReadOK),
+																			UDINT_TO_LREAL(nTotalOutersProcessingByPackAggregCameras )) * 100.0;
+		aPackPosEfficiency[nPackPositionIndex].Efficiency  :=LIMIT(0, aPackPosEfficiency[nPackPositionIndex].Efficiency , 100);
+	END_FOR
+END_IF
+
+stPackAggregationEfficiency.ProcessedTotal := stPackAggregationEfficiency.ProcessedTotal + 1;
+
+IF bValidOuter THEN
+	stPackAggregationEfficiency.ProcessedSuccessful := stPackAggregationEfficiency.ProcessedSuccessful + 1;
+ELSE
+	stPackAggregationEfficiency.ProcessedRejected := stPackAggregationEfficiency.ProcessedRejected + 1;
+END_IF
+
+stPackAggregationEfficiency.ProcessedEfficiency := F_SafeDIV(UDINT_TO_LREAL(stPackAggregationEfficiency.ProcessedSuccessful),
+																	UDINT_TO_LREAL(stPackAggregationEfficiency.ProcessedTotal )) * 100.0;
+stPackAggregationEfficiency.ProcessedEfficiency  :=LIMIT(0, stPackAggregationEfficiency.ProcessedEfficiency , 100);
+
+stMainItemProduced.Efficiency := F_SafeDIV(stMainItemProduced.Passed * 100, stMainItemProduced.Total);
+stMainItemProduced.Efficiency :=LIMIT(0, stMainItemProduced.Efficiency, 100);
+
+stShiftItemProduced.Efficiency := F_SafeDIV(stShiftItemProduced.Passed * 100, stShiftItemProduced.Total);
+stShiftItemProduced.Efficiency :=LIMIT(0, stShiftItemProduced.Efficiency, 100);
+
+stProdItemProduced.Efficiency := F_SafeDIV(stProdItemProduced.Passed * 100, stProdItemProduced.Total);
+stProdItemProduced.Efficiency :=LIMIT(0, stProdItemProduced.Efficiency, 100);]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="NCW" Id="{afa86b77-f8a6-47a7-96d6-4798f30c8313}">
+      <Implementation>
+        <ST><![CDATA[aPacksRead[sOuterStatus.stOACData.NumberOfLinkedPacks] := aPacksRead[sOuterStatus.stOACData.NumberOfLinkedPacks] +1;
+
+FOR nPackPositionIndex := 1 TO sOuterStatus.stOACData.NumberOfPacks DO
+	(* Pack code is valid *)
+	IF sOuterStatus.aOACPackStatus[nPackPositionIndex] = 5 THEN
+
+		aPackPosEfficiency[nPackPositionIndex].ReadOK := aPackPosEfficiency[nPackPositionIndex].ReadOK + 1;
+
+		stMainItemProduced.Passed:= stMainItemProduced.Passed + 1;
+		stShiftItemProduced.Passed:= stShiftItemProduced.Passed + 1;
+		stProdItemProduced.Passed:= stProdItemProduced.Passed + 1;
+	ELSE
+
+		stMainItemProduced.Rejected := stMainItemProduced.Rejected + 1;
+		stShiftItemProduced.Rejected := stShiftItemProduced.Rejected + 1;
+		stProdItemProduced.Rejected := stProdItemProduced.Rejected + 1;
+	END_IF
+
+	stMainItemProduced.Total := stMainItemProduced.Total+ 1;
+	stShiftItemProduced.Total := stShiftItemProduced.Total+ 1;
+	stProdItemProduced.Total := stProdItemProduced.Total+ 1;
+
+	(* update read efficiency for indyvidual Pack position *)
+	aPackPosEfficiency[nPackPositionIndex].Efficiency := F_SafeDIV(UDINT_TO_LREAL(aPackPosEfficiency[nPackPositionIndex].ReadOK),
+																		UDINT_TO_LREAL(nTotalOutersProcessingByPackAggregCameras )) * 100.0;
+	aPackPosEfficiency[nPackPositionIndex].Efficiency  :=LIMIT(0, aPackPosEfficiency[nPackPositionIndex].Efficiency , 100);
+END_FOR
+
+stMainItemProduced.Efficiency := F_SafeDIV(stMainItemProduced.Passed * 100, stMainItemProduced.Total);
+stMainItemProduced.Efficiency :=LIMIT(0, stMainItemProduced.Efficiency, 100);
+
+stShiftItemProduced.Efficiency := F_SafeDIV(stShiftItemProduced.Passed * 100, stShiftItemProduced.Total);
+stShiftItemProduced.Efficiency :=LIMIT(0, stShiftItemProduced.Efficiency, 100);
+
+stProdItemProduced.Efficiency := F_SafeDIV(stProdItemProduced.Passed * 100, stProdItemProduced.Total);
+stProdItemProduced.Efficiency :=LIMIT(0, stProdItemProduced.Efficiency, 100);]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PAOL" Id="{9ddec406-e693-46c6-884e-28a223442a73}">
+      <Implementation>
+        <ST><![CDATA[nTestCountPAOL := nTestCountPAOL + 1;
+
+bValidOuter := TRUE;
+
+IF sOuterStatus.stOACData.NumberOfLinkedPacks <= cMAX_PACKS_PER_OUTER AND
+	sOuterStatus.stOACData.NumberOfLinkedPacks >=0 THEN
+
+	aPacksRead[sOuterStatus.stOACData.NumberOfLinkedPacks] := aPacksRead[sOuterStatus.stOACData.NumberOfLinkedPacks] +1;
+END_IF
+
+IF sOuterStatus.stOACData.NumberOfPacks <= cMAX_PACKS_PER_OUTER AND
+	sOuterStatus.stOACData.NumberOfPacks >=0 THEN
+
+	FOR nPackPositionIndex := 1 TO sOuterStatus.stOACData.NumberOfPacks DO
+		(* Pack code is valid *)
+		IF sOuterStatus.aOACPackStatus[nPackPositionIndex] = 5  THEN
+	
+			aPackPosEfficiency[nPackPositionIndex].ReadOK := aPackPosEfficiency[nPackPositionIndex].ReadOK + 1;
+	
+			stMainItemProduced.Passed:= stMainItemProduced.Passed + 1;
+			stShiftItemProduced.Passed:= stShiftItemProduced.Passed + 1;
+			stProdItemProduced.Passed:= stProdItemProduced.Passed + 1;
+		ELSE
+	
+			bValidOuter := FALSE;
+	
+			stMainItemProduced.Rejected := stMainItemProduced.Rejected + 1;
+			stShiftItemProduced.Rejected := stShiftItemProduced.Rejected + 1;
+			stProdItemProduced.Rejected := stProdItemProduced.Rejected + 1;
+		END_IF
+	
+		stMainItemProduced.Total := stMainItemProduced.Total+ 1;
+		stShiftItemProduced.Total := stShiftItemProduced.Total+ 1;
+		stProdItemProduced.Total := stProdItemProduced.Total+ 1;
+	
+		(* update read efficiency for indyvidual Pack position *)
+		aPackPosEfficiency[nPackPositionIndex].Efficiency := F_SafeDIV(UDINT_TO_LREAL(aPackPosEfficiency[nPackPositionIndex].ReadOK),
+																			UDINT_TO_LREAL(nTotalOutersProcessingByPackAggregCameras )) * 100.0;
+		aPackPosEfficiency[nPackPositionIndex].Efficiency  :=LIMIT(0, aPackPosEfficiency[nPackPositionIndex].Efficiency , 100);
+	END_FOR
+END_IF
+
+stPackAggregationEfficiency.ProcessedTotal := stPackAggregationEfficiency.ProcessedTotal + 1;
+
+IF bValidOuter THEN
+	stPackAggregationEfficiency.ProcessedSuccessful := stPackAggregationEfficiency.ProcessedSuccessful + 1;
+ELSE
+	stPackAggregationEfficiency.ProcessedRejected := stPackAggregationEfficiency.ProcessedRejected + 1;
+END_IF
+
+stPackAggregationEfficiency.ProcessedEfficiency := F_SafeDIV(UDINT_TO_LREAL(stPackAggregationEfficiency.ProcessedSuccessful),
+																	UDINT_TO_LREAL(stPackAggregationEfficiency.ProcessedTotal )) * 100.0;
+stPackAggregationEfficiency.ProcessedEfficiency  :=LIMIT(0, stPackAggregationEfficiency.ProcessedEfficiency , 100);
+
+stMainItemProduced.Efficiency := F_SafeDIV(stMainItemProduced.Passed * 100, stMainItemProduced.Total);
+stMainItemProduced.Efficiency :=LIMIT(0, stMainItemProduced.Efficiency, 100);
+
+stShiftItemProduced.Efficiency := F_SafeDIV(stShiftItemProduced.Passed * 100, stShiftItemProduced.Total);
+stShiftItemProduced.Efficiency :=LIMIT(0, stShiftItemProduced.Efficiency, 100);
+
+stProdItemProduced.Efficiency := F_SafeDIV(stProdItemProduced.Passed * 100, stProdItemProduced.Total);
+stProdItemProduced.Efficiency :=LIMIT(0, stProdItemProduced.Efficiency, 100);]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="PLAS" Id="{368cc00a-cea0-4fa2-be2f-3b503c1462e7}">
+      <Implementation>
+        <ST><![CDATA[nTestCountPLAS := nTestCountPLAS + 1;
+
+bValidOuter := TRUE;
+
+IF sOuterStatus.stOACData.NumberOfPacks <= cMAX_PACKS_PER_OUTER AND
+	sOuterStatus.stOACData.NumberOfPacks >=0 THEN
+
+	FOR nPackPositionIndex := 1 TO sOuterStatus.stOACData.NumberOfPacks DO
+	
+		(* Pack code restored from masterlist, by position *)
+		IF sOuterStatus.aOACPackStatus[nPackPositionIndex] = 6  THEN
+			aPacksRead[nPackPositionIndex] := aPacksRead[nPackPositionIndex] +1;
+		END_IF
+
+		(* Pack code is valid *)
+		IF sOuterStatus.aOACPackStatus[nPackPositionIndex] = 5
+			OR  sOuterStatus.aOACPackStatus[nPackPositionIndex] = 6  THEN
+	
+			aPackPosEfficiency[nPackPositionIndex].ReadOK := aPackPosEfficiency[nPackPositionIndex].ReadOK + 1;
+	
+			stMainItemProduced.Passed:= stMainItemProduced.Passed + 1;
+			stShiftItemProduced.Passed:= stShiftItemProduced.Passed + 1;
+			stProdItemProduced.Passed:= stProdItemProduced.Passed + 1;
+		ELSE
+
+			bValidOuter := FALSE;
+	
+			stMainItemProduced.Rejected := stMainItemProduced.Rejected + 1;
+			stShiftItemProduced.Rejected := stShiftItemProduced.Rejected + 1;
+			stProdItemProduced.Rejected := stProdItemProduced.Rejected + 1;
+		END_IF
+	
+		stMainItemProduced.Total := stMainItemProduced.Total+ 1;
+		stShiftItemProduced.Total := stShiftItemProduced.Total+ 1;
+		stProdItemProduced.Total := stProdItemProduced.Total+ 1;
+	
+		(* update read efficiency for indyvidual Pack position *)
+		aPackPosEfficiency[nPackPositionIndex].Efficiency := F_SafeDIV(UDINT_TO_LREAL(aPackPosEfficiency[nPackPositionIndex].ReadOK),
+																			UDINT_TO_LREAL(nTotalOutersProcessingByPackAggregCameras )) * 100.0;
+		aPackPosEfficiency[nPackPositionIndex].Efficiency  :=LIMIT(0, aPackPosEfficiency[nPackPositionIndex].Efficiency , 100);
+	END_FOR
+END_IF
+(******************************************************************************************************************************************)
+
+stPackAggregationEfficiency.ProcessedTotal := stPackAggregationEfficiency.ProcessedTotal + 1;
+
+IF (sOuterStatus.stOACData.AggregationCodes[1] = cCODE_OVERWIRTTEN OR
+		sOuterStatus.stOACData.AggregationCodes[1] = '')		AND
+		bUseInterimCode 											THEN
+
+	bValidOuter := FALSE;
+END_IF
+
+IF bValidOuter THEN
+	stPackAggregationEfficiency.ProcessedSuccessful := stPackAggregationEfficiency.ProcessedSuccessful + 1;
+ELSE
+	stPackAggregationEfficiency.ProcessedRejected := stPackAggregationEfficiency.ProcessedRejected + 1;
+END_IF
+
+stPackAggregationEfficiency.ProcessedEfficiency := F_SafeDIV(UDINT_TO_LREAL(stPackAggregationEfficiency.ProcessedSuccessful),
+																	UDINT_TO_LREAL(stPackAggregationEfficiency.ProcessedTotal )) * 100.0;
+stPackAggregationEfficiency.ProcessedEfficiency  :=LIMIT(0, stPackAggregationEfficiency.ProcessedEfficiency , 100);
+
+(******************************************************************************************************************************************)
+
+stMainItemProduced.Efficiency := F_SafeDIV(stMainItemProduced.Passed * 100, stMainItemProduced.Total);
+stMainItemProduced.Efficiency :=LIMIT(0, stMainItemProduced.Efficiency, 100);
+
+stShiftItemProduced.Efficiency := F_SafeDIV(stShiftItemProduced.Passed * 100, stShiftItemProduced.Total);
+stShiftItemProduced.Efficiency :=LIMIT(0, stShiftItemProduced.Efficiency, 100);
+
+stProdItemProduced.Efficiency := F_SafeDIV(stProdItemProduced.Passed * 100, stProdItemProduced.Total);
+stProdItemProduced.Efficiency :=LIMIT(0, stProdItemProduced.Efficiency, 100);]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="FB_KPI_PackEfficiency">
+      <LineId Id="22" Count="14" />
+    </LineIds>
+    <LineIds Name="FB_KPI_PackEfficiency.CAM2">
+      <LineId Id="0" Count="61" />
+    </LineIds>
+    <LineIds Name="FB_KPI_PackEfficiency.NCW">
+      <LineId Id="0" Count="35" />
+    </LineIds>
+    <LineIds Name="FB_KPI_PackEfficiency.PAOL">
+      <LineId Id="0" Count="61" />
+    </LineIds>
+    <LineIds Name="FB_KPI_PackEfficiency.PLAS">
+      <LineId Id="0" Count="72" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

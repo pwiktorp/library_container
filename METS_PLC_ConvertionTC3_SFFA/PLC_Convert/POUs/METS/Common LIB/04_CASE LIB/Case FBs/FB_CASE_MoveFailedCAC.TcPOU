@@ -1,0 +1,101 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_CASE_MoveFailedCAC" Id="{94d09488-a9d0-49a1-87b9-184079573053}" SpecialFunc="None">
+    <Declaration><![CDATA[(* move failded CaC dato into Failed Cac *)
+FUNCTION_BLOCK FB_CASE_MoveFailedCAC
+VAR_INPUT
+	bExecute 						: BOOL;		(* set TRUE to move Outers *)
+	stPrintCACData				: ST_CAC_Data;
+	stCTDateTime					: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	(*stCodeInfo_Case		: ST_CodeInfo;*)
+END_VAR
+VAR_IN_OUT
+	aFailedCACData				: ARRAY[1..cMAX_FAILED_CASE_QUEUE] OF ST_CAC_Data;	(* array of failed CAC data *)
+	aFailedCACDataHMI			: ARRAY[1..cMAX_FAILED_CASE_QUEUE] OF ST_HMI_CAC_Data;	(* array of failed CAC data *)
+	stQaseQueueDataHMI			: ST_HMI_CAC_Data;
+END_VAR
+VAR_OUTPUT
+	bDone: BOOL;
+END_VAR
+VAR
+	fbExecute						: R_TRIG;
+	nIndexOuter					:INT;
+	nIndexPack					:INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+(* move CaseData *)
+IF fbExecute.Q = TRUE THEN
+
+	(* shift data *)
+	MEMMOVE(ADR(aFailedCACData[2]), ADR(aFailedCACData[1]), SIZEOF(aFailedCACData) - SIZEOF(aFailedCACData[1]));
+	(* clear data *)
+	MEMSET(ADR(aFailedCACData[1]), 16#00, SIZEOF(aFailedCACData[1]));
+
+	IF stPrintCACData.ProductionTime ='' THEN
+		stPrintCACData.ProductionDate := F_StringWildcard('#YYYYMMDD#', stCTDateTime.sSystemTime);
+		stPrintCACData.ProductionTime := F_StringWildcard('#hhmmss#', stCTDateTime.sSystemTime);
+		stPrintCACData.ProductionTimeOffset := F_SYSTEM_SystemTimeOffsetToHHMM(stCTDateTime.nSystemTimeOffset);
+	END_IF
+
+	MEMMOVE(ADR(aFailedCACData[1]), ADR(stPrintCACData), SIZEOF(aFailedCACData[1]));
+
+	(*shift HMI Data*)
+	MEMMOVE(ADR(aFailedCACDataHMI[2]), ADR(aFailedCACDataHMI[1]), SIZEOF(aFailedCACDataHMI) - SIZEOF(aFailedCACDataHMI[1]));
+	(* clear data *)
+	MEMSET(ADR(aFailedCACDataHMI[1]), 16#00, SIZEOF(aFailedCACDataHMI[1]));
+
+	IF aFailedCACData[1].CaseRejectCode = 'OK' THEN
+		aFailedCACDataHMI[1].sBarcode:= F_CONCAT3(aFailedCACData[1].Barcode,'(999)','1');
+	ELSE
+		aFailedCACDataHMI[1].sBarcode:= F_CONCAT3(aFailedCACData[1].Barcode,'(999)','0');
+	END_IF
+
+	(*IF aFailedCACData[1].Barcode <>  cCASE_PACKER_REJECT THEN
+		aFailedCACDataHMI[1].sCaseIDCode		:= RIGHT(F_CODE_GetItem(aFailedCACData[1].Barcode, eCodeAIType.SerialCode, stCodeInfo_Case), 7);
+	ELSE
+		aFailedCACDataHMI[1].sCaseIDCode := '';
+	END_IF
+	aFailedCACDataHMI[1].sProductionDate 	:= aFailedCACData[1].ProductionDate;
+	aFailedCACDataHMI[1].sProductionTime 	:= aFailedCACData[1].ProductionTime;
+	aFailedCACDataHMI[1].sCaseRejectCode 	:= aFailedCACData[1].CaseRejectCode;*)
+	aFailedCACDataHMI[1].nNumberOfOuters	:= aFailedCACData[1].NumberOfOuters;
+	aFailedCACDataHMI[1].nNumberOfPacks 	:= aFailedCACData[1].Outer[1].NumberOfPacks;
+
+
+	FOR nIndexOuter:=1 TO MIN(aFailedCACData[1].NumberOfOuters,cMAX_OUTERS_PER_CASE) DO
+		IF aFailedCACData[1].Outer[nIndexOuter].OuterRejectCode = 'OK' THEN
+			aFailedCACDataHMI[1].aOuter[nIndexOuter].sBarcode:= F_CONCAT3(aFailedCACData[1].Outer[nIndexOuter].Barcode,'(999)','1');
+		ELSE
+			aFailedCACDataHMI[1].aOuter[nIndexOuter].sBarcode:= F_CONCAT3(aFailedCACData[1].Outer[nIndexOuter].Barcode,'(999)','0');
+		END_IF
+
+		FOR nIndexPack:=1 TO MIN(aFailedCACData[1].Outer[nIndexOuter].NumberOfPacks, cMAX_PACKS_PER_OUTER) DO
+			IF aFailedCACData[1].Outer[nIndexOuter].PackRejectCode[nIndexPack] = 'OK' THEN
+				aFailedCACDataHMI[1].aOuter[nIndexOuter].aPackCode[nIndexPack]:= F_CONCAT3(aFailedCACData[1].Outer[nIndexOuter].PackCode[nIndexPack],'(999)','1');
+			ELSE
+				aFailedCACDataHMI[1].aOuter[nIndexOuter].aPackCode[nIndexPack]:= F_CONCAT3(aFailedCACData[1].Outer[nIndexOuter].PackCode[nIndexPack],'(999)','0');
+			END_IF
+
+		END_FOR
+	END_FOR
+
+	MEMSET(ADR(stQaseQueueDataHMI), 16#00, SIZEOF(stQaseQueueDataHMI));
+
+	(*End of New HMI Data*)
+
+	bDone := TRUE;
+
+(* bExecute has been reset *)
+ELSIF bExecute = FALSE THEN
+	bDone := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_CASE_MoveFailedCAC">
+      <LineId Id="22" Count="68" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

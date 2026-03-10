@@ -1,0 +1,108 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CumulativeAverage" Id="{4a6ef04f-f555-4e33-9da2-32381d0d6a72}" SpecialFunc="None">
+    <Declaration><![CDATA[(* fAverage = sum of fInput samples / no of samples;  individual samples are not recorded *)
+FUNCTION_BLOCK FB_CumulativeAverage
+VAR_INPUT
+	bEnable			: BOOL;		(* start cumulative calculation *)
+	fInput			: LREAL;		(* input position *)
+	tSamplePeriod	: TIME;		(* time period between each new value being logged *)
+END_VAR
+VAR_OUTPUT
+	bRunning		: BOOL;		(* moving window being calculated without problem *)
+	bNewValue		: BOOL;		(* set TRUE when a new value is logged and output is updated *)
+	fAverage		: LREAL;	(* change in input value per second *)
+	fMaxValue		: LREAL;	(* highest input value seen *)
+	fMinValue		: LREAL;	(* lowest input value seen *)
+END_VAR
+VAR
+	fbTaskTime		: FB_SYSTEM_TaskInfo;
+	fTaskCycleTime	: LREAL;
+	fbEnable		: R_TRIG;
+	nLoggedSamples	: UDINT;
+	fTimer			: LREAL;
+	fSamplePeriod	: LREAL;
+	fAccumulator	: LREAL;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		LREAL now used in place of REAL
+
+-------------------------------------------------------------------------------------------------
+07/03/2012	1.09.00	PB		TaskTime calculated on rising edge of bEnable
+05/02/2010	1.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* detect rising edge of bEnable *)
+fbEnable(CLK := bEnable);
+
+(* generate average value *)
+IF bEnable = TRUE THEN
+
+	(* on rising edge of bEnable *)
+	IF fbEnable.Q = TRUE THEN
+
+		(* time base of current task *)
+		fbTaskTime();
+		fTaskCycleTime := fbTaskTime.fTaskTimeMicrosecs / 1000;
+
+		fAccumulator := 0.0;
+		nLoggedSamples := 0;
+		fMaxValue := 0.0;
+		fMinValue := 0.0;
+	END_IF
+
+	(* calculate sample period *)
+	fSamplePeriod := MAX(fTaskCycleTime, TIME_TO_REAL(tSamplePeriod));
+
+	(* update sample timer *)
+	fTimer := fTimer + fTaskCycleTime;
+
+	(* time to store new sample *)
+	IF fTimer >= fSamplePeriod THEN
+
+		(* set new value logged flag *)
+		bNewValue := TRUE;
+
+		(* update accumulator and samples and calculate new average *)
+		fAccumulator := fAccumulator + fInput;
+		nLoggedSamples := nLoggedSamples + 1;
+		fAverage := F_SafeDIV(fAccumulator, UDINT_TO_REAL(nLoggedSamples));
+
+		(* on 1st sample, set Max and Min Values = fInput *)
+		IF nLoggedSamples = 1 THEN
+
+			fMaxValue := fInput;
+			fMinValue := fInput;
+		END_IF
+
+		(* update maximum and minimum values seen during average calculation *)
+		fMaxValue := MAX(fInput, fMaxValue);
+		fMinValue := MIN(fInput, fMinValue);
+
+		(* remove complete sample time from timer *)
+		fTimer := fTimer - fSamplePeriod;
+
+	(* no new sample *)
+	ELSE
+
+		bNewValue := FALSE;
+	END_IF
+
+(* sampling disabled *)
+ELSE
+
+	bRunning := FALSE;
+	bNewValue := FALSE;
+	fAverage := fInput;
+	nLoggedSamples := 0;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

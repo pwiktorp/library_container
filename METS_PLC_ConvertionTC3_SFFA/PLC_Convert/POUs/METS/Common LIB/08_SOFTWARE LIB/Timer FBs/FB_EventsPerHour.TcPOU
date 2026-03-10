@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_EventsPerHour" Id="{b0b4c9fc-8f74-4f41-9852-3e392463f200}" SpecialFunc="None">
+    <Declaration><![CDATA[(* calculate no of events per hour based on specified max and min nos of events.
+Event times are added to buffer on rising edge of bLogEvent, oldest value is deleted after 20 samples*)
+FUNCTION_BLOCK FB_EventsPerHour
+VAR_INPUT
+	bEnable			: BOOL;		(* set TRUE to enable FB, output set to 0 when disabled *)
+	bLogEvent		: BOOL;		(* log event time on FALSE-TRUE transition *)
+	dtDateTime		: DT;		(* date and time *)
+	nMinEvents		: UINT;		(* min no of logged events before output rate is updated *)
+	nMaxEvents		: UINT;		(* max no of events to keep logged *)
+END_VAR
+VAR_OUTPUT
+	fEventsPerHour	: LREAL;	(* number of events per hour *)
+END_VAR
+VAR
+	arrDateTime		: ARRAY[1..20] OF DT;
+	fbLogEvent		: R_TRIG;
+	nMaxSamples		: UINT;
+	nLoggedSamples	: UINT;
+	fTimeDiff		: LREAL;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		LREAL now used in place of REAL
+
+-------------------------------------------------------------------------------------------------
+05/02/2010	1.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* calculate max no of samples that can be handled *)
+nMaxSamples := SIZEOF(arrDateTime) / SIZEOF(arrDateTime[1]);
+
+(* new event *)
+fbLogEvent(CLK:= bLogEvent);
+
+(* log events enabled *)
+IF bEnable = TRUE THEN
+
+	IF fbLogEvent.Q = TRUE THEN
+
+		(* current number of stored samples *)
+		nLoggedSamples := MIN(nLoggedSamples + 1, MIN(nMaxEvents, nMaxSamples));
+
+		(* remove oldest event time and add latest event time to array *)
+		MEMMOVE(ADR(arrDateTime[2]), ADR(arrDateTime[1]), SIZEOF(arrDateTime[1]) * (nMaxSamples - 1));
+		arrDateTime[1] := dtDateTime;
+
+		(* when minimum number of events have occurred *)
+		IF nLoggedSamples >= nMinEvents THEN
+
+			(* calculate time difference between newest and oldest event, convert to hours and calculate corresponding events per hour *)
+			fTimeDiff := TIME_TO_REAL(arrDateTime[1] - arrDateTime[nLoggedSamples]) / TO_REAL((1000 * 60 * 60));
+			fEventsPerHour := F_SafeDIV(UINT_TO_REAL(nLoggedSamples), fTimeDiff);
+
+		ELSE
+
+			fEventsPerHour := UINT_TO_REAL(nLoggedSamples);
+		END_IF
+	END_IF
+
+(* log event disabled *)
+ELSE
+
+	nLoggedSamples := 0;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

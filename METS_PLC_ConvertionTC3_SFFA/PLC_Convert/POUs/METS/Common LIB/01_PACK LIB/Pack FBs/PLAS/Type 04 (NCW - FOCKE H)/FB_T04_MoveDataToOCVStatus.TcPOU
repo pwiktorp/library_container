@@ -1,0 +1,368 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_T04_MoveDataToOCVStatus" Id="{03ea7b71-dad3-4903-a2ad-cc0aabd85f5e}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_T04_MoveDataToOCVStatus
+VAR_INPUT
+	bExecute						: BOOL;
+	bEnableRestoreOCV			: BOOL;
+	stImageData					: ST_SCANNER_ImageData;	(* image data structure *)
+	nExpectedResp					: INT:=1;
+	(*nExpectedValidationDepth		: INT;*)
+	nPacksPerOuter				: INT;
+	bConfirmOnOuter				: BOOL;
+END_VAR
+VAR_IN_OUT
+	stPackRejectReasons			: ST_RejectReasonsForPack;
+	stPackInFeedQueue			: ST_PACK_InfeedQueue; (* Infeed queue *)
+	stOCVPackStatus				: ST_OUTER_Status;
+	stPreviousOCVPackStatus		: ST_OUTER_Status;
+	stCodeInfo						: ST_CodeInfo;
+END_VAR
+VAR_OUTPUT
+	bDone							: BOOL;
+
+	nImageDataIndex				: T_PositiveINT;
+	nSearchIndex					: T_PositiveINT;
+	nMoveIndex					: T_PositiveINT;
+	nValidatinIndex				: T_PositiveINT;
+
+	bOCVStackOutOfSequence		: BOOL;
+	bOCVNoConfiramtion			: BOOL;
+	bOCVConfirmationNotFound	: BOOL;
+
+	sStackerDataLog				: T_LongSTRING;
+END_VAR
+VAR
+	fbExecute						: R_TRIG;
+
+	nPackIndex					: T_PositiveINT;
+	nLogIndex						: INT;
+	sAppendedString				: STRING;
+	
+	nLastMoveIndex				: T_PositiveINT;
+	nValidationOffset 				: INT;
+	nGoodPackReads				: INT;
+
+	bActivateRestoreOCV			: BOOL;
+
+	aDiagonosticError				: ARRAY[1..10] OF INT;
+	aDiagonosticMove				: ARRAY[0..20] OF INT;
+
+	nDiagnosticRestore			: INT;
+	sLastRestoresInterim			: STRING;
+END_VAR
+
+VAR CONSTANT
+	aPackCodeMapping2x5		: ARRAY[1..cMAX_PACKS_PER_OUTER] OF INT :=[ 	9, 8, 7, 6, 5, 4, 3, 2, 1, 0];		(*mapping examples*)
+	aPackCodeMapping5x2		: ARRAY[1..cMAX_PACKS_PER_OUTER] OF INT :=[ 	0, 1, 2, 3, 4, 5, 6, 7, 8, 9];		(*mapping examples*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK := bExecute);
+
+IF fbExecute.Q THEN
+
+	bDone := FALSE;
+
+	nLastMoveIndex	:= nMoveIndex;
+	nMoveIndex	:= 0;
+	nSearchIndex 	:=0;		(*initialize in for loop on 1*)
+	nImageDataIndex := 0;	(*initialize in for loop on 1*)
+
+	sAppendedString	:= '';	
+	sStackerDataLog	:= '';
+
+	bOCVStackOutOfSequence		:= FALSE;
+	bOCVNoConfiramtion			:= FALSE;
+	(*bOCVConfirmationNotFound	:= FALSE;*)
+
+	(*nExpectedValidationDepth	:= LIMIT(1, nExpectedValidationDepth, cMAX_CAMERA_PROG_NUMBER);*)
+
+	nValidationOffset :=SEL(bConfirmOnOuter, 0, nExpectedResp);
+
+(*********************************Identify index***************************************************)
+
+	IF stImageData.nCodesRead > 0 THEN
+
+		FOR nImageDataIndex := 1 TO stImageData.nCodesRead DO
+			FOR nSearchIndex :=1 TO cMAX_PACK_INFEED_QUEUE DO
+
+				IF stImageData.aCodeData[nImageDataIndex].strDataString  = stPackInFeedQueue.aPackQueue[nSearchIndex].sPackCode AND
+					stPackInFeedQueue.aPackQueue[nSearchIndex].sPackCode <> '' THEN
+
+					IF nSearchIndex > stImageData.aCodeData[nImageDataIndex].nProgramNo THEN
+						nMoveIndex := nSearchIndex-stImageData.aCodeData[nImageDataIndex].nProgramNo +nValidationOffset;  (*add nExpectedResp as an option*)
+						EXIT;
+					END_IF
+				END_IF
+			END_FOR
+
+			IF nMoveIndex > 0 THEN
+				EXIT;
+			END_IF
+		END_FOR
+
+	ELSIF stImageData.nCodesRead = 0 AND stPackInFeedQueue.nIndex = nPacksPerOuter THEN
+		
+		nMoveIndex := stPackInFeedQueue.nIndex;
+	END_IF
+
+	sStackerDataLog	:= F_CONCAT3('MOVED ITEM [', INT_TO_STRING(nMoveIndex), ']:');
+
+(*********************************Validation***************************************************)
+
+	IF	bOCVConfirmationNotFound AND nMoveIndex <> 0 THEN		(*reject next outer after one with read code bou confirmation not found*)
+
+		(*sStackerDataLog	:= CONCAT(sStackerDataLog, '[X]');*)
+
+		aDiagonosticError[1]	:=  aDiagonosticError[1] + 1;
+		bOCVConfirmationNotFound := FALSE;
+
+		IF bEnableRestoreOCV AND bActivateRestoreOCV AND
+			nMoveIndex = 2*nPacksPerOuter AND stImageData.nCodesRead = nExpectedResp  THEN
+
+		(*Check all reaming codes in the comfirmation stack*)
+			FOR nValidatinIndex := 1 TO stImageData.nCodesRead DO														(*nMovePsotion - nExpectedResp as an option*)
+				IF stImageData.aCodeData[nValidatinIndex].strDataString <> stPackInFeedQueue.aPackQueue[nMoveIndex + stImageData.aCodeData[nValidatinIndex].nProgramNo - nValidationOffset].sPackCode(* AND
+					stPackInFeedQueue.aPackQueue[nMoveIndex + stImageData.aCodeData[nValidatinIndex].nProgramNo - nValidationOffset].sPackCode <> ''*)  THEN (*More restricted to reject if comapre with empty*)
+
+					(*aDiagonosticError[9]	:=  aDiagonosticError[9] + 1;*)
+					sStackerDataLog	:= CONCAT(sStackerDataLog, '[XC]');
+
+					bOCVStackOutOfSequence := TRUE;
+					EXIT;
+				END_IF
+			END_FOR
+
+			IF NOT bOCVStackOutOfSequence THEN		(*temp for now included bOCVNoConfiramtion*)
+
+				nGoodPackReads := 0;
+				stPreviousOCVPackStatus.nStatus := 0;
+
+				FOR nPackIndex := 1 TO LIMIT(1, nPacksPerOuter, cMAX_PACKS_PER_OUTER) DO
+
+					(* to avoid incorect mapping in PackCodeMapping declaration, where array index <0 *)
+					IF nMoveIndex - nPacksPerOuter >  aPackCodeMapping2x5[nPackIndex] AND nPacksPerOuter > 0 THEN
+						FillInPreviousOuter();
+					END_IF
+				END_FOR
+
+				stPreviousOCVPackStatus.nStatus.0 := TRUE; (* b0 linear aggregaton scan(s) complete *)
+				stPreviousOCVPackStatus.nStatus.6 := FALSE; (* b6	Pack codes store in OCV file *)
+				stPreviousOCVPackStatus.nStatus.7 := FALSE; (* b7	Pack codes OCV file write error *)
+
+				stPreviousOCVPackStatus.sDataSourceTracker 		:= 'RESTORE';
+
+				sStackerDataLog	:= CONCAT(sStackerDataLog, '[R]');
+			END_IF
+		ELSE
+			sStackerDataLog	:= CONCAT(sStackerDataLog, '[X]');
+
+			bOCVStackOutOfSequence := TRUE;
+		END_IF
+
+		bActivateRestoreOCV := FALSE;
+
+	ELSIF	stImageData.nCodesRead = 0 AND nMoveIndex = nPacksPerOuter THEN		(*move without confirmation found - temp blocked*)
+
+		aDiagonosticError[2]	:=  aDiagonosticError[2] + 1;
+		bOCVNoConfiramtion := TRUE;
+
+	ELSIF nMoveIndex = 0 AND stImageData.nCodesRead <> 0 THEN			(*Confirmation code read but not found in infeed*)
+
+		sStackerDataLog	:= CONCAT(sStackerDataLog, '[Y]');
+
+		aDiagonosticError[3]	:=  aDiagonosticError[3] + 1;
+		bOCVConfirmationNotFound := TRUE;
+
+	ELSIF nMoveIndex = 0 THEN		(*Confirmation code not found becouse camera not read*)
+
+		sStackerDataLog	:= CONCAT(sStackerDataLog, '[Z]');
+
+		aDiagonosticError[4]	:=  aDiagonosticError[4] + 1;
+		bOCVConfirmationNotFound := TRUE;
+
+		IF nLastMoveIndex <> 0 THEN
+			bActivateRestoreOCV := TRUE;
+		ELSE
+			bActivateRestoreOCV := FALSE;
+		END_IF
+
+	ELSIF  stImageData.nCodesRead <> nExpectedResp (*nExpectedValidationDepth*) THEN	(*no read or not enough code read found but at leas one code read and found*)
+
+		aDiagonosticError[5]	:=  aDiagonosticError[5] + 1;
+		bOCVStackOutOfSequence := TRUE;
+
+	ELSIF nMoveIndex > nPacksPerOuter THEN		(*f.ex phisical packs remode form line*)
+
+		aDiagonosticError[6]	:=  aDiagonosticError[6] + 1;
+		bOCVStackOutOfSequence := TRUE;
+
+	ELSIF nMoveIndex < nPacksPerOuter THEN		(*f.ex phantom packs passed form the line or queue was deleted*)
+
+		aDiagonosticError[7]	:=  aDiagonosticError[7] + 1;
+		bOCVStackOutOfSequence := TRUE;
+
+		IF nMoveIndex < 20 THEN	aDiagonosticMove[nMoveIndex] :=  aDiagonosticMove[nMoveIndex] + 1; END_IF
+
+		aDiagonosticError[8]	:=  aDiagonosticError[8] + 1;
+		bOCVStackOutOfSequence := TRUE;
+
+	ELSIF nMoveIndex = nPacksPerOuter  AND
+			stImageData.nCodesRead > 0	AND
+			nMoveIndex  <= cMAX_PACK_INFEED_QUEUE - cMAX_CAMERA_PROG_NUMBER	THEN
+
+		(*Check all reaming codes in the comfirmation stack*)
+		FOR nValidatinIndex := 1 TO stImageData.nCodesRead DO														(*nMovePsotion - nExpectedResp as an option*)
+			IF stImageData.aCodeData[nValidatinIndex].strDataString <> stPackInFeedQueue.aPackQueue[nMoveIndex + stImageData.aCodeData[nValidatinIndex].nProgramNo - nValidationOffset].sPackCode(* AND
+				stPackInFeedQueue.aPackQueue[nMoveIndex + stImageData.aCodeData[nValidatinIndex].nProgramNo - nValidationOffset].sPackCode <> ''*)  THEN (*More restricted to reject if comapre with empty*)
+
+				aDiagonosticError[9]	:=  aDiagonosticError[9] + 1;
+				bOCVStackOutOfSequence := TRUE;
+				EXIT;
+			END_IF
+		END_FOR
+	ELSE
+		aDiagonosticError[10]	:=  aDiagonosticError[10] + 1;
+		bOCVStackOutOfSequence := TRUE;
+	END_IF
+
+(*********************************Fill up OCV pack data***************************************************)
+
+	IF NOT bOCVStackOutOfSequence 		AND
+		NOT bOCVNoConfiramtion 			AND
+		NOT bOCVConfirmationNotFound  	THEN		(*temp for now included bOCVNoConfiramtion*)
+
+		FOR nPackIndex := 1 TO LIMIT(1, nPacksPerOuter, cMAX_PACKS_PER_OUTER) DO
+
+			(* to avoid incorect mapping in PackCodeMapping declaration, where array index <0 *)
+			IF nMoveIndex >  aPackCodeMapping2x5[nPackIndex] AND nPacksPerOuter > 0 THEN
+				FillInCurrentOuter();
+			ELSE
+				FillInOverWrittenOuter();
+			END_IF
+		END_FOR
+	ELSE
+		FOR nPackIndex := 1 TO LIMIT(1, nPacksPerOuter, cMAX_PACKS_PER_OUTER) DO
+
+			IF nPacksPerOuter > 0 THEN
+				FillInOverWrittenOuter();
+			ELSE
+				EXIT;	(*stOCVPackStatus remain empty - wrong input parameters*)
+			END_IF
+		END_FOR
+	END_IF
+
+(*********************************Log Move Pack Infeed Queue***************************************************)
+
+	IF nMoveIndex <> 0 THEN
+		FOR nLogIndex :=1 TO nMoveIndex  DO
+			//sStackerDataLog :=F_LongCONCAT(sStackerDataLog, '   ');
+			//sStackerDataLog :=F_LongCONCAT(sStackerDataLog, RIGHT(F_CODE_GetItem(stPackInFeedQueue.aPackQueue[nLogIndex].sPackCode, eCodeAIType.SerialCode, stCodeInfo),7));
+		
+			CONCAT2(ADR(sStackerDataLog), ADR('   '), ADR(sStackerDataLog), SIZEOF(sStackerDataLog));
+			
+			sAppendedString := RIGHT(F_CODE_GetItem(stPackInFeedQueue.aPackQueue[nLogIndex].sPackCode, eCodeAIType.SerialCode, stCodeInfo),7);
+			CONCAT2(ADR(sStackerDataLog), ADR(sAppendedString), ADR(sStackerDataLog), SIZEOF(sStackerDataLog));
+
+		END_FOR
+	END_IF
+
+(*********************************Move Pack Infeed Queue***************************************************)
+
+	IF nMoveIndex <> 0 THEN
+		(* move remaining Outers forward in sInfeedQueue and update index pointer *)
+		IF cMAX_PACK_INFEED_QUEUE  > nMoveIndex  THEN
+	
+			MEMMOVE(ADR(stPackInFeedQueue.aPackQueue[1]), ADR(stPackInFeedQueue.aPackQueue[nMoveIndex + 1]),
+											 F_SafeTo_UDINT(cMAX_PACK_INFEED_QUEUE- nMoveIndex) * SIZEOF(stPackInFeedQueue.aPackQueue[1]));
+			stPackInFeedQueue.nIndex := LIMIT(0, stPackInFeedQueue.nIndex - nMoveIndex,cMAX_PACK_INFEED_QUEUE);
+	
+		END_IF
+	
+		(* clear all data for empty Packs in PackInFeedQueue -> from Index + 1 till end of queue *)
+		IF cMAX_PACK_INFEED_QUEUE > stPackInFeedQueue.nIndex  THEN
+
+			MEMSET(ADR(stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex + 1]), 16#00,
+											F_SafeTo_UDINT(cMAX_PACK_INFEED_QUEUE - stPackInFeedQueue.nIndex ) * SIZEOF(stPackInFeedQueue.aPackQueue[1]));
+		END_IF
+	END_IF
+(****************************************************************************************************************************************************************)
+
+	bDone := TRUE;
+ELSE
+
+	bOCVStackOutOfSequence		:= FALSE;
+	bDone := FALSE;
+
+END_IF]]></ST>
+    </Implementation>
+    <Action Name="FillInCurrentOuter" Id="{9fd58994-8699-46ef-ba8a-07229d14efc4}">
+      <Implementation>
+        <ST><![CDATA[stOCVPackStatus.stOACData.PackCode[nPackIndex] := stPackInFeedQueue.aPackQueue[nMoveIndex - aPackCodeMapping2x5[nPackIndex]].sPackCode;
+stOCVPackStatus.aPackCodeFilledIn[nPackIndex] := stPackInFeedQueue.aPackQueue[nMoveIndex -aPackCodeMapping2x5[nPackIndex]].ePackCodeFilledIn;
+stOCVPackStatus.aPackCodes[nPackIndex].sBuffer[1].strCode := stPackInFeedQueue.aPackQueue[nMoveIndex -aPackCodeMapping2x5[nPackIndex]].stPackCodeData.strDataString;
+
+stOCVPackStatus.aOACPackStatus[nPackIndex]	:= stPackInFeedQueue.aPackQueue[nMoveIndex -aPackCodeMapping2x5[nPackIndex]].nPackStatus;
+stOCVPackStatus.stOACData.PackRejectID[nPackIndex] :=  stPackInFeedQueue.aPackQueue[nMoveIndex -aPackCodeMapping2x5[nPackIndex]].nPackRejectID;
+stOCVPackStatus.stOACData.PackRejectCode[nPackIndex] := stPackInFeedQueue.aPackQueue[nMoveIndex -aPackCodeMapping2x5[nPackIndex]].sPackRejectCode;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="FillInOverWrittenOuter" Id="{b6f67be1-c1df-4337-bd82-6c8c09448ab1}">
+      <Implementation>
+        <ST><![CDATA[stOCVPackStatus.stOACData.PackCode[nPackIndex] :=  cCODE_OVERWIRTTEN;
+stOCVPackStatus.aPackCodeFilledIn[nPackIndex] := E_PACK_CODEOVERWRITTEN;
+stOCVPackStatus.aPackCodes[nPackIndex].sBuffer[1].strCode :=  cCODE_OVERWIRTTEN;
+
+stOCVPackStatus.aOACPackStatus[nPackIndex]	:= 1;
+stOCVPackStatus.stOACData.PackRejectID[nPackIndex] :=  stPackRejectReasons.stPackCodesOverwritten.nRejectID;
+stOCVPackStatus.stOACData.PackRejectCode[nPackIndex] := stPackRejectReasons.stPackCodesOverwritten.sMetsDisplayCode;
+]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="FillInPreviousOuter" Id="{d6c40b95-ddc5-4683-a184-248fdd47087d}">
+      <Implementation>
+        <ST><![CDATA[stPreviousOCVPackStatus.stOACData.PackCode[nPackIndex] := stPackInFeedQueue.aPackQueue[nMoveIndex - nPacksPerOuter - aPackCodeMapping2x5[nPackIndex]].sPackCode;
+stPreviousOCVPackStatus.aPackCodeFilledIn[nPackIndex] := stPackInFeedQueue.aPackQueue[nMoveIndex - nPacksPerOuter - aPackCodeMapping2x5[nPackIndex]].ePackCodeFilledIn;
+stPreviousOCVPackStatus.aPackCodes[nPackIndex].sBuffer[1].strCode := stPackInFeedQueue.aPackQueue[nMoveIndex - nPacksPerOuter - aPackCodeMapping2x5[nPackIndex]].stPackCodeData.strDataString;
+
+stPreviousOCVPackStatus.aOACPackStatus[nPackIndex]	:= stPackInFeedQueue.aPackQueue[nMoveIndex - nPacksPerOuter - aPackCodeMapping2x5[nPackIndex]].nPackStatus;
+stPreviousOCVPackStatus.stOACData.PackRejectID[nPackIndex] :=  stPackInFeedQueue.aPackQueue[nMoveIndex - nPacksPerOuter - aPackCodeMapping2x5[nPackIndex]].nPackRejectID;
+stPreviousOCVPackStatus.stOACData.PackRejectCode[nPackIndex] := stPackInFeedQueue.aPackQueue[nMoveIndex - nPacksPerOuter - aPackCodeMapping2x5[nPackIndex]].sPackRejectCode;
+
+IF  stPreviousOCVPackStatus.aOACPackStatus[nPackIndex] > 1 THEN
+	stPreviousOCVPackStatus.stOACData.NumberOfLinkedPacks:= stPreviousOCVPackStatus.stOACData.NumberOfLinkedPacks + 1;
+END_IF
+
+IF stPreviousOCVPackStatus.aOACPackStatus[nPackIndex]	= 1 THEN
+	stPreviousOCVPackStatus.nStatus.25 := TRUE;
+END_IF
+
+IF stPreviousOCVPackStatus.aOACPackStatus[nPackIndex]	= 2 THEN
+	stPreviousOCVPackStatus.nStatus.26 := TRUE;
+END_IF
+
+
+IF stPreviousOCVPackStatus.aOACPackStatus[nPackIndex] = 5 THEN
+	nGoodPackReads := nGoodPackReads + 1;
+END_IF
+
+stPreviousOCVPackStatus.stOACData.PackCodeStatus[nPackIndex] :=
+							F_FiltredSetBitState16(TRUE, 'LOW', stPreviousOCVPackStatus.aOACPackStatus[nPackIndex], TRUE, stPreviousOCVPackStatus.stOACData.PackCodeStatus[nPackIndex]);
+
+IF stPreviousOCVPackStatus.aPackCodeFilledIn[nPackIndex] = E_PACK_SECONDARYMASTERLISTRESTORED THEN
+	stPreviousOCVPackStatus.stOACData.PackCodeStatus[nPackIndex].10 := TRUE;
+	stPreviousOCVPackStatus.aOACPackStatus[nPackIndex] := 6;
+ELSIF stPreviousOCVPackStatus.aPackCodeFilledIn[nPackIndex] = E_PACK_PRIMARYMASTERLISTRESTORED THEN
+	stPreviousOCVPackStatus.stOACData.PackCodeStatus[nPackIndex].9 := TRUE;
+	stPreviousOCVPackStatus.aOACPackStatus[nPackIndex] := 6;
+END_IF
+
+stPreviousOCVPackStatus.stOACData.PackCodeStatus[nPackIndex].6 := TRUE;
+
+nDiagnosticRestore:= nDiagnosticRestore + 1;
+sLastRestoresInterim := stPreviousOCVPackStatus.stOACData.AggregationCodes[1];
+]]></ST>
+      </Implementation>
+    </Action>
+  </POU>
+</TcPlcObject>

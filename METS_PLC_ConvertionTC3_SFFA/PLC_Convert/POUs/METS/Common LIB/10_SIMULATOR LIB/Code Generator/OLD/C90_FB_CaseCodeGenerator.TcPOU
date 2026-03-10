@@ -1,0 +1,69 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="C90_FB_CaseCodeGenerator" Id="{34b460f1-7841-4feb-ab96-fd1738101605}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK C90_FB_CaseCodeGenerator
+
+VAR_INPUT
+	bStart:BOOL;
+END_VAR
+
+VAR_OUTPUT
+	sOuterCode:STRING(50);
+END_VAR
+
+VAR
+	sAsciiSymbol:STRING(1);
+
+	nIndex:INT;
+	fbCaseCharacterGenerator:C90_FB_CharacterGenerator;
+	s01:STRING(4):='(01)';
+	s21:STRING(4):='(21)';
+	s240:STRING(5):='(240)';
+END_VAR
+
+
+
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Case code generator *********************************************************************)
+	IF NOT bStart THEN
+		sOuterCode:='';
+		RETURN;
+	END_IF
+
+	FOR nIndex:=1 TO 50 DO
+
+		(*Character Generator *)
+		fbCaseCharacterGenerator	(
+									nMinAsciiRange:=16#21,
+									nMaxAsciiRange:=16#7A,
+									sAsciiSymbol=>sAsciiSymbol
+								);
+
+		(*Outer string creator*)
+		IF nIndex = 1  THEN
+			sOuterCode:=CONCAT(sOuterCode, s01);
+			nIndex:= 4;
+		ELSIF nIndex = 19 THEN
+			sOuterCode:=CONCAT(sOuterCode, s21);
+			nIndex:= 22;
+		ELSIF nIndex = 38 THEN
+			sOuterCode:=CONCAT(sOuterCode, s240);
+			nIndex:= 42;
+		ELSE
+			sOuterCode:=CONCAT(sOuterCode, sAsciiSymbol);
+		END_IF
+
+	END_FOR
+
+(*****************************************************************************************)
+
+(* (01)xxxxxxxxxxxxxx(21)xxxxxxxxxxxxxxx(240)xxxxxxxx *)
+(*'(01)a*2y;G_*Mtb5go(21)Bd(nr@<gsNa\MIs(240)DgSP5_O'*)]]></ST>
+    </Implementation>
+    <LineIds Name="C90_FB_CaseCodeGenerator">
+      <LineId Id="24" Count="34" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,56 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_CODE_BATSerializator" Id="{e22051ce-17eb-4bc1-aa43-c3a748085a37}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_CODE_BATSerializator : STRING(25)
+VAR_INPUT
+	stCTDateTime				: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	nItemType					: INT;
+	bDummyCodeUse			: BOOL;
+END_VAR
+
+VAR
+	sYMD					: STRING(3);
+	sFNC1 					: STRING(3) :='$1D';
+END_VAR
+VAR CONSTANT
+	aProductionMonth		: ARRAY[1..12] OF T_Char :=[  'A', 'B', 'C', 'D',  'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M'];
+	aProductionDay		: ARRAY[1..31] OF T_Char :=[  'A', 'B', 'C', 'D',  'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '1', '2', '3', '4', '5', '6', '7', '8'];
+	aTrackingLevel			: ARRAY[0..2] OF STRING(3) :=[ '100', '300', '500'];
+	aDummyTrackingLevel	: ARRAY[0..2] OF STRING(3) :=[ '1DC', '3DC', '5DC'];
+END_VAR
+
+(*All VAR_IN_OUT variables have been moved to the end of the declaration due to compatibility reasons*)
+VAR_IN_OUT
+	stPCMStatus				: ST_PCM_Status;
+	nSecquentionalCounter	: UDINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF stCTDateTime.bSystemTimeValid AND stCTDateTime.sSystemTime.wMonth <> 0 AND stCTDateTime.sSystemTime.wDay <> 0 THEN
+	
+	sYMD:=RIGHT(WORD_TO_STRING(stCTDateTime.sSystemTime.wYear), 1);
+	sYMD	:= CONCAT(sYMD, aProductionMonth[stCTDateTime.sSystemTime.wMonth]);
+	sYMD	:= CONCAT(sYMD, aProductionDay[stCTDateTime.sSystemTime.wDay]);
+END_IF
+
+nSecquentionalCounter := LIMIT(0, nSecquentionalCounter, 99999);
+
+F_CODE_BATSerializator	:= CONCAT(stPCMStatus.sProductionSite, stPCMStatus.sProductionLine);
+F_CODE_BATSerializator	:= CONCAT(F_CODE_BATSerializator, sYMD);
+F_CODE_BATSerializator	:= CONCAT(F_CODE_BATSerializator, F_ZeroPadString(WORD_TO_STRING(stCTDateTime.sSystemTime.wHour),2));
+F_CODE_BATSerializator	:= CONCAT(F_CODE_BATSerializator, F_ZeroPadString(WORD_TO_STRING(stCTDateTime.sSystemTime.wMinute),2));
+F_CODE_BATSerializator	:= CONCAT(F_CODE_BATSerializator, F_ZeroPadString(UDINT_TO_STRING(nSecquentionalCounter),5));
+
+IF nItemType < 3 THEN
+	F_CODE_BATSerializator	:= CONCAT(F_CODE_BATSerializator, SEL(bDummyCodeUse, aTrackingLevel[nItemType], aDummyTrackingLevel[nItemType]));
+ELSE
+	F_CODE_BATSerializator	:= CONCAT(F_CODE_BATSerializator, '000');
+END_IF
+
+IF nSecquentionalCounter = 99999 OR stPCMStatus.bRSKUChanged OR stPCMStatus.bOpModeChanged THEN
+	nSecquentionalCounter := 0;
+ELSE
+	nSecquentionalCounter	:= nSecquentionalCounter + 1;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

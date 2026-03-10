@@ -1,0 +1,241 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_OCV_FindFileWithError" Id="{38e6106a-076d-4fb2-95f6-12cc29832d19}" SpecialFunc="None">
+    <Declaration><![CDATA[(* converts strOuterBarcode to OCV filename and loads data *)
+FUNCTION_BLOCK FB_OCV_FindFileWithError
+VAR_INPUT
+	bExecute			: BOOL;		(* set TRUE to load OCV file *)
+	strPackCode	 	: STRING(255);	(* Outer barcode *)
+	strLocalOCVPath	: STRING(50);(* local OCv path *)
+END_VAR
+VAR_IN_OUT
+	sOuterStatus			: ST_OUTER_Status;	(* Outer status *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;		(* TRUE = find file complete *)
+	bBusy				: BOOL;		(* TRUE = find file in progress *)
+	bError				: BOOL;		(* TRUE = error occurred *)
+	nErrorID				: UDINT;	(* error code *)
+	bOCVFileFound 		: BOOL;
+	bOCVErrorFileFound		: BOOL;		(* TRUE = OCv file found *)
+	strOCVFile			: T_OCV_Filename;	(* OCV filename *)
+	strOCVErrorFile		: T_OCV_Filename;	(* OCV filename *)
+	strOCVErrorNameFound	: T_OCV_Filename;	(* OCV filename *)
+	nReadOCVError		: UDINT;
+	nReadOCVFound		: UDINT;
+	nReadOCVFoundInErr	: UDINT;
+END_VAR
+VAR
+	fbExecute				: R_TRIG;
+	eState				: E_OCV_State;
+	eErrorState			: E_OCV_State;
+
+	fbReadFile			: FB_XmlSrvRead;
+	fbGetNewFileInfo		: FB_FILE_GetFileInfo;
+	fbReadErrorFile		: FB_XmlSrvRead;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_OCV_IDLE:
+
+	(* rising edge of bExecute *)
+	IF fbExecute.Q = TRUE THEN
+
+		(* initialise outputs *)
+		bDone := FALSE;
+		bBusy := TRUE;
+		bError := FALSE;
+		nErrorID := 0;
+		strOCVFile := '';
+		strOCVErrorFile :='';
+
+		(* convert strOuterBarcode to OCV filename *)
+		bOCVFileFound 		:= FALSE;
+		bOCVErrorFileFound		:= FALSE;
+
+		MEMSET(ADR(sOuterStatus), 16#00, SIZEOF(sOuterStatus));
+
+		strOCVFile := 	 F_CONCAT3('OCV_',strPackCode, '.xml');
+		strOCVErrorFile := 	 F_CONCAT3('*',strPackCode, '*');
+
+		strOCVErrorNameFound	:= '';
+
+		eState := E_OCV_READFILE;
+
+	(* bExecute has been reset *)
+	ELSIF bExecute = FALSE THEN
+
+		(* reset outputs *)
+		bDone := FALSE;
+		bBusy := FALSE;
+		bError := FALSE;
+		nErrorID := 0;
+
+		bOCVFileFound 		:= FALSE;
+		bOCVErrorFileFound		:= FALSE;
+
+		strOCVErrorNameFound	:= '';
+
+	END_IF
+
+(* read good OCV  file *)
+	E_OCV_READFILE:
+
+		fbReadFile(
+			sNetId		:= '',
+			ePath		:= PATH_GENERIC,
+			nMode		:= XMLSRV_SKIPMISSING,
+			pSymAddr	:= ADR(sOuterStatus),
+			cbSymSize	:= SIZEOF(sOuterStatus),
+			sFilePath	:= CONCAT(strLocalOCVPath, strOCVFile),
+			sXPath		:= '/OCVPack',
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+		
+		(* read file complete *)
+		IF fbReadFile.bBusy = FALSE THEN
+		
+			(* read file completed OK *)
+			IF fbReadFile.bError = FALSE THEN
+
+				nReadOCVFound := nReadOCVFound + 1;
+				(* OAC file exists *)
+				bOCVFileFound := TRUE;
+
+				eState := E_OCV_DONE;
+			(* read file failed *)
+			ELSE
+		
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbReadFile.nErrId;
+				eErrorState := eState;
+				nReadOCVError :=nReadOCVError + 1;
+				eState := E_OCV_FINDFILE;
+		
+			END_IF
+
+			(* close off fbReadFile *)
+			fbReadFile(bExecute := FALSE);
+		END_IF
+
+	E_OCV_FINDFILE:
+
+
+		fbGetNewFileInfo(
+			bExecute			:=TRUE,			(* set TRUE to get file info *)
+			strPathSource		:=CONCAT(strLocalOCVPath,'Error\'),	(* folder path for SOURCE file, wildcard chars '*' and '?' can be used *)
+			strFileName		:=strOCVErrorFile,	(* name of file to be copied, wildcard chars '*' and '?' can be used *)
+			tTimeout			:=t#1s
+					);	(* full name of file found *)
+
+		(* delete file complete *)
+		IF fbGetNewFileInfo.bBusy = FALSE THEN
+
+			(* delete file completed OK *)
+			IF fbGetNewFileInfo.bError = FALSE THEN
+
+				IF fbGetNewFileInfo.bFileExists THEN
+					strOCVErrorNameFound := fbGetNewFileInfo.strFileFound;
+					bOCVErrorFileFound := TRUE;
+					eState := E_OCV_READERRORFILE;
+				ELSE
+					eState := E_OCV_DONE;
+				END_IF
+			(* copy file error *)
+			ELSE
+				(* no error has previously occurred *)
+				IF bError = FALSE THEN
+
+					(* log error code and failure state *)
+					bError := TRUE;
+					nErrorID := fbGetNewFileInfo.nErrorID;
+					eErrorState := eState;
+				END_IF
+
+				eState := E_OCV_DONE;
+
+			END_IF
+
+			(* close off fbDeleteFile *)
+			fbGetNewFileInfo(bExecute := FALSE);
+		END_IF
+	(* read error OCV  file *)
+	E_OCV_READERRORFILE:
+
+		fbReadErrorFile(
+			sNetId		:= '',
+			ePath		:= PATH_GENERIC,
+			nMode		:= XMLSRV_SKIPMISSING,
+			pSymAddr	:= ADR(sOuterStatus),
+			cbSymSize	:= SIZEOF(sOuterStatus),
+			sFilePath	:= F_CONCAT3(strLocalOCVPath, 'Error\', strOCVErrorNameFound),
+			sXPath		:= '/OCVPack',
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+		
+		(* read file complete *)
+		IF fbReadErrorFile.bBusy = FALSE THEN
+		
+			(* read file completed OK *)
+			IF fbReadErrorFile.bError = FALSE THEN
+
+				nReadOCVFoundInErr := nReadOCVFoundInErr + 1;
+				(* OAC file exists *)
+				bOCVErrorFileFound := TRUE;
+		
+				eState := E_OCV_DONE;
+			(* read file failed *)
+			ELSE
+		
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbReadErrorFile.nErrId;
+				eErrorState := eState;
+				nReadOCVError :=nReadOCVError + 1;
+				eState := E_OCV_DONE;
+
+			END_IF
+
+			(* close off fbReadFile *)
+			fbReadErrorFile(bExecute := FALSE);
+		END_IF
+
+	(* complete *)
+	E_OCV_DONE:
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_OCV_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_OCV_IDLE;
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+	nErrorID := 0;
+	bOCVFileFound 		:= FALSE;
+	bOCVErrorFileFound		:= FALSE;
+
+	strOCVErrorNameFound	:= '';
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_OCV_FindFileWithError">
+      <LineId Id="34" Count="196" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_PCM_TrackingModeDecode" Id="{9d3db65a-eea0-4bb1-a55e-ff0132e9a410}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_PCM_TrackingModeDecode
+VAR_INPUT
+	sTrackingLevels : STRING;
+END_VAR
+VAR_OUTPUT
+
+	nOpMode: INT;
+	sCodingAndTrackingMode	: STRING(3);
+	bWipSpliteMode		:	BOOL;
+END_VAR
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ IF FIND(sTrackingLevels, 'PK') <> 0 AND FIND(sTrackingLevels, 'OUT') <> 0 AND FIND(sTrackingLevels, 'CS') <>0 THEN
+	nOpMode :=11;
+	sCodingAndTrackingMode:='11';
+	bWipSpliteMode:=FALSE;
+ELSIF FIND(sTrackingLevels, 'PK')  = 0 AND FIND(sTrackingLevels, 'OUT') <> 0 AND FIND(sTrackingLevels, 'CS') <> 0THEN
+	nOpMode :=7;
+	sCodingAndTrackingMode:='7';
+	bWipSpliteMode:=FALSE;
+ELSIF FIND(sTrackingLevels, 'PK')  = 0 AND FIND(sTrackingLevels, 'OUT') = 0  AND FIND(sTrackingLevels, 'CS')  <> 0 THEN
+	nOpMode :=4;
+	sCodingAndTrackingMode:='4';
+	bWipSpliteMode:=FALSE;
+ELSE
+	nOpMode :=0;
+	sCodingAndTrackingMode:='0';
+	bWipSpliteMode:=FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_PCM_TrackingModeDecode">
+      <LineId Id="12" Count="16" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

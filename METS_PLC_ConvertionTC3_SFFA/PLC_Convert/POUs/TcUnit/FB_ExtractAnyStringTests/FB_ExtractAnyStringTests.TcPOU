@@ -1,0 +1,1244 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_ExtractAnyStringTests" Id="{6325394b-4a1e-4a45-b729-0c7c32420650}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ExtractAnyStringTests EXTENDS FB_TestSuite
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[//==============================================================
+//MAIN TESTS
+//==============================================================
+
+testMain01_ModeWITHIDENT_ExactDataNoPurge();
+testMain02_ModeWITHIDENTPURGE_ExactDataAndPurge();
+testMain03_ModeWITHOUTIDENT_ExtractDataNoPurge();
+testMain04_ModeWITHOUTIDENTPURGE_ExtractDataAndPurge();
+testMain05_ModeWITHOUTIDENTREMIDENT_ExtractDataNoPurge();
+testMain06_ModeWITHOUTIDENTREMIDENTPURGE_ExtractDataAndPurge();
+testMain07_ExtractFromLongString_ExtractData();
+testMain08_ExtractFromLongString_LenghtExtractedDataOk();
+testMain09_ExtractCharOnly_LeftStringWithExtractCharLenght();
+
+//==============================================================
+//NEGATIVE TESTS
+//==============================================================
+
+testNeg01_ReverseIdentAllModes_EmptyString();
+testNeg02_NoSufixFound_EmptyStringNoDataCahnge();
+testNeg03_NoPrefixFound_EmptyStringNoDataCahnge();
+testNeg04_NoPrefixSufixFoundNoCharsExtr_LeftString();
+testNeg05_PrefixFoundNoSufixNoCharsExtr_RightString();
+
+//==============================================================
+//SEQUENCE TESTS
+//==============================================================
+
+testSeq01_MVxDecode_ImageData();
+
+//==============================================================
+//OTHERS TESTS
+//==============================================================
+
+//FbExtrctAnyStringTests_ExtractPrefLenght_StringExtracted();
+//FbExtrctAnyStringTests_ExtractPrefLenghtToLong_EmptyString();]]></ST>
+    </Implementation>
+    <Folder Name="01 Main" Id="{0bed1d7a-f58c-47a5-bc26-ffa74ef3a344}" />
+    <Folder Name="02 Negative" Id="{63a8b0a9-1f14-40e0-93f8-136d23ea418b}" />
+    <Folder Name="03 Sequence" Id="{885129a0-284d-418b-b394-efe61bfcf3fc}" />
+    <Folder Name="99 Others" Id="{fdfd9971-f1c8-46e2-b654-fe92c11d60c4}" />
+    <Method Name="FbExtrctAnyStringTests_ExtractPrefLenght_StringExtracted" Id="{34d9bb77-0ff5-44cd-8ea7-3bf04b5ddafa}" FolderPath="99 Others\">
+      <Declaration><![CDATA[METHOD INTERNAL FbExtrctAnyStringTests_ExtractPrefLenght_StringExtracted 
+VAR_INST
+	fbSut 	: FB_ExtractAnyString;
+	sDataString		: T_LongSTRING := 'ABCDEFGHIJKL'; 
+	sResult : T_LongSTRING;	// Result
+END_VAR
+//FB_ExtractAnyString]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('FbExtrctAnyStringTests_ExtractPrefLenght_StringExtracted');
+
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:= 3 , 
+	sPrefix:='E' , 
+	sSuffix:= '', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_PURGE, 
+	sDataString:= sDataString, 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= 'FGH', 
+						Actual:= fbSut.sExtractedString, 
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_STRING(	Expected:= 'IJKL', 
+						Actual:= sDataString, 
+						Message:= 'Remaining string is not as expected');
+						
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="FbExtrctAnyStringTests_ExtractPrefLenghtToLong_EmptyString" Id="{d1600533-bd0d-4a88-9d0d-cb007d8f755a}" FolderPath="99 Others\">
+      <Declaration><![CDATA[METHOD INTERNAL FbExtrctAnyStringTests_ExtractPrefLenghtToLong_EmptyString 
+VAR_INST
+	fbSut 	: FB_ExtractAnyString;
+	sDataString		: T_LongSTRING := 'ABCDEFGHIJKL'; 
+	sResult : T_LongSTRING;	// Result
+END_VAR
+//FB_ExtractAnyString]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('FbExtrctAnyStringTests_ExtractPrefLenghtToLong_EmptyString');
+
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:= 15 , 
+	sPrefix:='B' , 
+	sSuffix:= '', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_PURGE, 
+	sDataString:= sDataString, 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= 'CDEFGHIJKL', 
+						Actual:= fbSut.sExtractedString, 
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_STRING(	Expected:= '', 
+						Actual:= sDataString, 
+						Message:= 'Remaining string is not as expected');
+						
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testMain01_ModeWITHIDENT_ExactDataNoPurge" Id="{1b0843fb-4604-453c-8562-7072601b2b6b}" FolderPath="01 Main\">
+      <Declaration><![CDATA[METHOD INTERNAL testMain01_ModeWITHIDENT_ExactDataNoPurge
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	sDataString		: T_LongSTRING := '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; 
+	sResult 		: T_LongSTRING;	// Result
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testMain01_ModeWITHIDENT_ExactDataNoPurge');
+
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='DS=' , 
+	sSuffix:= ';OG', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT, 
+	sDataString:= sDataString, 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= 'DS=]d201062533414058582101485MV125000156300$1D24010120957;OG', 
+						Actual:= sResult, 
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_STRING(	Expected:= '$01ST=53;$02CT=10;=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04', 
+						Actual:= sDataString, 
+						Message:= 'Remaining string is not as expected');
+						
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testMain02_ModeWITHIDENTPURGE_ExactDataAndPurge" Id="{c1186f7c-c0e9-4f48-94ab-b4bc75454a04}" FolderPath="01 Main\">
+      <Declaration><![CDATA[METHOD INTERNAL testMain02_ModeWITHIDENTPURGE_ExactDataAndPurge
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	sDataString		: T_LongSTRING := '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; 
+	sResult 		: T_LongSTRING;	// Result
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testMain02_ModeWITHIDENTPURGE_ExactDataAndPurge');
+
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='DS=' , 
+	sSuffix:= ';OG', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT_PURGE, 
+	sDataString:= sDataString, 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= 'DS=]d201062533414058582101485MV125000156300$1D24010120957;OG', 
+						Actual:= sResult, 
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_STRING(	Expected:= '=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04', 
+						Actual:= sDataString, 
+						Message:= 'Remaining string is not as expected');
+						
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testMain03_ModeWITHOUTIDENT_ExtractDataNoPurge" Id="{4dfcbf59-9ed9-48e9-ab6c-b05da07709f9}" FolderPath="01 Main\">
+      <Declaration><![CDATA[METHOD INTERNAL testMain03_ModeWITHOUTIDENT_ExtractDataNoPurge
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	sDataString		: T_LongSTRING := '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; 
+	sResult 		: T_LongSTRING;	// Result
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testMain03_ModeWITHOUTIDENT_ExtractDataNoPurge');
+
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='DS=' , 
+	sSuffix:= ';OG', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT, 
+	sDataString:= sDataString, 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= ']d201062533414058582101485MV125000156300$1D24010120957', 
+						Actual:= sResult, 
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_STRING(	Expected:= '$01ST=53;$02CT=10;DS=;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04', 
+						Actual:= sDataString, 
+						Message:= 'Remaining string is not as expected');
+						
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testMain04_ModeWITHOUTIDENTPURGE_ExtractDataAndPurge" Id="{f01f16fc-bbd0-4ff4-8ef9-eb55eb860b9d}" FolderPath="01 Main\">
+      <Declaration><![CDATA[METHOD INTERNAL testMain04_ModeWITHOUTIDENTPURGE_ExtractDataAndPurge
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	sDataString		: T_LongSTRING := '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; 
+	sResult 		: T_LongSTRING;	// Result
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testMain04_ModeWITHOUTIDENTPURGE_ExtractDataAndPurge');
+
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='DS=' , 
+	sSuffix:= ';OG', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_PURGE, 
+	sDataString:= sDataString, 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= ']d201062533414058582101485MV125000156300$1D24010120957', 
+						Actual:= sResult, 
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_STRING(	Expected:= ';OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04', 
+						Actual:= sDataString, 
+						Message:= 'Remaining string is not as expected');
+						
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testMain05_ModeWITHOUTIDENTREMIDENT_ExtractDataNoPurge" Id="{834e5d7f-3caa-497d-8e73-9252a7e2274c}" FolderPath="01 Main\">
+      <Declaration><![CDATA[METHOD INTERNAL testMain05_ModeWITHOUTIDENTREMIDENT_ExtractDataNoPurge
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	sDataString		: T_LongSTRING := '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; 
+	sResult 		: T_LongSTRING;	// Result
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testMain05_ModeWITHOUTIDENTREMIDENT_ExtractDataNoPurge');
+
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='DS=' , 
+	sSuffix:= ';OG', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT, 
+	sDataString:= sDataString, 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= ']d201062533414058582101485MV125000156300$1D24010120957', 
+						Actual:= sResult, 
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_STRING(	Expected:= '$01ST=53;$02CT=10;=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04', 
+						Actual:= sDataString, 
+						Message:= 'Remaining string is not as expected');
+						
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testMain06_ModeWITHOUTIDENTREMIDENTPURGE_ExtractDataAndPurge" Id="{e3972cae-5a93-41f8-9690-ca512407d303}" FolderPath="01 Main\">
+      <Declaration><![CDATA[METHOD INTERNAL testMain06_ModeWITHOUTIDENTREMIDENTPURGE_ExtractDataAndPurge
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	sDataString		: T_LongSTRING := '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; 
+	sResult 		: T_LongSTRING;	// Result
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testMain06_ModeWITHOUTIDENTREMIDENTPURGE_ExtractDataAndPurge');
+
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='DS=' , 
+	sSuffix:= ';OG', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT_PURGE, 
+	sDataString:= sDataString, 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= ']d201062533414058582101485MV125000156300$1D24010120957', 
+						Actual:= sResult, 
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_STRING(	Expected:= '=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04', 
+						Actual:= sDataString, 
+						Message:= 'Remaining string is not as expected');
+						
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testMain07_ExtractFromLongString_ExtractData" Id="{29b29c4b-ffc7-45f5-9193-065e7bb5f166}" FolderPath="01 Main\">
+      <Declaration><![CDATA[METHOD INTERNAL testMain07_ExtractFromLongString_ExtractData
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	sResult 		: T_LongSTRING;	// Result
+END_VAR
+VAR_INST
+	aDataString		: ARRAY[1..3] OF T_LongSTRING;
+END_VAR
+
+// '$01ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03$04
+//		$01ST=53;$02CT=10;DS=N7E1Y89UNK3O;OG=3;XP=-50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=2;$03$04
+//		$01ST=53;$02CT=10;DS=JHWJXYFNX9DS;OG=3;XP=50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=3;$03$04
+//		$01ST=53;$02CT=10;DS=XGBEZLBV8A9I;OG=3;XP=50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=4;$03$04'; ]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testMain07_ExtractFromLongString_ExtractData');	
+			
+aDataString[1] := '$01ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03$04
+					$01ST=53;$02CT=10;DS=N7E1Y89UNK3O;OG=3;XP=-50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=2;$03$04
+					$01ST=53;$02CT=10;DS=JHWJXYFNX9DS;OG=3;XP=50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=3;$03$04
+					$01ST=53;$02CT=10;DS=XGBEZLBV8A9I;OG=3;XP=50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=4;$03$04'; 
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=9 , 
+	sPrefix:='XGB' , 
+	sSuffix:= '', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT, 
+	sDataString:= aDataString[1], 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= 'XGBEZLBV8A9I', 
+						Actual:= sResult, 
+						Message:= 'Extr data in mode:WITHIDENT not as expect');
+	
+aDataString[2] := '$01ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03$04
+					$01ST=53;$02CT=10;DS=N7E1Y89UNK3O;OG=3;XP=-50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=2;$03$04
+					$01ST=53;$02CT=10;DS=JHWJXYFNX9DS;OG=3;XP=50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=3;$03$04
+					$01ST=53;$02CT=10;DS=XGBEZLBV8A9I;OG=3;XP=50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=4;$03$04'; 
+					
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='DS=' , 
+	sSuffix:= ';OG', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_PURGE, 
+	sDataString:= aDataString[2], 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= 'GZDNP5JOA3IL', 
+						Actual:= sResult, 
+						Message:= 'Extr data in mode:WITHOUTIDENT_PURGE not as expect');
+				
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testMain08_ExtractFromLongString_LenghtExtractedDataOk" Id="{b0ea8d63-3195-48b2-b0a1-418160a1ad22}" FolderPath="01 Main\">
+      <Declaration><![CDATA[METHOD INTERNAL testMain08_ExtractFromLongString_LenghtExtractedDataOk
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	nResult 		: UDINT;	// Result
+END_VAR
+VAR_INST
+	aDataString		: ARRAY[1..4] OF T_LongSTRING;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testMain08_ExtractFromLongString_LenghtExtractedDataOk');	
+			
+aDataString[1] := '$01ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03$04
+					$01ST=53;$02CT=10;DS=N7E1Y89UNK3O;OG=3;XP=-50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=2;$03$04
+					$01ST=53;$02CT=10;DS=JHWJXYFNX9DS;OG=3;XP=50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=3;$03$04
+					$01ST=53;$02CT=10;DS=XGBEZLBV8A9I;OG=3;XP=50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=4;$03$04'; 
+					
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='$01' , 
+	sSuffix:= '$04', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT, 
+	sDataString:= aDataString[1], 
+	bStringFound=> , 
+	sExtractedString=>, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=>nResult ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_UDINT(	Expected:= 83, 
+						Actual:= nResult, 
+						Message:= 'Extr data in mode:WITHIDENT not as expect');
+				
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='$01' , 
+	sSuffix:= '$04', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT, 
+	sDataString:= aDataString[1], 
+	bStringFound=> , 
+	sExtractedString=>, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=>nResult ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_UDINT(	Expected:= 84, 
+						Actual:= nResult, 
+						Message:= 'Extr data in mode:WITHIDENT not as expect');
+						
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='$01' , 
+	sSuffix:= '$04', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT, 
+	sDataString:= aDataString[1], 
+	bStringFound=> , 
+	sExtractedString=>, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=>nResult ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_UDINT(	Expected:= 82, 
+						Actual:= nResult, 
+						Message:= 'Extr data in mode:WITHIDENT not as expect');
+						
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='$01' , 
+	sSuffix:= '$04', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT, 
+	sDataString:= aDataString[1], 
+	bStringFound=> , 
+	sExtractedString=>, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=>nResult ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_UDINT(	Expected:= 83, 
+						Actual:= nResult, 
+						Message:= 'Extr data in mode:WITHIDENT not as expect');
+				
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testMain09_ExtractCharOnly_LeftStringWithExtractCharLenght" Id="{58de1171-2990-4b80-afce-8b161a9a1b92}" FolderPath="01 Main\">
+      <Declaration><![CDATA[METHOD INTERNAL testMain09_ExtractCharOnly_LeftStringWithExtractCharLenght
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	nResult 		: UDINT;	// Result
+END_VAR
+VAR_INST
+	aDataString		: ARRAY[1..4] OF T_LongSTRING;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testMain09_ExtractCharOnly_LeftStringWithExtractCharLenght');	
+			
+aDataString[1] := '$01ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03$04$01ST=53;$02CT=10;DS=N7E1Y89UNK3O;OG=3;XP=-50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=2;$03$04'; 
+					
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=82 , 
+	sPrefix:='$01' , 
+	sSuffix:= '$04', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT, 
+	sDataString:= aDataString[1], 
+	bStringFound=> , 
+	sExtractedString=>, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=>nResult ,
+	nDataStringLen=> );
+	
+	AssertEquals_STRING(Expected:= '$01ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03$04', 
+						Actual:= fbSut.sExtractedString, 
+						Message:= 'Extr string in mode:WITHIDENT not as expect');
+						
+	AssertEquals_STRING(Expected:= '$01ST=53;$02CT=10;DS=N7E1Y89UNK3O;OG=3;XP=-50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=2;$03$04', 
+						Actual:= aDataString[1], 
+						Message:= 'Remain string in mode:WITHIDENT not as expect');
+						
+	AssertEquals_UDINT(	Expected:= 83, 
+						Actual:= fbSut.nExtractedStringLen, 
+						Message:= 'Extr data in mode:WITHIDENT not as expect');
+				
+	
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testNeg01_ReverseIdentAllModes_EmptyString" Id="{f9216112-c8dc-4324-a090-dae80d6100d8}" FolderPath="02 Negative\">
+      <Declaration><![CDATA[METHOD INTERNAL testNeg01_ReverseIdentAllModes_EmptyString
+VAR_INST
+	fbSut 			: FB_ExtractAnyString;
+	aDataString		: ARRAY[1..6] OF T_LongSTRING;
+	sResult 		: T_LongSTRING;	// Result
+END_VAR
+
+// '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; ]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testNeg01_ReverseIdentAllModes_EmptyString');
+
+aDataString[1] := '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; 
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:=';OG' , 
+	sSuffix:= 'DS=', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT, 
+	sDataString:= aDataString[1], 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= '', 
+						Actual:= sResult, 
+						Message:= 'Extr data in mode:WITHIDENT not as expect');
+						
+	AssertEquals_STRING(	Expected:= '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04', 
+						Actual:= aDataString[1], 
+						Message:= 'Remaining string 1 is not as expected');
+			
+aDataString[2] := '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; 
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:=';OG' , 
+	sSuffix:= 'DS=', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT_PURGE, 
+	sDataString:= aDataString[2], 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= '', 
+						Actual:= sResult, 
+						Message:= 'Extr data in mode:WITHIDENT_PURGE not as expect');
+						
+	AssertEquals_STRING(	Expected:= '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04', 
+						Actual:= aDataString[2], 
+						Message:= 'Remaining string 2 is not as expected');
+						
+			
+aDataString[3] := '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; 
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:=';OG' , 
+	sSuffix:= 'DS=', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT, 
+	sDataString:= aDataString[3], 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= '', 
+						Actual:= sResult, 
+						Message:= 'Extr data in mode:WITHOUTIDENT not as expect');
+						
+	AssertEquals_STRING(	Expected:= '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04', 
+						Actual:= aDataString[3], 
+						Message:= 'Remaining string 3 is not as expected');
+						
+			
+aDataString[4] := '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; 
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:=';OG' , 
+	sSuffix:= 'DS=', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_PURGE, 
+	sDataString:= aDataString[4], 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= '', 
+						Actual:= sResult, 
+						Message:= 'Extr data in mode:WITHOUTIDENT_PURGE not as expect');
+						
+	AssertEquals_STRING(	Expected:= '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04', 
+						Actual:= aDataString[4], 
+						Message:= 'Remaining string 4 is not as expected');
+						
+			
+aDataString[5] := '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; 
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:=';OG' , 
+	sSuffix:= 'DS=', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT, 
+	sDataString:= aDataString[5], 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= '', 
+						Actual:= sResult, 
+						Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT not as expect');
+						
+	AssertEquals_STRING(	Expected:= '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04', 
+						Actual:= aDataString[5], 
+						Message:= 'Remaining string 5 is not as expected');
+						
+			
+aDataString[6] := '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04'; 
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:=';OG' , 
+	sSuffix:= 'DS=', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT_PURGE, 
+	sDataString:= aDataString[6], 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=> ,
+	nDataStringLen=> );
+	
+	
+	AssertEquals_STRING(	Expected:= '', 
+						Actual:= sResult, 
+						Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT_PURGE not as expect');
+						
+	AssertEquals_STRING(	Expected:= '$01ST=53;$02CT=10;DS=]d201062533414058582101485MV125000156300$1D24010120957;OG=3;XP=94;YP=-39;AP=-88;CS=06.2;SC=0070;PN=1;QS=3;$03$04', 
+						Actual:= aDataString[6], 
+						Message:= 'Remaining string 6 is not as expected');
+				
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testNeg02_NoSufixFound_EmptyStringNoDataCahnge" Id="{6594c34e-adaf-4ff0-9b07-154fa7bade00}" FolderPath="02 Negative\">
+      <Declaration><![CDATA[METHOD INTERNAL testNeg02_NoSufixFound_EmptyStringNoDataCahnge
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	sResult			: T_LongSTRING;	// Result
+	nResult 		: UDINT;	// Result
+	nDataResult		: UDINT;
+	
+	nDataOrigin	: UDINT;
+END_VAR
+VAR_INST
+	sDataString		: T_LongSTRING;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testNeg02_NoSufixFound_EmptyStringNoDataCahnge');	
+			
+sDataString := '$01ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03
+					$01ST=53;$02CT=10;DS=N7E1Y89UNK3O;OG=3;XP=-50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=2;$03
+					$01ST=53;$02CT=10;DS=JHWJXYFNX9DS;OG=3;XP=50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=3;$03
+					$01ST=53;$02CT=10;DS=XGBEZLBV8A9I;OG=3;XP=50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=4;$03'; 
+
+nDataOrigin	:= len2(ADR(sDataString));
+					
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='$01' , 
+	sSuffix:= '$04', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT, 
+	sDataString:= sDataString, 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=>nResult ,
+	nDataStringLen=>nDataResult );
+	
+	AssertEquals_STRING(	Expected:= '', 
+						Actual:= sResult, 
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_UDINT(	Expected:= 0, 
+						Actual:= nResult, 
+						Message:= 'Extr data in mode:WITHIDENT not as expect');
+						
+	AssertEquals_UDINT(	Expected:= nDataOrigin, 
+						Actual:= nDataResult, 
+						Message:= 'Left data in mode:WITHIDENT not as expect');
+						
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testNeg03_NoPrefixFound_EmptyStringNoDataCahnge" Id="{203e93e7-efd8-4573-98fc-3fce9a722b84}" FolderPath="02 Negative\">
+      <Declaration><![CDATA[METHOD INTERNAL testNeg03_NoPrefixFound_EmptyStringNoDataCahnge : REFERENCE TO FB_Test
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	sResult			: T_LongSTRING;	// Result
+	nResult 		: UDINT;	// Result
+	nDataResult		: UDINT;
+	
+	nDataOrigin	: UDINT;
+END_VAR
+VAR_INST
+	sDataString		: T_LongSTRING;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testNeg03_NoPrefixFound_EmptyStringNoDataCahnge');	
+			
+sDataString := 'ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03$04
+					ST=53;$02CT=10;DS=N7E1Y89UNK3O;OG=3;XP=-50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=2;$03$04
+					ST=53;$02CT=10;DS=JHWJXYFNX9DS;OG=3;XP=50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=3;$03$04
+					ST=53;$02CT=10;DS=XGBEZLBV8A9I;OG=3;XP=50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=4;$03$04'; 
+
+nDataOrigin	:= len2(ADR(sDataString));
+					
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='$01' , 
+	sSuffix:= '$04', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT, 
+	sDataString:= sDataString, 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=>nResult ,
+	nDataStringLen=>nDataResult );
+	
+	AssertEquals_STRING(	Expected:= '', 
+						Actual:= sResult, 
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_UDINT(	Expected:= 0, 
+						Actual:= nResult, 
+						Message:= 'Extr data in mode:WITHIDENT not as expect');
+						
+	AssertEquals_UDINT(	Expected:= nDataOrigin, 
+						Actual:= nDataResult, 
+						Message:= 'Left data in mode:WITHIDENT not as expect');
+						
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testNeg04_NoPrefixSufixFoundNoCharsExtr_LeftString" Id="{5c08fa74-7d4f-4d86-aa28-5feda591b06e}" FolderPath="02 Negative\">
+      <Declaration><![CDATA[METHOD INTERNAL testNeg04_NoPrefixSufixFoundNoCharsExtr_LeftString : REFERENCE TO FB_Test
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	sResult			: T_LongSTRING;	// Result
+	nResult 		: UDINT;	// Result
+	nDataResult		: UDINT;
+	
+	nExtractedOrigin : INT;
+	nDataOrigin	: UDINT;
+END_VAR
+VAR_INST
+	sDataString		: T_LongSTRING;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testNeg04_NoPrefixSufixFoundNoCharsExtr_LeftString');	
+			
+sDataString := 'ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03$04
+					ST=53;$02CT=10;DS=N7E1Y89UNK3O;OG=3;XP=-50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=2;$03$04
+					ST=53;$02CT=10;DS=JHWJXYFNX9DS;OG=3;XP=50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=3;$03$04
+					ST=53;$02CT=10;DS=XGBEZLBV8A9I;OG=3;XP=50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=4;$03$04'; 
+
+nExtractedOrigin := LEN('ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03$04');
+nDataOrigin	:= LEN2(ADR(sDataString)) - TO_UDINT(nExtractedOrigin);
+					
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='' , 
+	sSuffix:= '$04', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT, 
+	sDataString:= sDataString, 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=>nResult ,
+	nDataStringLen=>nDataResult );
+	
+	AssertEquals_STRING( Expected:= 'ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03$04', 
+						Actual:= sResult, 
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_UDINT(	Expected:= TO_UDINT(nExtractedOrigin), 
+						Actual:= nResult, 
+						Message:= 'Extr data in mode:WITHIDENT not as expect');
+						
+	AssertEquals_UDINT(	Expected:= nDataOrigin, 
+						Actual:= nDataResult, 
+						Message:= 'Left data in mode:WITHIDENT not as expect');
+						
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testNeg05_PrefixFoundNoSufixNoCharsExtr_RightString" Id="{5d1b6767-ce38-4640-8602-3294fdf8301f}" FolderPath="02 Negative\">
+      <Declaration><![CDATA[METHOD INTERNAL testNeg05_PrefixFoundNoSufixNoCharsExtr_RightString : REFERENCE TO FB_Test
+VAR
+	fbSut 			: FB_ExtractAnyString;
+	sResult			: T_LongSTRING;	// Result
+	nResult 		: UDINT;	// Result
+	nDataResult		: UDINT;
+	
+	nExtractedOrigin : UDINT;
+END_VAR
+VAR_INST
+	sDataString		: T_LongSTRING;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testNeg05_PrefixFoundNoSufixNoCharsExtr_RightString');	
+			
+sDataString := 'ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03$04ST=53;$02CT=10;DS=N7E1Y89UNK3O;OG=3;XP=-50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=2;$03$04
+					$01ST=53;$02CT=10;DS=JHWJXYFNX9DS;OG=3;XP=50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=3;$03$04ST=53;$02CT=10;DS=XGBEZLBV8A9I;OG=3;XP=50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=4;$03$04'; 
+
+nExtractedOrigin := LEN2(ADR('$01ST=53;$02CT=10;DS=JHWJXYFNX9DS;OG=3;XP=50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=3;$03$04ST=53;$02CT=10;DS=XGBEZLBV8A9I;OG=3;XP=50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=4;$03$04'));
+					
+fbSut(
+	bExtractData:= TRUE, 
+	nExtractChars:=0 , 
+	sPrefix:='$01' , 
+	sSuffix:= '', 
+	bIgnoreCase:= FALSE, 
+	eExtractMode := E_STRING_ExtrMode.WITHIDENT_PURGE, 
+	sDataString:= sDataString, 
+	bStringFound=> , 
+	sExtractedString=>sResult, 
+	nExtractedStringPos=> ,
+	nExtractedStringLen=>nResult ,
+	nDataStringLen=>nDataResult );
+	
+	AssertEquals_STRING( Expected:= '$01ST=53;$02CT=10;DS=JHWJXYFNX9DS;OG=3;XP=50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=3;$03$04ST=53;$02CT=10;DS=XGBEZLBV8A9I;OG=3;XP=50;YP=-50;AP=-88;CS=06.2;SC=0070;QS=3;PN=4;$03$04', 
+						Actual:= sResult, 
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_UDINT(	Expected:= TO_UDINT(nExtractedOrigin), 
+						Actual:= nResult, 
+						Message:= 'Extr data in mode:WITHIDENT_PURGE not as expect');
+						
+	AssertEquals_UDINT(	Expected:= 0, 
+						Actual:= nDataResult, 
+						Message:= 'Left data in mode:WITHIDENT_PURGE not as expect');
+						
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="testSeq01_MVxDecode_ImageData" Id="{503a1200-3e2e-4043-b586-d8229e20c6d7}" FolderPath="03 Sequence\">
+      <Declaration><![CDATA[METHOD INTERNAL testSeq01_MVxDecode_ImageData
+VAR
+	fbSut01 			: FB_ExtractAnyString;
+	fbSut02 			: FB_ExtractAnyString;
+	fbSut03 			: FB_ExtractAnyString;
+	aResult				: ARRAY[1..3] OF T_LongSTRING;	// Result
+	nResult 			: UDINT;	// Result
+	nDataResult			: UDINT;
+	nIndex				: INT;
+	nExtractedOrigin 	: UDINT;
+END_VAR				
+VAR_INST
+	sDataString		: T_LongSTRING;		//'ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03'
+	stImageData		: ST_SCANNER_ImageData;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('testSeq01_MVxDecode_ImageData');
+
+sDataString := 'ST=53;$02CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;$03'; 
+
+	(* get image data message *)
+	//fbCodeData
+	fbSut01(
+		nExtractChars:=0 , 
+		sPrefix:='$02' , 
+		sSuffix:= '$03', 
+		bIgnoreCase:= FALSE, 
+		eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT, 
+		sDataString:= sDataString, 
+		bStringFound=> , 
+		sExtractedString=>aResult[1], 
+		nExtractedStringPos=> ,
+		nExtractedStringLen=> ,
+		nDataStringLen=> );
+	
+		AssertEquals_STRING( Expected:= 'ST=53;', 
+						Actual:= sDataString, 
+						Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT not as expect');
+						
+		AssertEquals_STRING( Expected:= 'CT=10;DS=GZDNP5JOA3IL;OG=3;XP=-50;YP=50;AP=-88;CS=06.2;SC=0070;QS=3;PN=1;', 
+						Actual:= aResult[1], 
+						Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT not as expect');
+
+	(* code data found *)
+	IF fbSut01.bStringFound THEN
+		
+		nIndex := 1;
+		
+		//fbFieldData
+		fbSut02(
+			nExtractChars:=0 , 
+			sPrefix:='CT=' , 
+			sSuffix:= ';', 
+			bIgnoreCase:= FALSE, 
+			eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT_PURGE, 
+			sDataString:= fbSut01.sExtractedString, 
+			bStringFound=> , 
+			sExtractedString=>, 
+			nExtractedStringPos=> ,
+			nExtractedStringLen=> ,
+			nDataStringLen=> );
+			
+		IF fbSut02.bStringFound THEN
+			(* extract data value *)
+			stImageData.aCodeData[nIndex].eCodeType := STRING_TO_INT(fbSut02.sExtractedString);
+		END_IF
+		
+		AssertEquals_INT(	Expected:= E_SCANNER_CodeType.DATAMARTIX,
+					Actual:= stImageData.aCodeData[nIndex].eCodeType, 
+					Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT_PURGE not as expect');
+						
+		fbSut02(
+			nExtractChars:=0 , 
+			sPrefix:='DS=' , 
+			sSuffix:= ';OG=', 
+			bIgnoreCase:= FALSE, 
+			eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_PURGE, 
+			sDataString:= fbSut01.sExtractedString, 
+			bStringFound=> , 
+			sExtractedString=>aResult[2], 
+			nExtractedStringPos=> ,
+			nExtractedStringLen=> ,
+			nDataStringLen=> );
+		
+		IF fbSut02.bStringFound THEN
+			(* extract data value *)
+			stImageData.aCodeData[nIndex].strDataString := fbSut02.sExtractedString;
+		END_IF
+		
+		AssertEquals_STRING( Expected:= 'GZDNP5JOA3IL', 
+				Actual:= aResult[2], 
+				Message:= 'Extr data in mode:WITHOUTIDENT_PURGE not as expect');
+		
+		IF LEN(stImageData.aCodeData[nIndex].strDataString) > 0 AND stImageData.aCodeData[nIndex].eCodeType <> E_SCANNER_CodeType.NONE THEN
+			
+			fbSut03(
+				nExtractChars:=0 , 
+				sPrefix:='OG=' , 
+				sSuffix:= ';', 
+				bIgnoreCase:= FALSE, 
+				eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT, 
+				sDataString:= fbSut01.sExtractedString, 
+				bStringFound=> , 
+				sExtractedString=>, 
+				nExtractedStringPos=> ,
+				nExtractedStringLen=> ,
+				nDataStringLen=> );
+			
+			IF fbSut03.bStringFound THEN
+				(* extract data value *)
+				stImageData.aCodeData[nIndex].fOverallGrade := STRING_TO_LREAL(fbSut03.sExtractedString);
+			END_IF
+			
+			AssertEquals_LREAL(Expected:= 3, 
+						Actual:= stImageData.aCodeData[nIndex].fOverallGrade, 
+						Delta:= 0.001, 
+						Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT not as expect' );
+			
+			fbSut03(
+				nExtractChars:=0 , 
+				sPrefix:='QS=' , 
+				sSuffix:= ';', 
+				bIgnoreCase:= FALSE, 
+				eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT, 
+				sDataString:= fbSut01.sExtractedString, 
+				bStringFound=> , 
+				sExtractedString=>, 
+				nExtractedStringPos=> ,
+				nExtractedStringLen=> ,
+				nDataStringLen=> );
+			
+			IF fbSut03.bStringFound THEN
+				(* extract data value *)
+				stImageData.aCodeData[nIndex].nEvaluation := STRING_TO_INT(fbSut03.sExtractedString);
+			END_IF
+									
+			AssertEquals_INT(	Expected:= 3, 
+						Actual:= stImageData.aCodeData[nIndex].nEvaluation, 
+						Message:= 'Left data in mode:WITHIDENT_PURGE not as expect');
+			
+			fbSut03(
+				nExtractChars:=0 , 
+				sPrefix:='YP=' , 		//XP and YP reversed intetnionally to check if alghoritm is resistant for change order
+				sSuffix:= ';', 
+				bIgnoreCase:= FALSE, 
+				eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT, 
+				sDataString:= fbSut01.sExtractedString, 
+				bStringFound=> , 
+				sExtractedString=>, 
+				nExtractedStringPos=> ,
+				nExtractedStringLen=> ,
+				nDataStringLen=> );
+			
+			IF fbSut03.bStringFound THEN
+				(* extract data value *)
+				stImageData.aCodeData[nIndex].fYPos := STRING_TO_LREAL(fbSut03.sExtractedString);
+			END_IF
+			
+			AssertEquals_LREAL(Expected:= 50, 
+				Actual:= stImageData.aCodeData[nIndex].fYPos, 
+				Delta:= 0.001, 
+				Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT not as expect' );
+	
+			fbSut03(
+				nExtractChars:=0 , 
+				sPrefix:='XP=' , 
+				sSuffix:= ';', 
+				bIgnoreCase:= FALSE, 
+				eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT, 
+				sDataString:= fbSut01.sExtractedString, 
+				bStringFound=> , 
+				sExtractedString=>, 
+				nExtractedStringPos=> ,
+				nExtractedStringLen=> ,
+				nDataStringLen=> );
+			
+			IF fbSut03.bStringFound THEN
+				(* extract data value *)
+				stImageData.aCodeData[nIndex].fXPos := STRING_TO_LREAL(fbSut03.sExtractedString);
+			END_IF
+			
+			AssertEquals_LREAL(Expected:= -50, 
+				Actual:= stImageData.aCodeData[nIndex].fXPos, 
+				Delta:= 0.001, 
+				Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT not as expect' );
+				
+			fbSut03(
+				nExtractChars:=0 , 
+				sPrefix:='CS=' , 
+				sSuffix:= ';', 
+				bIgnoreCase:= FALSE, 
+				eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT, 
+				sDataString:= fbSut01.sExtractedString, 
+				bStringFound=> , 
+				sExtractedString=>, 
+				nExtractedStringPos=> ,
+				nExtractedStringLen=> ,
+				nDataStringLen=> );
+			
+			IF fbSut03.bStringFound THEN
+				(* extract data value *)
+				stImageData.aCodeData[nIndex].fCellSize := STRING_TO_LREAL(fbSut03.sExtractedString);
+			END_IF
+			
+			AssertEquals_LREAL(Expected:= 6.2, 
+				Actual:= stImageData.aCodeData[nIndex].fCellSize, 
+				Delta:= 0.001, 
+				Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT not as expect' );
+				
+			fbSut03(
+				nExtractChars:=0 , 
+				sPrefix:='SC=' , 
+				sSuffix:= ';', 
+				bIgnoreCase:= FALSE, 
+				eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT, 
+				sDataString:= fbSut01.sExtractedString, 
+				bStringFound=> , 
+				sExtractedString=>, 
+				nExtractedStringPos=> ,
+				nExtractedStringLen=> ,
+				nDataStringLen=> );
+			
+			IF fbSut03.bStringFound THEN
+				(* extract data value *)
+				stImageData.aCodeData[nIndex].fSymbolContrast := STRING_TO_LREAL(fbSut03.sExtractedString);
+			END_IF
+			
+			AssertEquals_LREAL(Expected:= 70, 
+				Actual:= stImageData.aCodeData[nIndex].fSymbolContrast, 
+				Delta:= 0.001, 
+				Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT not as expect' );
+		END_IF
+		
+		fbSut02(
+			nExtractChars:=0 , 
+			sPrefix:='PN=' , 
+			sSuffix:= ';', 
+			bIgnoreCase:= FALSE, 
+			eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT_PURGE, 
+			sDataString:= fbSut01.sExtractedString, 
+			bStringFound=> , 
+			sExtractedString=>, 
+			nExtractedStringPos=> ,
+			nExtractedStringLen=> ,
+			nDataStringLen=> nResult);
+		
+		IF fbSut02.bStringFound THEN
+			(* extract data value *)
+			stImageData.aCodeData[nIndex].nProgramNo := STRING_TO_BYTE(fbSut02.sExtractedString);
+		END_IF
+		
+		AssertEquals_BYTE(	Expected:= 1, 
+						Actual:= stImageData.aCodeData[nIndex].nProgramNo, 
+						Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT_PURGE not as expect');
+						
+	END_IF
+	
+	
+	AssertEquals_STRING( Expected:= '',
+						Actual:= fbSut01.sExtractedString,
+						Message:= 'Extracted string is not as expected');
+						
+	AssertEquals_UDINT(	Expected:= 0, 
+						Actual:= nResult, 
+						Message:= 'Extr data in mode:WITHIDENT_PURGE not as expect');
+
+//Check no additional string
+
+	fbSut01(
+		nExtractChars:=0 , 
+		sPrefix:='$02' , 
+		sSuffix:= '$03', 
+		bIgnoreCase:= FALSE, 
+		eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT, 
+		sDataString:= sDataString, 
+		bStringFound=> , 
+		sExtractedString=>, 
+		nExtractedStringPos=> ,
+		nExtractedStringLen=>nDataResult ,
+		nDataStringLen=> );
+	
+	AssertEquals_UDINT( Expected:= 0, 
+						Actual:= fbSut01.nExtractedStringLen, 
+						Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT not as expect');
+						
+	(* code data found *)
+	IF NOT fbSut01.bStringFound AND nIndex = 1 THEN					
+		
+		stImageData.nCodesRead	:= nIndex;
+		(* Scan Time field (ST=%c;) *)
+		fbSut02(
+			nExtractChars:=0 , 
+			sPrefix:='ST=' , 
+			sSuffix:= ';', 
+			bIgnoreCase:= FALSE, 
+			eExtractMode := E_STRING_ExtrMode.WITHOUTIDENT_REMIDENT_PURGE, 
+			sDataString:= sDataString, 
+			bStringFound=> , 
+			sExtractedString=>aResult[3], 
+			nExtractedStringPos=> ,
+			nExtractedStringLen=> nDataResult,
+			nDataStringLen=> );
+			
+		IF fbSut02.bStringFound THEN
+			(* extract data value *)
+			stImageData.tScanTime := UDINT_TO_TIME(STRING_TO_UDINT(fbSut02.sExtractedString));
+		END_IF
+	END_IF
+		
+	AssertEquals_STRING( Expected:= '', 
+					Actual:= sDataString, 
+					Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT_PURGE not as expect');
+					
+	AssertEquals_TIME( Expected:= T#53MS, 
+					Actual:= stImageData.tScanTime, 
+					Message:= 'Extr data in mode:WITHOUTIDENT_REMIDENT_PURGE not as expect');
+
+	
+	TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,103 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_PACK_DuplicatesPackCodesDB" Id="{9e494c5f-37e1-44d2-a824-1b87888f9196}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_PACK_DuplicatesPackCodesDB
+VAR_INPUT
+	stDuplicatedItem						: ST_RejectItems;
+	nMaxOuterIndex					: INT;
+	nSourceIndex						: INT;
+	bExtendedDupCheck					: BOOL;
+END_VAR
+VAR_OUTPUT
+	bDuplicateFound 				: BOOL;
+END_VAR
+VAR_IN_OUT
+	stOuterStatus				: ST_OUTER_Status;	(* Outer status *)
+	stLastOuterStatus			: ST_OUTER_Status;	(* Outer status *)
+END_VAR
+VAR
+	nCheckIndex : T_PositiveINT;
+	nPackIndex : T_PositiveINT;
+
+	nGoodPackReads	: T_PositiveINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* for dupicats for packs in next  Outer in queue*)		(*nSourceIndex cannot be equal cMAX_OUTER_STATUS_QUEUE because input data will be out of index*)
+IF	bExtendedDupCheck AND stLastOuterStatus.nStatus.6 AND nSourceIndex < cMAX_OUTER_STATUS_QUEUE THEN
+	(* for all other Packs in Outer *)
+	FOR  nPackIndex :=1 TO cMAX_PACKS_PER_OUTER DO
+
+		IF stOuterStatus.stOACData.PackCodeStatus[nPackIndex].5 OR stOuterStatus.stOACData.PackCodeStatus[nPackIndex].6 THEN
+
+			FOR nCheckIndex :=1 TO cMAX_PACKS_PER_OUTER DO
+
+				IF stOuterStatus.stOACData.PackCode[nPackIndex] = stLastOuterStatus.stOACData.PackCode[nCheckIndex] THEN
+
+					stOuterStatus.nStatus.22 := TRUE;
+					stOuterStatus.sDataSourceTracker  := 'PK_DUPLIC';
+
+					stLastOuterStatus.nStatus.22 := TRUE;
+					stLastOuterStatus.sDataSourceTracker  := 'PK_DUPLIC';
+
+					EXIT;
+				END_IF
+			END_FOR
+			EXIT;
+		END_IF
+	END_FOR
+END_IF
+
+bDuplicateFound 	:= FALSE;
+
+(* for dupicats for all packs inside one Outer *)
+FOR  nPackIndex :=1 TO cMAX_PACKS_PER_OUTER DO
+
+	IF stOuterStatus.stOACData.PackCodeStatus[nPackIndex].5 OR stOuterStatus.stOACData.PackCodeStatus[nPackIndex].6 THEN
+
+		FOR nCheckIndex := nPackIndex  TO cMAX_PACKS_PER_OUTER DO
+
+			IF stOuterStatus.stOACData.PackCodeStatus[nCheckIndex].5 OR stOuterStatus.stOACData.PackCodeStatus[nCheckIndex].6 THEN
+
+				IF stOuterStatus.stOACData.PackCode[nPackIndex] = stOuterStatus.stOACData.PackCode[nCheckIndex]  AND
+					nPackIndex <> nCheckIndex	THEN
+
+
+					(* duplicate packs found *)
+					stOuterStatus.aOACPackStatus[nPackIndex] := 3;
+					(*additional bit passing to CAC*)
+					stOuterStatus.stOACData.PackCodeStatus[nPackIndex] :=
+											F_FiltredSetBitState16(TRUE, 'LOW', 3, TRUE, stOuterStatus.stOACData.PackCodeStatus[nPackIndex]);
+
+					stOuterStatus.aOACPackStatus[nCheckIndex] := 3;
+					(*additional bit passing to CAC*)
+					stOuterStatus.stOACData.PackCodeStatus[nCheckIndex] :=
+											F_FiltredSetBitState16(TRUE, 'LOW', 3, TRUE, stOuterStatus.stOACData.PackCodeStatus[nCheckIndex]);
+
+					bDuplicateFound := TRUE;
+
+					stOuterStatus.stOACData.PackRejectCode[nPackIndex]  	:= stDuplicatedItem.sMetsDisplayCode;
+	   				stOuterStatus.stOACData.PackRejectID[nPackIndex] 	 	:= stDuplicatedItem.nRejectID;
+					stOuterStatus.stOACData.PackRejectCode[nCheckIndex]  := stDuplicatedItem.sMetsDisplayCode;
+					stOuterStatus.stOACData.PackRejectID[nCheckIndex]  	:= stDuplicatedItem.nRejectID;
+
+				END_IF
+			END_IF
+		END_FOR
+	END_IF
+END_FOR
+
+
+IF bDuplicateFound THEN
+
+	nGoodPackReads	:=cMAX_PACKS_PER_OUTER;
+	stOuterStatus.nStatus.23 := TRUE;
+
+	FOR  nPackIndex :=1 TO cMAX_PACKS_PER_OUTER DO
+		IF stOuterStatus.stOACData.PackCodeStatus[nPackIndex].3 THEN nGoodPackReads := nGoodPackReads - 1; END_IF
+	END_FOR
+
+END_IF
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

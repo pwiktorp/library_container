@@ -1,0 +1,313 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_CHM_ClearArchive" Id="{cd871c75-d05f-46a5-bbb4-d1c9cda366b0}" SpecialFunc="None">
+    <Declaration><![CDATA[(* scans CHM archive and deletes files and folders older than tMaxArchiveAge *)
+FUNCTION_BLOCK FB_CHM_ClearArchive
+VAR_INPUT
+	bExecute				: BOOL;			(* set TRUE to scan archive for old folders and files *)
+	tMaxArchiveAge		: TIME;			(* max file age, older files/folders will be deleted *)
+	strLocalCHMPath		: STRING(255);	(* CaseTrace CHM folder path *)
+	sSystemTime			: TIMESTRUCT;	(* current system time *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;			(* TRUE = scan complete *)
+	bBusy				: BOOL;			(* TRUE = scan in progress *)
+	bError				: BOOL;			(* TRUE = scan error *)
+	nErrorID				: UDINT;		(* error code *)
+	nFoldersDeleted		: UDINT;		(* total folders deleted *)
+	nCHMFilesDeleted		: UDINT;		(* total CHM files deleted *)
+END_VAR
+VAR
+	fbExecute				: R_TRIG;
+	eState				: E_CHM_State;
+	eErrorState			: E_CHM_State;
+	nSourceAge			: T_ULARGE_INTEGER;
+	nFoldersFound			: UDINT;
+	nCHMFilesFound		: UDINT;
+
+	fbFindFolder			: FB_EnumFindFileEntry;
+	eFolderCmd 			: E_EnumCmdType := eEnumCmd_First;
+	strFolder				: STRING(255);
+
+	fbFindFile				: FB_EnumFindFileEntry;
+	eFileCmd 				: E_EnumCmdType := eEnumCmd_First;
+	strFileName			: STRING(255);
+
+	fbDeleteFile			: FB_FileDelete;
+	fbDeleteFolder			: FB_RemoveDir;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_CHM_IDLE:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			(* reset values *)
+			nFoldersDeleted := 0;
+			nCHMFilesDeleted := 0;
+			nFoldersFound := 0;
+			nCHMFilesFound := 0;
+
+			strFolder := '';
+			eFolderCmd := eEnumCmd_First;
+			strFileName := '';
+			eFileCmd := eEnumCmd_First;
+
+			eState := E_CHM_FINDFOLDER;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* date folders *)
+	E_CHM_FINDFOLDER:
+
+		(* get list of date folders in "..CaseTrace\CHM\Archive\" *)
+		fbFindFolder(
+			sNetId		:= '',
+			sPathName	:= CONCAT(strLocalCHMPath, 'Archive\*.'),
+			eCmd		:= eFolderCmd,
+			bExecute	:= TRUE,
+			tTimeout	:= T#5s
+		);
+
+		(* find folder complete *)
+		IF fbFindFolder.bBusy = FALSE THEN
+
+			(* find folder completed OK *)
+			IF fbFindFolder.bError = FALSE THEN
+
+				(* file list complete *)
+				IF fbFindFolder.bEOE = TRUE THEN
+
+					eFolderCmd := eEnumCmd_First;
+
+					eState := E_CHM_DONE;
+
+				(* file found *)
+				ELSE
+
+					(* first 2 folders are '.' and '..' *)
+					IF fbFindFolder.stFindFile.sFileName = '.' OR fbFindFolder.stFindFile.sFileName = '..' THEN
+
+						(* next file *)
+						eFolderCmd := eEnumCmd_Next;
+
+					(* folder found *)
+					ELSE
+
+						(* update counter *)
+						nFoldersFound := nFoldersFound + 1;
+
+						(* FolderAge = SystemTime - FileTime *)
+						nSourceAge := UInt64Sub64(F_FileTimeToULarge(SYSTEMTIME_TO_FILETIME(sSystemTime)), F_FileTimeToULarge(fbFindFolder.stFindFile.creationTime));
+
+						(* folder is older than max age (converted to 64-bit format) *)
+						IF UInt64Cmp64(nSourceAge, UInt32x32To64(TIME_TO_UDINT(tMaxArchiveAge), 10000)) = 1 THEN
+
+							(* folder found *)
+							strFolder := fbFindFolder.stFindFile.sFileName;
+
+							eState := E_CHM_FINDFILE;
+						END_IF
+
+						(* next folder on next pass *)
+						eFolderCmd := eEnumCmd_Next;
+					END_IF
+				END_IF
+
+			(* find folder error *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbFindFolder.nErrID;
+				eErrorState := eState;
+
+				eFolderCmd := eEnumCmd_First;
+
+				eState := E_CHM_DONE;
+			END_IF
+
+			(* close off fbFindFolder *)
+			fbFindFolder(bExecute := FALSE);
+		END_IF
+
+
+	(* find files in folder *)
+	E_CHM_FINDFILE:
+
+		(* get list of files *)
+		fbFindFile(
+			sNetId		:= '',
+			sPathName	:= F_CONCAT4(strLocalCHMPath, 'Archive\', strFolder, '\*.*'),
+			eCmd		:= eFileCmd,
+			bExecute	:= TRUE,
+			tTimeout	:= T#5s
+		);
+
+		(* find date complete *)
+		IF fbFindFile.bBusy = FALSE THEN
+
+			(* find file completed OK *)
+			IF fbFindFile.bError = FALSE THEN
+
+				(* file list complete *)
+				IF fbFindFile.bEOE = TRUE THEN
+
+					eFileCmd := eEnumCmd_First;
+
+					eState := E_CHM_DELETEFOLDER;
+
+				(* file found *)
+				ELSE
+
+					(* first 2 files could be '.' and '..' *)
+					IF fbFindFile.stFindFile.sFileName = '.' OR fbFindFile.stFindFile.sFileName = '..' THEN
+
+						(* next file *)
+						eFileCmd := eEnumCmd_Next;
+
+					(* folder found *)
+					ELSE
+
+						(* count files in folder *)
+						nCHMFilesFound := nCHMFilesFound + 1;
+	
+						(* FileAge = SystemTime - FileTime *)
+						nSourceAge := UInt64Sub64(F_FileTimeToULarge(SYSTEMTIME_TO_FILETIME(sSystemTime)), F_FileTimeToULarge(fbFindFile.stFindFile.creationTime));
+
+						(* source file is older than max age (converted to 64-bit format) *)
+						IF UInt64Cmp64(nSourceAge, UInt32x32To64(TIME_TO_UDINT(tMaxArchiveAge), 10000)) = 1 THEN
+	
+							(* date folder found *)
+							strFileName := fbFindFile.stFindFile.sFileName;
+	
+							eState := E_CHM_DELETEFILE;
+						END_IF
+	
+						(* next folder *)
+						eFileCmd := eEnumCmd_Next;
+					END_IF
+				END_IF
+
+			(* find file error *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbFindFile.nErrID;
+				eErrorState := eState;
+
+				eFileCmd := eEnumCmd_First;
+
+				eState := E_CHM_FINDFOLDER;
+			END_IF
+
+			(* close off fbFindFile *)
+			fbFindFile(bExecute := FALSE);
+		END_IF
+
+
+	(* delete old file *)
+	E_CHM_DELETEFILE:
+
+		(* delete files *)
+		fbDeleteFile(
+			sNetId		:= '',
+			sPathName	:= F_CONCAT5(strLocalCHMPath, 'Archive\', strFolder, '\', strFileName),
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* delete file complete *)
+		IF fbDeleteFile.bBusy = FALSE THEN
+
+			(* delete file completed OK *)
+			IF fbDeleteFile.bError = FALSE THEN
+
+				(* count files deleted from current folder *)
+				nCHMFilesDeleted := nCHMFilesDeleted + 1;
+			END_IF
+
+			eState := E_CHM_FINDFILE;
+
+			(* close off fbDeleteFile *)
+			fbDeleteFile(bExecute := FALSE);
+		END_IF
+
+
+	(* delete old folder *)
+	E_CHM_DELETEFOLDER:
+
+		(* delete folder *)
+		fbDeleteFolder(
+			sNetId		:= '',
+			sPathName	:= F_CONCAT3(strLocalCHMPath, 'Archive\', strFolder),
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* delete folder complete *)
+		IF fbDeleteFolder.bBusy = FALSE THEN
+
+			(* delete folder complete *)
+			IF fbDeleteFolder.bError = FALSE THEN
+
+				(* count folder deleted *)
+				nFoldersDeleted := nFoldersDeleted + 1;
+			END_IF
+
+			eState := E_CHM_FINDFOLDER;
+
+			(* close off fbDeleteFolder *)
+			fbDeleteFolder(bExecute := FALSE);
+		END_IF
+
+
+	(* complete *)
+	E_CHM_DONE:
+
+		(* update outputs *)
+		bBusy := FALSE;
+		bDone := TRUE;
+
+		eState := E_CHM_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_CHM_IDLE;
+
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+	nErrorID := 0;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_CHM_ClearArchive">
+      <LineId Id="35" Count="267" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

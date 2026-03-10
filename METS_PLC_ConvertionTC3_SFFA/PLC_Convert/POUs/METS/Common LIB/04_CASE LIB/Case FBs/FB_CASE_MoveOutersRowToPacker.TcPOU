@@ -1,0 +1,296 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CASE_MoveOutersRowToPacker" Id="{11d89052-cb68-4792-aff4-32b39b3a0fcd}" SpecialFunc="None">
+    <Declaration><![CDATA[(* move Outers up to and including strOuterBarcode from sInfeedQueue to stCACData *)
+FUNCTION_BLOCK FB_CASE_MoveOutersRowToPacker
+VAR_INPUT
+	bExecute 						: BOOL;		(* set TRUE to move Outers *)
+	nOutersPerRow				: INT;
+	nOutersPerCase				: INT;
+	nPacker1Index					: INT;
+	strOuterBarcode				: T_OUTER_Barcode;	(* 2D barcode from scanner *)
+	sMetsSearchCode				: STRING(50); (*this is what to search for when changing the reject reason for FSS*)
+	bUseInterimCodeForLastPosition	: BOOL;
+	nAggregationQueueIndex			: INT;
+	bManualConfirmationEnable		: BOOL;
+END_VAR
+VAR_IN_OUT
+	sInfeedQueue				: ST_CASE_InfeedQueue;	(* Infeed Queue *)
+	sPackerQueue 				: ST_CASE_InfeedQueue;	(* Outfeed Queue *)
+	stCaseQueue				: ST_CASE_CaseQueue;				(* Outfeed Case Queue *)
+	nRestoreCounter			: UDINT;
+	stCodeInfo					: ST_CodeInfo;
+END_VAR
+VAR_OUTPUT
+	bDone 					: BOOL;		(* TRUE = complete *)
+	bBusy					: BOOL;		(* TRUE = in progress *)
+	bError					: BOOL;		(* TRUE = error *)
+	nErrorID					: UDINT;	(* error code *)
+	nValidationIndex			: INT;
+	bValIndexNotFound			: BOOL;
+	sOutersMoved				: T_LongSTRING;
+END_VAR
+VAR
+	fbExecute					: R_TRIG;
+	eState					: E_CASE_State;
+	eErrorState				: E_CASE_State;
+	nOuterIndex				: T_PositiveINT;
+	//nMaxInfeedIndex			: T_PositiveINT;
+	nCaseQueueIndex			: T_PositiveINT;
+	//nMaxCaseQueueIndex		: T_PositiveINT;
+	nVALIndex					: INT;
+	nRowIndex					: INT;
+	sAppendedString				: STRING;
+	(*nMaxOutersPerCase			: INT;*)
+	nCounterDeletedLable		: INT;
+	nQtyOver					: INT;
+	nDeletedFiles				: UDINT;
+	sDeletedBarcode			: T_OUTER_Barcode;	(* 2D barcode from scanner *)
+	nMemoQtyOver			: INT;
+
+	nValQtyOver				: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_CASE_IDLE:
+
+		(* move Outers from sInfeedQueue to stCACData *)
+		IF fbExecute.Q THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+			eErrorState := eState;
+			bValIndexNotFound := FALSE;
+
+			sAppendedString	:= '';
+			sOutersMoved 	:= '';
+			
+			(* max no of Outers in sInfeedQueue and sPackerQueue *)
+			//nMaxInfeedIndex := TO_INT(SIZEOF(sInfeedQueue.aOuter) / SIZEOF(sInfeedQueue.aOuter[1]));
+
+			(* reset nValidationIndex and get expected Outer barcode *)
+			nValidationIndex := 0;
+			nDeletedFiles := 0;
+			(*
+			(* clear and initialise stCACData *)
+			MEMSET(ADR(stCACData), 16#00, SIZEOF(stCACData));*)
+
+			eState := E_CASE_SCANINFEEDQUEUE;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+			bValIndexNotFound :=FALSE;
+		END_IF
+
+
+	(* find strOuterBarcode in sInfeedQueue *)
+	E_CASE_SCANINFEEDQUEUE:
+
+		IF strOuterBarcode <> '' THEN
+			(* scan sInfeedQueue *)
+			FOR nOuterIndex := 1 TO MIN(sInfeedQueue.nIndex, cMAX_INFEED_QUEUE)  DO
+				(* strOuterBarcode found *)
+				IF bManualConfirmationEnable THEN
+					IF   sInfeedQueue.aOuter[nOuterIndex].Barcode = strOuterBarcode THEN
+
+						nValidationIndex := sInfeedQueue.nIndex;
+						EXIT;
+					END_IF
+				ELSIF (bUseInterimCodeForLastPosition AND sInfeedQueue.aOuter[nOuterIndex].AggregationCodes[1] = strOuterBarcode) OR
+					(NOT bUseInterimCodeForLastPosition AND sInfeedQueue.aOuter[nOuterIndex].Barcode = strOuterBarcode)   THEN
+
+					nValidationIndex := nOuterIndex - nAggregationQueueIndex;
+					EXIT;
+				END_IF
+			END_FOR
+
+			(* strOuterBarcode was found *)
+			IF nValidationIndex > 0 AND nValidationIndex=nOutersPerRow*2 AND sPackerQueue.nIndex = 0  AND nPacker1Index = 0 THEN
+
+				(* max no of Cases  in stCaseQueue *)
+				//nMaxCaseQueueIndex := UDINT_TO_INT(SIZEOF(stCaseQueue.aCACData) / SIZEOF(stCaseQueue.aCACData[1]));
+				(* scan stCaseQueue *)
+				FOR nCaseQueueIndex := 1 TO cMAX_CASE_QUEUE DO
+
+					(* strOuterBarcode found *)
+					IF stCaseQueue.aCACData[nCaseQueueIndex].CaseRejectCode <> '' THEN
+
+						IF FIND(stCaseQueue.aCACData[nCaseQueueIndex].CaseRejectCode, sMetsSearchCode) > 0 THEN
+							nVALIndex := STRING_TO_INT(MID(stCaseQueue.aCACData[nCaseQueueIndex].CaseRejectCode ,2,7));
+						ELSE
+							nVALIndex := -1;
+						END_IF
+
+						IF nOutersPerCase = nVALIndex + nOutersPerRow AND nVALIndex > 0 AND nOutersPerCase > 0 AND nOutersPerRow > 0 THEN
+
+							MEMMOVE(ADR(stCaseQueue.aCACData[nCaseQueueIndex].Outer[nVALIndex+1]), ADR(sInfeedQueue.aOuter[1]), F_SafeTo_UDINT(nOutersPerRow)* SIZEOF(sInfeedQueue.aOuter[1]));
+							
+							IF  nOutersPerRow = cMAX_INFEED_QUEUE THEN
+								MEMSET(ADR(sInfeedQueue.aOuter), 16#00, SIZEOF(sInfeedQueue.aOuter));
+							ELSIF nOutersPerRow < cMAX_INFEED_QUEUE THEN
+								MEMMOVE(ADR(sInfeedQueue.aOuter[1]), ADR(sInfeedQueue.aOuter[nOutersPerRow + 1]), F_SafeTo_UDINT(cMAX_INFEED_QUEUE - nOutersPerRow) * SIZEOF(sInfeedQueue.aOuter[1]));
+							END_IF
+							
+							sInfeedQueue.nIndex := LIMIT(0,sInfeedQueue.nIndex - nOutersPerRow,cMAX_INFEED_QUEUE);
+							nValidationIndex :=nOutersPerRow - nAggregationQueueIndex;
+							stCaseQueue.aCACData[nCaseQueueIndex]. NumberOfOuters := nOutersPerCase;
+							stCaseQueue.aCACData[nCaseQueueIndex].CaseRejectCode := 'OK';
+							stCaseQueue.aCACData[nCaseQueueIndex].CaseRejectID := 0;
+						END_IF
+
+						EXIT;
+					END_IF
+				END_FOR
+
+				eState := E_CASE_UPDATEINFEEDQUEUE;
+
+			ELSIF nValidationIndex > 0 THEN
+
+				eState := E_CASE_UPDATEINFEEDQUEUE;
+
+			(* strOuterBarcode not found *)
+			ELSE
+
+				bValIndexNotFound  := TRUE;
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := 12;
+				eErrorState := eState;
+
+				sOutersMoved	:= F_CONCAT3('RowComplete moved [0]:', ' ErrorID: ', UDINT_TO_STRING(nErrorID));
+
+				IF bManualConfirmationEnable THEN
+					MEMSET(ADR(sInfeedQueue), 16#00, SIZEOF(sInfeedQueue));
+				END_IF
+
+				eState := E_CASE_DONE;
+			END_IF
+
+		(* strOuterBarcode does not contain data *)
+		ELSE
+
+			(* update outputs *)
+			bError := TRUE;
+			nErrorID := 11;
+			eErrorState := eState;
+
+			sOutersMoved	:= F_CONCAT3('RowComplete moved [0]:', ' ErrorID: ', UDINT_TO_STRING(nErrorID));
+
+			eState := E_CASE_DONE;
+		END_IF
+
+
+	(* move Outers from sInfeedQueue to stCACData *)
+	E_CASE_UPDATEINFEEDQUEUE:
+
+		nQtyOver := nValidationIndex MOD nOutersPerRow;
+
+		IF  nQtyOver <> 0 AND nValidationIndex <= cMAX_INFEED_QUEUE  THEN
+			FOR nOuterIndex := 1 TO nValidationIndex DO
+				IF sInfeedQueue.aOuter[nOuterIndex].OuterMasterListRestored  THEN
+
+					sDeletedBarcode := sInfeedQueue.aOuter[nOuterIndex].Barcode;
+					nMemoQtyOver := nQtyOver;
+
+					IF nOuterIndex = cMAX_INFEED_QUEUE THEN
+						MEMSET(ADR(sInfeedQueue.aOuter[cMAX_INFEED_QUEUE]), 16#00, SIZEOF(sInfeedQueue.aOuter[1]));
+					ELSIF nOuterIndex < cMAX_INFEED_QUEUE THEN
+						MEMMOVE(ADR(sInfeedQueue.aOuter[nOuterIndex]), ADR(sInfeedQueue.aOuter[nOuterIndex+1]), SIZEOF(sInfeedQueue.aOuter[1]) * F_SafeTo_UDINT(sInfeedQueue.nIndex - nOuterIndex) );
+						MEMSET(ADR(sInfeedQueue.aOuter[sInfeedQueue.nIndex]), 16#00, SIZEOF(sInfeedQueue.aOuter[1]));
+					END_IF
+					
+					nValidationIndex := nValidationIndex - 1;
+					sInfeedQueue.nIndex := sInfeedQueue.nIndex - 1;
+
+					nRestoreCounter	:= MAX(0, nRestoreCounter - 1);
+					nDeletedFiles := nDeletedFiles + 1;
+					nCounterDeletedLable :=nCounterDeletedLable + 1;
+				END_IF
+			END_FOR
+		END_IF
+
+		nValQtyOver := nValidationIndex MOD nOutersPerRow;
+
+		IF  nValQtyOver <> 0  THEN
+			FOR nOuterIndex := 1 TO nValidationIndex DO
+				sInfeedQueue.aOuter[nOuterIndex].OuterCodeStatus.5 := TRUE;
+			END_FOR
+		END_IF
+
+		(* move Outers from sInfeedQueue to sPackerQueue, clamped to max number of Outers supported by sPackerQueue *)
+		IF cMAX_INFEED_QUEUE -  sPackerQueue.nIndex >= MIN(nValidationIndex, cMAX_INFEED_QUEUE) THEN
+			MEMMOVE(ADR(sPackerQueue.aOuter[sPackerQueue.nIndex+1]), ADR(sInfeedQueue.aOuter[1]), F_SafeTo_UDINT(MIN(nValidationIndex, cMAX_INFEED_QUEUE)) * SIZEOF(sInfeedQueue.aOuter[1]));
+		ELSIF cMAX_INFEED_QUEUE -  sPackerQueue.nIndex > 0 THEN
+			MEMMOVE(ADR(sPackerQueue.aOuter[sPackerQueue.nIndex+1]), ADR(sInfeedQueue.aOuter[1]), F_SafeTo_UDINT(cMAX_INFEED_QUEUE - sPackerQueue.nIndex) * SIZEOF(sInfeedQueue.aOuter[1]));
+		END_IF
+		sPackerQueue.nIndex := LIMIT(0, sPackerQueue.nIndex + MIN(nValidationIndex, cMAX_INFEED_QUEUE),cMAX_INFEED_QUEUE);
+
+		sOutersMoved	:= F_CONCAT3('RowComplete moved [', INT_TO_STRING(nValidationIndex), ']:');
+		FOR nRowIndex :=1 TO nValidationIndex DO
+			//sOutersMoved :=F_LongCONCAT(sOutersMoved, '   ');
+			//sOutersMoved :=F_LongCONCAT(sOutersMoved, F_CODE_GetItem(sInfeedQueue.aOuter[nRowIndex].Barcode, eCodeAIType.SerialCode, stCodeInfo));
+			
+			CONCAT2(ADR(sOutersMoved), ADR('   '), ADR(sOutersMoved), SIZEOF(sOutersMoved));
+		
+			sAppendedString := RIGHT(F_CODE_GetItem(sInfeedQueue.aOuter[nRowIndex].Barcode, eCodeAIType.SerialCode, stCodeInfo),7);
+			CONCAT2(ADR(sOutersMoved), ADR(sAppendedString), ADR(sOutersMoved), SIZEOF(sOutersMoved));
+		END_FOR
+
+		(* move remaining Outers forward in sInfeedQueue and update index pointer *)
+		IF cMAX_INFEED_QUEUE - nValidationIndex > 0 THEN
+			MEMMOVE(ADR(sInfeedQueue.aOuter[1]), ADR(sInfeedQueue.aOuter[nValidationIndex + 1]), F_SafeTo_UDINT(cMAX_INFEED_QUEUE - nValidationIndex) * SIZEOF(sInfeedQueue.aOuter[1]));
+			sInfeedQueue.nIndex := LIMIT(0,sInfeedQueue.nIndex - nValidationIndex,cMAX_INFEED_QUEUE);
+		END_IF
+
+		(* clear all data for empty Outers in sInfeedQueue *)
+		IF cMAX_INFEED_QUEUE - sInfeedQueue.nIndex > 0 THEN
+			MEMSET(ADR(sInfeedQueue.aOuter[sInfeedQueue.nIndex + 1]), 16#00, F_SafeTo_UDINT(cMAX_INFEED_QUEUE - sInfeedQueue.nIndex ) * SIZEOF(sInfeedQueue.aOuter[1]));
+		END_IF
+
+		IF sInfeedQueue.bDoorReject THEN
+			sPackerQueue.bDoorReject := TRUE;
+			sInfeedQueue.bDoorReject := FALSE;
+		END_IF
+
+		eState := E_CASE_DONE;
+
+
+	(* complete *)
+	E_CASE_DONE:
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_CASE_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_CASE_IDLE;
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+	nErrorID := 0;
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

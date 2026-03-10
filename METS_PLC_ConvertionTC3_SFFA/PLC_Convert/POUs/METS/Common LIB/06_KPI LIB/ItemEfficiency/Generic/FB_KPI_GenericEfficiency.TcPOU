@@ -1,0 +1,60 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_KPI_GenericEfficiency" Id="{a3702327-d8f2-417d-9f8b-f4b846b604f1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_KPI_GenericEfficiency
+VAR_INPUT
+	bUpdateItemData		: 	BOOL;
+	bItemSuccessful		:	 BOOL;
+	bNVDataInitOK							: BOOL;
+END_VAR
+VAR_IN_OUT
+	stMainItemProduced		: 	ST_KPI_ItemsProduced;
+	stShiftItemProduced			: 	ST_KPI_ItemsProduced;
+	stProdItemProduced		: 	ST_KPI_ItemsProduced;
+END_VAR
+VAR
+	rtrigUpdateItemData	:	 R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[rtrigUpdateItemData(CLK:=bUpdateItemData);
+
+IF bNVDataInitOK THEN
+
+	IF rtrigUpdateItemData.Q THEN
+
+		stMainItemProduced.Total := stMainItemProduced.Total+ 1;
+		stShiftItemProduced.Total := stShiftItemProduced.Total+ 1;
+		stProdItemProduced.Total := stProdItemProduced.Total+ 1;
+
+		IF bItemSuccessful THEN
+			stMainItemProduced.Passed:= stMainItemProduced.Passed + 1;
+			stShiftItemProduced.Passed:= stShiftItemProduced.Passed + 1;
+			stProdItemProduced.Passed:= stProdItemProduced.Passed + 1;
+		ELSE
+			stMainItemProduced.Rejected := stMainItemProduced.Rejected + 1;
+			stShiftItemProduced.Rejected := stShiftItemProduced.Rejected + 1;
+			stProdItemProduced.Rejected := stProdItemProduced.Rejected + 1;
+		END_IF
+
+	END_IF
+
+	stMainItemProduced.Efficiency := F_SafeDIV(stMainItemProduced.Passed * 100, stMainItemProduced.Total);
+	stMainItemProduced.Efficiency :=LIMIT(0, stMainItemProduced.Efficiency, 100);
+
+	stShiftItemProduced.Efficiency := F_SafeDIV(stShiftItemProduced.Passed * 100, stShiftItemProduced.Total);
+	stShiftItemProduced.Efficiency :=LIMIT(0, stShiftItemProduced.Efficiency, 100);
+
+	stProdItemProduced.Efficiency := F_SafeDIV(stProdItemProduced.Passed * 100, stProdItemProduced.Total);
+	stProdItemProduced.Efficiency :=LIMIT(0, stProdItemProduced.Efficiency, 100);
+
+ELSE
+	stMainItemProduced.Efficiency 	:= 0;
+	stShiftItemProduced.Efficiency 	:= 0;
+	stProdItemProduced.Efficiency 	:= 0;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_KPI_GenericEfficiency">
+      <LineId Id="14" Count="35" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_CREATE_MESSAGE" Id="{8220c5f4-cb2c-4878-8752-5687240a5aec}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_CREATE_MESSAGE : BOOL
+VAR_INPUT
+END_VAR
+VAR
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

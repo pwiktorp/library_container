@@ -1,0 +1,147 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_ExtractString_v2" Id="{7c321934-7f44-4e32-992c-9292b0c29fc9}" SpecialFunc="None">
+    <Declaration><![CDATA[(* extracts a sub-string defined by prefix and suffix *)
+FUNCTION_BLOCK FB_ExtractString_v2
+VAR_INPUT
+	bIgnoreCase		: BOOL;
+	strPrefix		: STRING(10);	(* prefix string *)
+	strSuffix		: STRING(10);	(* suffix string *)
+	nExtractChars	: BYTE;			(* if suffix is blank, >0 = no of chars to extract , 0 = remainder of string *)
+END_VAR
+VAR_IN_OUT
+	strString		: T_MaxString;	(* string to be searched *)
+END_VAR
+VAR_OUTPUT
+	bStringFound	: BOOL;			(* TRUE = sub-string with matching prefix/suffix found *)
+	nChars			: INT;			(* no of chars in sub-string *)
+	strResult		: T_MaxString;	(* sub-string with prefix and suffix *)
+END_VAR
+VAR
+	nPrefixPos		: INT;
+	nSuffixPos		: INT;
+	nIndex			: INT;
+	strStringInt	: T_MaxString;
+	strPrefixInt	: STRING(10);
+	strSuffixInt	: STRING(10);
+	strCheckString	: STRING(10);
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+DATE		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+06/07/2011	1.23.00	PB		Pre-check added to ensure that strString is not empty.
+07/06/2011	1.19.00	PB		bIgnoreCase input added, set to TRUE to ignore upper/lower case when matching Prefix and Suffix.
+31/01/2011	1.08.03	PB		Bug fix - strings now handled correctly if strSuffix is longer than 1 char.
+							Search for suffix changed to start after prefix position.
+22/11/2010	1.07.01	PB		Initial release.
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* string to be searched is not empty *)
+IF LEN(strString) > 0 THEN
+
+	(* matching for Prefix and Suffix is case-sesnsitive *)
+	IF bIgnoreCase = FALSE THEN
+
+		(* internal comparators are not changed *)
+		strStringInt := strString;
+		strPrefixInt := strPrefix;
+		strSuffixInt := strsuffix;
+
+	(* ignore case when matching for Prefix and Suffix *)
+	ELSE
+
+		(* internal comparators are all converted to lower case *)
+		strStringInt := F_ToLCase(strString);
+		strPrefixInt := F_ToLCase(strPrefix);
+		strSuffixInt := F_ToLCase(strsuffix);
+	END_IF
+
+	(* prefix is blank *)
+	IF strPrefixInt = '' THEN
+
+		(* start at beginning of string *)
+		nPrefixPos := 1;
+
+	(* prefix is not blank *)
+	ELSE
+
+		(* find 1st occurrence of prefix in strString *)
+		nPrefixPos := FIND(strStringInt, strPrefixInt);
+	END_IF
+
+	(* suffix is blank *)
+	IF strSuffixInt = '' THEN
+	
+		(* no of chars not specified *)
+		IF nExtractChars = 0 THEN
+	
+			(* finish at end of string *)
+			nSuffixPos := LEN(strStringInt);
+	
+		(* no of chars specified *)
+		ELSE
+	
+			(* finish at end of string *)
+			nSuffixPos := nPrefixPos + nExtractChars - 1;
+		END_IF
+	
+	(* suffix is not blank *)
+	ELSE
+	
+		nSuffixPos := 0;
+	
+		(* find 1st occurrence of suffix in strString AFTER position of strPrefix *)
+		FOR nIndex := nPrefixPos + LEN(strPrefixInt) TO LEN(strStringInt) DO
+	
+			(* extract string same length as suffix string *)
+			strCheckString := MID(strStringInt, LEN(strSuffixInt), nIndex);
+	
+			(* extracted string = suffix string *)
+			IF strCheckString = strSuffixInt THEN
+	
+				(* position of suffix string *)
+				nSuffixPos := nIndex;
+				EXIT;
+			END_IF
+		END_FOR
+	END_IF
+	
+	
+	(* prefix and suffix both exist *)
+	IF nPrefixPos > 0 AND nSuffixPos > 0 THEN
+	
+		(* extract sub-string *)
+		strResult := MID(strString, nSuffixPos + MAX(LEN(strSuffixInt), 1) - nPrefixPos, nPrefixPos);
+
+		(* delete sub-string *)
+		strString := DELETE(strString, nSuffixPos + MAX(LEN(strSuffixInt), 1) - nPrefixPos, nPrefixPos);
+	
+		(* update outputs *)
+		bStringFound := TRUE;
+		nChars := LEN(strResult);
+	
+	(* no prefix or suffix defined, cannot search for string *)
+	ELSE
+	
+		strResult := '';
+		bStringFound := FALSE;
+		nChars := 0;
+	END_IF
+
+(* string to be searched is empty *)
+ELSE
+
+	(* reset outputs *)
+	bStringFound := FALSE;
+	nChars := 0;
+	strResult := '';
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_ExtractString_v2">
+      <LineId Id="37" Count="99" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

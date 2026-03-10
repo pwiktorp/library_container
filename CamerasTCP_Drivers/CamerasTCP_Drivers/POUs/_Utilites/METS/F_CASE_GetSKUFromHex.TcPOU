@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_CASE_GetSKUFromHex" Id="{8d20e672-64ff-4309-ba81-e07d8a92d21c}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_CASE_GetSKUFromHex : STRING(8)
+VAR_INPUT
+	sSKU_FromCase	: STRING(7);
+END_VAR
+VAR
+
+	nSKULen			: INT;
+	nCharIndex		: INT;
+	strChar				: STRING(1);
+	nCharInDec		: REAL;
+	nData				: lREAL;
+	sSKU_Number		: STRING;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* reset output *)
+F_CASE_GetSKUFromHex := '';
+
+
+(* length of strPackCode *)
+nSKULen := LEN(sSKU_FromCase);
+nData:=0;
+(* strPackCode contains data *)
+IF nSKULen > 0 THEN
+
+	(* check each char in the code *)
+	FOR nCharIndex := 1 TO nSKULen DO
+		(* get char from string *)
+		strChar := MID(sSKU_FromCase, 1, nCharIndex);
+		nCharInDec := BYTE_TO_INT(HEXCHRNIBBLE_TO_BYTE(strChar));
+		nData:= nCharInDec*EXPT(16,nSKULen-nCharIndex) + nData;
+	END_FOR
+END_IF
+
+F_CASE_GetSKUFromHex := LEFT(lREAL_TO_STRING(nData),8);
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

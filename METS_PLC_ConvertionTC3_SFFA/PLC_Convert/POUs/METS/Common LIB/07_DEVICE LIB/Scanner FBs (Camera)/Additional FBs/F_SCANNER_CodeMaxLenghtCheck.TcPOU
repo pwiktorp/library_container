@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_SCANNER_CodeMaxLenghtCheck" Id="{89a5dd55-69dc-4c8b-a6e6-20d3b7d172ae}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_SCANNER_CodeMaxLenghtCheck : INT
+VAR_INPUT
+	sImageData			: ST_SCANNER_ImageData;
+	nMaxCodeLenght		: INT;
+END_VAR
+VAR
+	n: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[F_SCANNER_CodeMaxLenghtCheck := 0;
+FOR n := 1 TO LIMIT(1, sImageData.nCodesRead, cMAX_CAMERA_PROG_NUMBER) DO
+	IF LEN(sImageData.aCodeData[n].strDataString) > nMaxCodeLenght THEN
+		F_SCANNER_CodeMaxLenghtCheck := F_SCANNER_CodeMaxLenghtCheck+1;
+		sImageData.aCodeData[n].strDataString := '';
+	END_IF
+END_FOR]]></ST>
+    </Implementation>
+    <LineIds Name="F_SCANNER_CodeMaxLenghtCheck">
+      <LineId Id="8" Count="6" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

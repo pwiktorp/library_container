@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_LAB_PackData" Id="{172e89ca-c344-458f-beb2-ab9cb7a0c8e2}">
+    <Declaration><![CDATA[TYPE ST_LAB_PackData :
+STRUCT
+	sPackCode			: T_MaxString;
+	nPackStatus			: INT;
+	nPackRejectID		: UINT;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

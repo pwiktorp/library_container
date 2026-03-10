@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_ReplaceSingleChar" Id="{393001e2-95a8-4e1b-bac3-77cf60263f3e}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_ReplaceSingleChar : STRING(255)
+VAR_INPUT
+	sFullCode		: STRING(255);
+	sCharRemove			: T_Char := '$1D';
+	sReplacmentChar		: T_Char := '';
+END_VAR
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* reset output *)
+F_ReplaceSingleChar :='';
+
+WHILE FIND(sFullCode, sCharRemove) > 0 DO
+	sFullCode := REPLACE(sFullCode,sReplacmentChar, LEN(sCharRemove), FIND(sFullCode, sCharRemove));
+END_WHILE
+
+F_ReplaceSingleChar	:= sFullCode;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,277 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SCANNER_CameraSelectExt" Id="{d8f385b4-2e2f-4194-889b-7a1a89240aea}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SCANNER_CameraSelectExt
+VAR_INPUT
+	bEnable							: BOOL;			(* set TRUE to enable TCP comms connection *)
+	bConfigMode						: BOOL;			(* set TRUE to allow MV4x0 to be switched to CONFIG mode *)
+	bReadCode						: BOOL;			(* set TRUE to read code *)
+	bBrowseLive						: BOOL;			(* set TRUE to launch browser to view live images from MV4x0 *)
+	bBrowseDiag						: BOOL;			(* set TRUE to launch browser to view diagnostic images from MV4x0 *)
+	nReqProgram						: BYTE;			(* requested program to activate in MV4x0 *)
+	sScannerIPAddr					: T_IPv4Addr;	(* scanner IP address *)
+	nScannerPortNo					: UINT;			(* scanner port number *)
+	stTriggerID							: ST_SCANNER_TriggerID;	(* trigger ID data, will be returned in sImageData to allow trigger and response to be aligned *)
+	stOptions							: ST_SCANNER_Options;	(* MV configuration info *)
+	tTimeout							: TIME;			(* timeout delay *)
+	bTCPTrigger						: BOOL;
+	eCameraVendor					: E_SCANNER_Vendor;
+	sFC1ReplacmentChar				: STRING(1);
+	bDontParseAsGS1					:BOOL;
+END_VAR
+VAR_OUTPUT
+	bScannerReady						: BOOL;			(* TRUE = scanner port connected *)
+	bEnableActive						: BOOL;
+	nTriggerCounter					: UDINT;
+	bDone							: BOOL;			(* TRUE = code scan complete *)
+	bBusy							: BOOL;			(* TRUE = code scan in progress *)
+	bError							: BOOL;			(* TRUE = code scan error *)
+	nActiveProgram					: BYTE;			(* active program *)
+	bAcceptTrigger						: BOOL;			(* TRUE = camera will accept trigger *)
+	bTCPComsLockedUp					: BOOL;
+	stOpState							: ST_SCANNER_OpState;	(* operating state values *)
+	sStatus							: STRING(255);				(* image status string *)
+	sCurrentCodeRead					: STRING(255);
+	aLast10CodesRead					: ARRAY[1..10]  OF STRING(255);
+	stImageData						: ST_SCANNER_ImageData;		(* image data structure *)
+	eSocketState						: E_SocketConnectionState;	(* TCP socket connection state *)
+	stReadPerformance					: ST_SCANNER_Performance;
+	
+	bCameraTrigger						: BOOL;			(* TRG signal to camera *)
+	bLightTrigger						: BOOL;
+END_VAR
+VAR
+
+	fbSiemens					: FB_SCANNER_SiemensExt;
+	fbOmron						: FB_SCANNER_OmronExt;
+	fbKeyence				: FB_SCANNER_KeyenceExt;
+
+	fbAverageScanTime					: FB_SYSTEM_AverageTimeDiff;
+	ftEnable							: F_TRIG;
+	rtDone							: R_TRIG;
+	fbTriggerCounter					: R_TRIG;
+	nShiftIndex						: UINT;
+
+	nCode: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bEnableActive := bEnable;
+
+CASE eCameraVendor OF
+
+E_SCANNER_Vendor.SIEMENS :
+
+	fbSiemens(
+		bEnable:= bEnable,
+		bConfigMode:= bConfigMode,
+		bReadCode:= bReadCode,
+		bBrowseLive:= bBrowseLive,
+		bBrowseDiag:= bBrowseDiag,
+		nReqProgram:= nReqProgram,
+		strScannerIPAddr:= sScannerIPAddr,
+		nScannerPortNo:= nScannerPortNo,
+		sTriggerID:= stTriggerID,
+		sOptions:= stOptions,
+		tTimeout:= tTimeout,
+		bDontParseAsGS1 := bDontParseAsGS1,
+		bScannerReady=> bScannerReady,
+		bDone=> bDone,
+		bBusy=> bBusy,
+		bError=> bError,
+		bdoTrigger=> bCameraTrigger,
+		nActiveProgram=> nActiveProgram,
+		bAcceptTrigger=> bAcceptTrigger,
+		sOpState=> stOpState,
+		strStatus=> ,
+		sImageData=> ,
+		eSocketState=> eSocketState);
+
+
+E_SCANNER_Vendor.OMRON :
+
+	fbOmron(
+		bEnable:= bEnable,
+		bConfigMode:= bConfigMode,
+		bReadCode:= bReadCode,
+		bBrowseLive:= bBrowseLive,
+		bBrowseDiag:= bBrowseDiag,
+		nReqProgram:= nReqProgram,
+		strScannerIPAddr:= sScannerIPAddr,
+		nScannerPortNo:= nScannerPortNo,
+		sTriggerID:= stTriggerID,
+		sOptions:= stOptions,
+		tTimeout:= tTimeout,
+		bDontParseAsGS1 := bDontParseAsGS1,
+		bScannerReady=> bScannerReady,
+		bDone=> bDone,
+		bBusy=> bBusy,
+		bError=> bError,
+		bdoTrigger=> bCameraTrigger,
+		nActiveProgram=> nActiveProgram,
+		bAcceptTrigger=> bAcceptTrigger,
+		bTCPComsLockedUp => bTCPComsLockedUp,
+		sOpState=> stOpState,
+		strStatus=> ,
+		sImageData=> ,
+		eSocketState=> eSocketState);
+		
+E_SCANNER_Vendor.KEYENCE :
+
+	fbKeyence(
+		bEnable:= bEnable,
+		bConfigMode:= bConfigMode,
+		bReadCode:= bReadCode,
+		bBrowseLive:= bBrowseLive,
+		bBrowseDiag:= bBrowseDiag,
+		nReqProgram:= nReqProgram,
+		strScannerIPAddr:= sScannerIPAddr,
+		nScannerPortNo:= nScannerPortNo,
+		sTriggerID:= stTriggerID,
+		sOptions:= stOptions,
+		tTimeout:= tTimeout,
+		bDontParseAsGS1 := bDontParseAsGS1,
+		bScannerReady=> bScannerReady,
+		bDone=> bDone,
+		bBusy=> bBusy,
+		bError=> bError,
+		bdoTrigger=> bCameraTrigger,
+		nActiveProgram=> nActiveProgram,
+		bAcceptTrigger=> bAcceptTrigger,
+		sOpState=> stOpState,
+		strStatus=> ,
+		sImageData=> ,
+		eSocketState=> eSocketState);
+
+
+ELSE
+
+	fbSiemens(
+		bEnable:= bEnable,
+		bConfigMode:= bConfigMode,
+		bReadCode:= bReadCode,
+		bBrowseLive:= bBrowseLive,
+		bBrowseDiag:= bBrowseDiag,
+		nReqProgram:= nReqProgram,
+		strScannerIPAddr:= sScannerIPAddr,
+		nScannerPortNo:= nScannerPortNo,
+		sTriggerID:= stTriggerID,
+		sOptions:= stOptions,
+		tTimeout:= tTimeout,
+		bDontParseAsGS1 := bDontParseAsGS1,
+		bScannerReady=> bScannerReady,
+		bDone=> bDone,
+		bBusy=> bBusy,
+		bError=> bError,
+		bdoTrigger=> bCameraTrigger,
+		nActiveProgram=> nActiveProgram,
+		bAcceptTrigger=> bAcceptTrigger,
+		sOpState=> stOpState,
+		strStatus=> ,
+		sImageData=> ,
+		eSocketState=> eSocketState);
+
+END_CASE
+
+(****************************************************************************************************************)
+
+stOpState.nExpectedResp := LIMIT(1, stOptions.nExpectedResp, cMAX_CAMERA_PROG_NUMBER);
+
+(****************************************************************************************************************)
+fbTriggerCounter(CLK:=bCameraTrigger);
+
+bLightTrigger := (fbTriggerCounter.Q OR bConfigMode) AND stOptions.bUseExternalLight;
+
+IF fbTriggerCounter.Q THEN
+	nTriggerCounter := nTriggerCounter + 1;
+	sCurrentCodeRead := '';
+
+	IF stOptions.nExpectedResp > 1 THEN
+
+
+		nShiftIndex := INT_TO_UINT(MAX(0,stOptions.nExpectedResp));
+
+		MEMMOVE(ADR(aLast10CodesRead[1+nShiftIndex]), ADR(aLast10CodesRead[1]), SIZEOF(aLast10CodesRead) - nShiftIndex * SIZEOF(aLast10CodesRead[1]) );
+
+		MEMSET(ADR(aLast10CodesRead[1]), 16#00, nShiftIndex * SIZEOF(aLast10CodesRead[1]));
+
+		FOR nCode:=1 TO LIMIT(1, stOptions.nExpectedResp, cMAX_CAMERA_PROG_NUMBER)  DO
+
+			aLast10CodesRead[nCode]:=stImageData.aCodeData[nCode].strDataString;
+
+		END_FOR
+
+	ELSE
+
+
+		MEMMOVE(ADR(aLast10CodesRead[2]), ADR(aLast10CodesRead[1]), SIZEOF(aLast10CodesRead) - SIZEOF(aLast10CodesRead[1]));
+
+		aLast10CodesRead[1]:=stImageData.aCodeData[1].strDataString;
+
+	END_IF
+
+	MEMSET(ADR(stImageData), 16#00, SIZEOF(stImageData));
+	sStatus				:= '';
+END_IF
+(****************************************************************************************************************)
+rtDone(CLK := bDone);
+
+(* FC1 / Group seperator char swap - AS remove first GS if present!*)
+
+IF rtDone.Q THEN
+
+	CASE eCameraVendor OF
+
+		E_SCANNER_Vendor.SIEMENS :
+			stImageData 	:= fbSiemens.sImageData;
+			sStatus 		:= fbSiemens.strStatus;
+		E_SCANNER_Vendor.OMRON:
+			stImageData 	:= fbOmron.sImageData;
+			sStatus 		:= fbOmron.strStatus;
+		E_SCANNER_Vendor.KEYENCE:
+			stImageData 	:= fbKeyence.sImageData;
+			sStatus 		:= fbKeyence.strStatus;
+		ELSE
+			stImageData 	:= fbSiemens.sImageData;
+			sStatus 		:= fbSiemens.strStatus;
+	END_CASE
+
+	FOR nCode := 1 TO LIMIT(1, stImageData.nCodesRead,cMAX_CAMERA_PROG_NUMBER) DO
+		IF LEFT(stImageData.aCodeData[nCode].strDataString, 1) = '$1D' THEN
+			stImageData.aCodeData[nCode].strDataString := RIGHT(stImageData.aCodeData[nCode].strDataString, LEN(stImageData.aCodeData[nCode].strDataString) - 1);
+		END_IF
+
+		stImageData.aCodeData[nCode].strDataString := F_ReplaceSingleChar(stImageData.aCodeData[nCode].strDataString, '$1D', sFC1ReplacmentChar);
+
+
+	END_FOR
+	IF stImageData.nCodesRead = 0 OR stImageData.nCodesRead > cMAX_CAMERA_PROG_NUMBER THEN
+		sCurrentCodeRead := '';
+	ELSE
+		sCurrentCodeRead := stImageData.aCodeData[stImageData.nCodesRead].strDataString;
+	END_IF
+END_IF
+(****************************************************************************************************************)
+fbAverageScanTime(
+			bEnable := bScannerReady,
+			bStart := bReadCode,
+			bStop := bDone,
+			tLastDiff 		=> stReadPerformance.tLastDiff,
+			tAverageDiff 	=> stReadPerformance.tAverageDiff,
+			arrTimeDiff 	=> stReadPerformance.arrTimeDiff	);
+(****************************************************************************************************************)
+ftEnable(CLK:= bEnable);
+
+IF ftEnable.Q THEN
+
+	nTriggerCounter := 0;
+	sStatus				:= '';
+	sCurrentCodeRead	:= '';
+
+	MEMSET(ADR(aLast10CodesRead), 16#00, SIZEOF(aLast10CodesRead));
+	MEMSET(ADR(stImageData), 16#00, SIZEOF(stImageData));
+	MEMSET(ADR(stReadPerformance), 16#00, SIZEOF(stReadPerformance));
+END_IF
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,60 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_CX_LocalIPAddr" Id="{8772d404-dbc0-4c4b-8fd2-ec36f3fa0265}" SpecialFunc="None">
+    <Declaration><![CDATA[(* returnd IP address of Ethernet port that matches Target IP address with subnet mask applied *)
+FUNCTION F_CX_LocalIPAddr : T_IPv4Addr
+VAR_INPUT
+	strTargetIPAddr		: T_IPv4Addr;	(* IP address of target device *)
+	sNetworkInfo		: ST_CX_NetworkInfo;	(* list of IP addresses for Ethernet ports *)
+END_VAR
+VAR
+	arrTargetIPAddr		: T_IPv4AddrArr;
+	nTargetIPAddr		: DWORD;
+	nMaxIndex			: INT;
+	nIndex				: INT;
+	arrAdapterIPAddr	: T_IPv4AddrArr;
+	nAdapterIPAddr		: DWORD;
+	arrSubnetMask		: T_IPv4AddrArr;
+	nSubnetMask			: DWORD;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* convert target IP address to array of bytes and move to DWORD *)
+arrTargetIPAddr := F_ScanIPv4AddrIds(strTargetIPAddr);
+MEMMOVE(ADR(nTargetIPAddr), ADR(arrTargetIPAddr), SIZEOF(nTargetIPAddr));
+
+(* max adapters *)
+nMaxIndex := UDINT_TO_INT(SIZEOF(sNetworkInfo.arrAdapterInfo) / SIZEOF(sNetworkInfo.arrAdapterInfo[1]));
+
+(* scan for adapter with matching IP address *)
+FOR nIndex := 1 TO nMaxIndex DO
+
+	(* convert adapter address to array of bytes and move to DWORD *)
+	arrAdapterIPAddr := F_ScanIPv4AddrIds(sNetworkInfo.arrAdapterInfo[nIndex].strIPAddress);
+	MEMMOVE(ADR(nAdapterIPAddr), ADR(arrAdapterIPAddr), SIZEOF(nAdapterIPAddr));
+
+	(* convert subnet mask to array of bytes and move to DWORD *)
+	arrSubnetMask := F_ScanIPv4AddrIds(sNetworkInfo.arrAdapterInfo[nIndex].strSubnetMask);
+	MEMMOVE(ADR(nSubnetMask), ADR(arrSubnetMask), SIZEOF(nSubnetMask));
+
+	(* check for matching Target and Adapter IP address with Subnet Mask applied *)
+	IF (nAdapterIPAddr AND nSubnetMask) = (nTargetIPAddr AND nSubnetMask) AND nSubnetMask > 0 THEN
+
+		(* match found, use adapter IP address *)
+		F_CX_LocalIPAddr := sNetworkInfo.arrAdapterInfo[nIndex].strIPAddress;
+
+		EXIT;
+	END_IF
+END_FOR
+
+(* matching IP address not found *)
+IF nIndex > nMaxIndex THEN
+
+	(* clear IP address *)
+	F_CX_LocalIPAddr := '';
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="F_CX_LocalIPAddr">
+      <LineId Id="16" Count="33" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

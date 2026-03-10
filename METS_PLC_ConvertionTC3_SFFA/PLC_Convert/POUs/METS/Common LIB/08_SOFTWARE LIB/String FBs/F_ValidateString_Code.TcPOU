@@ -1,0 +1,93 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_ValidateString_Code" Id="{22effcab-0064-4f59-977e-366de985d926}" SpecialFunc="None">
+    <Declaration><![CDATA[(* checks a string for various characteristics and returns a code if validation fails *)
+FUNCTION F_ValidateString_Code : UDINT
+VAR_INPUT
+	strFieldData		: T_MaxString;	(* string to be examined *)
+	nExpectedChars		: BYTE;			(* >0 = no of chars expected in string, 0 = chars not counted but string must not be empty *)
+	nMaxChars			: UINT;			(* >0 = max no of chars allowed in strFieldData, 0 = do not check *)
+	bNumCharsOnly		: BOOL;			(* TRUE = all chars are checked to ensure only numerical (0-9) chars are present *)
+	bDecPointAllowed	: BOOL;			(* TRUE = decimal point is allowed in a numerical string *)
+END_VAR
+VAR
+	nIndex				: INT;
+	nCharValue			: BYTE;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+DATE		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* string contains data *)
+IF LEN(strFieldData) > 0 THEN
+
+	(* field data length exceeds specified maximum no of chars *)
+	IF nMaxChars > 0 AND LEN(strFieldData) > nMaxChars THEN
+
+		F_ValidateString_Code := 6;
+
+	(* string has expected no of chars OR string length does not matter *)
+	ELSIF LEN(strFieldData) = nExpectedChars OR nExpectedChars = 0 THEN
+
+		(* string must only have numerical chars *)
+		IF bNumCharsOnly = TRUE THEN
+
+			(* check each char in the string *)
+			FOR nIndex := 1 TO LEN(strFieldData) DO
+
+				(* convert char to ASCII value *)
+(*				nCharValue := ASC(MID(strFieldData, 1, nIndex));*)
+				nCharValue := F_ToASC(MID(strFieldData, 1, nIndex));
+
+				(* string char is valid if 0-9, decimal point also allowed if enabled *)
+				IF (nCharValue >= F_ToASC('0') AND nCharValue <= F_ToASC('9')) OR (nCharValue = F_ToASC('.') AND bDecPointAllowed = TRUE) THEN
+
+					F_ValidateString_Code := 0;
+
+				(* decimal point found but not allowed *)
+				ELSIF nCharValue = F_ToASC('.') AND bDecPointAllowed = FALSE THEN
+
+					F_ValidateString_Code := 5;
+					EXIT;
+
+				(* other invalid char found *)
+				ELSE
+
+					F_ValidateString_Code := 4;
+					EXIT;
+				END_IF
+			END_FOR
+
+		(* string can be alpha-numeric chars *)
+		ELSE
+
+			F_ValidateString_Code := 0;
+		END_IF
+
+	(* string is too short *)
+	ELSIF LEN(strFieldData) < nExpectedChars THEN
+
+		F_ValidateString_Code := 2;
+
+	(* string is too long *)
+	ELSIF LEN(strFieldData) > nExpectedChars THEN
+
+		F_ValidateString_Code := 3;
+	END_IF
+
+(* empty string *)
+ELSE
+
+	F_ValidateString_Code := 1;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="F_ValidateString_Code">
+      <LineId Id="21" Count="61" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

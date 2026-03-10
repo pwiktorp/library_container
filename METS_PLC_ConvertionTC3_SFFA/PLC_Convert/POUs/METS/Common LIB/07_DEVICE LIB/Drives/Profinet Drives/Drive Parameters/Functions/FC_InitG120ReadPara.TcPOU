@@ -1,0 +1,85 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FC_InitG120ReadPara" Id="{4f2c76b8-a560-47ee-b851-bc1a7f47d879}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION FC_InitG120ReadPara : BOOL
+VAR_INPUT
+	i_xInit				:BOOL;
+END_VAR
+
+VAR
+	stEmptyParameter		: ST_Parameter;
+	iLoop				: INT;
+	uiParameterNumber	: INT;
+	stParameters			 :ST_Parameters;
+END_VAR
+(*All VAR_IN_OUT variables have been moved to the end of the declaration due to compatibility reasons*)
+VAR_IN_OUT
+	iq_stParameters		: ST_Parameters;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF i_xInit THEN
+    stEmptyParameter.eFormat := 0;
+    stEmptyParameter.uiParameter := 0;
+    stEmptyParameter.uiSubIndex := 0;
+    stEmptyParameter.stValue.xValueType1 := FALSE;
+    stEmptyParameter.stValue.siValueType2 := 0;
+    stEmptyParameter.stValue.iValueType3 := 0;
+    stEmptyParameter.stValue.diValueType4 := 0;
+    stEmptyParameter.stValue.usiValueType5 := 0;
+    stEmptyParameter.stValue.uiValueType6 := 0;
+    stEmptyParameter.stValue.udiValueType7 := 0;
+    stEmptyParameter.stValue.rValueType8 := 0.0;
+    stEmptyParameter.stValue.sValueType9 := '';
+    
+    FOR iLoop := 1 TO cPARAMETER_STORAGE_SIZE DO
+       stParameters.astParameterList[iLoop] := stEmptyParameter;
+    END_FOR;
+
+    stParameters.astParameterList[1].uiParameter := 52;(*Status 1*)
+	stParameters.astParameterList[1].eFormat:=ePD_UINT16;
+   	stParameters.astParameterList[2].uiParameter := 53;(*Status 2*)
+	stParameters.astParameterList[2].eFormat:=ePD_UINT16;
+    stParameters.astParameterList[3].uiParameter := 54;(*Control 1*)
+	stParameters.astParameterList[3].eFormat:=ePD_UINT16;
+    stParameters.astParameterList[4].uiParameter := 899;(*Status word sequence control*)
+	stParameters.astParameterList[4].eFormat:=ePD_UINT16;
+    stParameters.astParameterList[5].uiParameter := 945;(*Fault Code*)
+	stParameters.astParameterList[5].eFormat:=ePD_UINT16;
+    stParameters.astParameterList[6].uiParameter := 945;(*Fault Code*)
+	stParameters.astParameterList[6].eFormat:=ePD_UINT16;
+    stParameters.astParameterList[7].uiParameter := 2132;(*Alarm Code*)
+	stParameters.astParameterList[7].eFormat:=ePD_UINT16;
+    stParameters.astParameterList[8].uiParameter := 2132;(*Alarm Code*)
+	stParameters.astParameterList[8].eFormat:=ePD_UINT16;
+    stParameters.astParameterList[9].uiParameter := 46;(*Missing Enables*)
+	stParameters.astParameterList[9].eFormat:=ePD_UINT32;
+    stParameters.astParameterList[10].uiParameter := 100;(*IEC/NEMA mot stds*)
+	stParameters.astParameterList[10].eFormat:= ePD_INT16;
+    stParameters.astParameterList[11].uiParameter := 304;(*Rated motor voltage*)
+	stParameters.astParameterList[11].eFormat:= ePD_FLOAT;
+    stParameters.astParameterList[12].uiParameter := 305;(*Rated motor current*)
+	stParameters.astParameterList[12].eFormat:= ePD_FLOAT;
+    stParameters.astParameterList[13].uiParameter := 307;(*Rated motor Power*)
+	stParameters.astParameterList[13].eFormat:= ePD_FLOAT;
+    stParameters.astParameterList[14].uiParameter := 310;(*Rated motor frequency*)
+	stParameters.astParameterList[14].eFormat:= ePD_FLOAT;
+    stParameters.astParameterList[15].uiParameter := 311;(*Rated motor Speed*)
+	stParameters.astParameterList[15].eFormat:= ePD_FLOAT;
+    stParameters.astParameterList[16].uiParameter := 610;(*Motor overtemperature response*)
+	stParameters.astParameterList[16].eFormat:= ePD_INT16;
+    stParameters.astParameterList[17].uiParameter := 640;(*Current limit*)
+	stParameters.astParameterList[17].eFormat:= ePD_FLOAT;
+    stParameters.astParameterList[18].uiParameter := 1000;(*Speed setpoint selection*)
+	stParameters.astParameterList[18].eFormat:= ePD_INT16;
+    stParameters.astParameterList[19].uiParameter := 35;(*Motor Temperature*)
+	stParameters.astParameterList[19].eFormat:= ePD_FLOAT;
+    
+iq_stParameters:=stParameters;
+	
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="FC_InitG120ReadPara">
+      <LineId Id="15" Count="59" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

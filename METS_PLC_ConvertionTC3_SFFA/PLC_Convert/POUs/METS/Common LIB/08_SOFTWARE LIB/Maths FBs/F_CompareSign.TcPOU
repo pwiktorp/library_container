@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_CompareSign" Id="{dd5744f2-1972-4a30-b80b-929d17a05b8b}" SpecialFunc="None">
+    <Declaration><![CDATA[(* F_CompareSign compares the sign of 2 LREAL values and gives TRUE if both values *)
+(* are non-zero and have opposite sign *)
+FUNCTION F_CompareSign : BOOL
+VAR_INPUT
+	fValue1		: LREAL;
+	fValue2		: LREAL;
+END_VAR
+VAR
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		No change
+
+-------------------------------------------------------------------------------------------------
+05/02/10	1.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* input values are both non-zero *)
+IF fValue1 <> 0.0 AND fValue2 <> 0.0 THEN
+
+	(* values have different signs *)
+	IF F_GetSign(fValue1) <> F_GetSign(fValue2) THEN
+
+		F_CompareSign := TRUE;
+
+	(* values have same sign *)
+	ELSE
+
+		F_CompareSign := FALSE;
+	END_IF
+
+(* one of input values is zero *)
+ELSE
+
+	F_CompareSign := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="F_CompareSign">
+      <LineId Id="20" Count="18" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

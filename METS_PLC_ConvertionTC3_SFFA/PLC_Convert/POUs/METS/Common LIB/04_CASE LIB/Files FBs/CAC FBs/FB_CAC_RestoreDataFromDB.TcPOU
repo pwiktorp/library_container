@@ -1,0 +1,374 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CAC_RestoreDataFromDB" Id="{e14939b7-7d24-4185-badf-7c5e654ce2f7}" SpecialFunc="None">
+    <Declaration><![CDATA[(* reads CAC files from CAC folder, deletes OAC file and copies CAC file into Archive *)
+FUNCTION_BLOCK FB_CAC_RestoreDataFromDB
+VAR_INPUT
+	bExecute						: BOOL;		(* set TRUE to archive OAC files *)
+	sCaseBarcode					: T_MaxString;
+	bUseInterimCodeForValidation	: BOOL;
+	stSystemTime					: TIMESTRUCT;
+END_VAR
+VAR_IN_OUT
+	stCodeInfo_Pack				: ST_CodeInfo;
+	stCodeInfo_Intermediate		: ST_CodeInfo;
+	stCodeInfo_Outer			: ST_CodeInfo;
+	stCodeInfo_Case				: ST_CodeInfo;
+
+	stOCVDataDB				: ST_DB_OCVDataCtrl;
+	stOACDataDB				: ST_DB_OACDataCtrl;
+	stCACDataDB				: ST_DB_CACDataCtrl;
+
+	stProductInstruction		: ST_PCM_Status;
+END_VAR
+VAR_OUTPUT
+	bDone 						: BOOL;		(* TRUE = OAC archive complete *)
+	bBusy 						: BOOL;		(* TRUE = OAC archive active *)
+	bError 						: BOOL;		(* TRUE = OAC archive error *)
+	nErrorID					: UDINT;	(* error code *)
+
+	bCACDataFound				: BOOL;
+	sCACRestored				: T_MaxString;
+	nOCVRestored				: UDINT;
+	nOACRestored				: UDINT;
+	nCACRestored				: UDINT;
+
+	bCACValid					: BOOL;
+END_VAR
+VAR
+	fbExecute					: R_TRIG;
+	eState						: E_CAC_State;
+	eErrorState					: E_CAC_State;
+
+	tonTimeOut					: TON;
+	rtTimeOutExec				: R_TRIG;
+
+	sFirstOuter					: T_OUTER_Barcode;
+	sLastOuter					: T_OUTER_Barcode;
+
+	stCACData					: ST_CAC_Data;
+
+	stDiagCACDataDB				:  ST_DB_CACDataCtrl;
+
+	nOuterIndex					: INT;
+	nOACIndex					: INT;
+	nOCVIndex					: INT;
+	
+	sPOFromCaseLabel			: T_CodePO;
+	sRSKUFromCaseLabel			: T_CodeRSKU;
+	sRSKUFromCaseLabel_test		: T_CodeRSKU;
+
+END_VAR
+
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(***************************************TimeOut *******************************************)
+(* monitor Busy timeout *)
+tonTimeOut( IN:=bBusy, PT:=cFIVE_SECONDS, Q=>);
+(*	cTHREE_SECONDS						: TIME := T#3s;
+	cFIVE_SECONDS						: TIME := t#5s;
+	cTEN_SECONDS						: TIME := t#10s;*)
+
+rtTimeOutExec(CLK:= tonTimeOut.Q);
+
+IF rtTimeOutExec.Q THEN
+
+	bError := TRUE;
+	nErrorID := 100;
+	eErrorState := eState;
+
+	bCACDataFound	:= FALSE;
+	sCACRestored		:= '';
+
+	//MEMSET(ADR(stOCVStatus), 16#00, SIZEOF(stOCVStatus));
+	//MEMSET(ADR(stOACStatus), 16#00, SIZEOF(stOACStatus));
+	MEMSET(ADR(stCACData), 16#00, SIZEOF(stCACData));
+
+	MEMSET(ADR(stOCVDataDB), 16#00, SIZEOF(stOCVDataDB));
+	MEMSET(ADR(stOACDataDB), 16#00, SIZEOF(stOACDataDB));
+	MEMSET(ADR(stCACDataDB), 16#00, SIZEOF(stCACDataDB));
+
+	eState := E_CAC_DONE;
+END_IF
+
+(***************************************Execution*******************************************)
+
+(* monitor bExecute for rising edge *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_CAC_IDLE:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			(*sDateFolder	:= '';
+			sTargetPath 	:= '';*)
+			bCACValid		:= FALSE;
+
+			bCACDataFound	:= FALSE;
+			sCACRestored		:= '';
+
+			//MEMSET(ADR(stOCVStatus), 16#00, SIZEOF(stOCVStatus));
+			//MEMSET(ADR(stOACStatus), 16#00, SIZEOF(stOACStatus));
+			MEMSET(ADR(stCACData), 16#00, SIZEOF(stCACData));
+
+			MEMSET(ADR(stOCVDataDB), 16#00, SIZEOF(stOCVDataDB));
+			MEMSET(ADR(stOACDataDB), 16#00, SIZEOF(stOACDataDB));
+			MEMSET(ADR(stCACDataDB), 16#00, SIZEOF(stCACDataDB));
+
+			nOCVRestored			:= 0;
+			nOACRestored			:= 0;
+			nCACRestored			:= 0;
+
+			eState := E_CAC_READDATA;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* clear outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			(*nErrorID := 0;*)
+		END_IF
+
+(*****************************************************************************************)
+
+	E_CAC_READDATA:
+
+		IF F_InvalidateASCIIChar(sCaseBarcode) >	0 	THEN
+
+			stCACDataDB.sFileCodeName	:= '';
+		ELSE
+			stCACDataDB.sFileCodeName	:= F_CASE_BarcodeToCACFilename(sCaseBarcode, stSystemTime, FALSE);
+		END_IF
+		
+		sPOFromCaseLabel := F_CODE_GetItem(sCaseBarcode, eCodeAIType.ProductionOrder, stCodeInfo_Case);
+		sRSKUFromCaseLabel := F_CODE_GetItem(sCaseBarcode, eCodeAIType.RSKU, stCodeInfo_Case);
+
+		sRSKUFromCaseLabel_test := F_CASE_GetSKUFromHex( sRSKUFromCaseLabel) ;
+
+		IF stCodeInfo_Case.stProductionOrder.nListPosition = 0 									AND
+			((  LEN(sRSKUFromCaseLabel) = 7 													AND
+				stProductInstruction.sRetailSKU = F_CASE_GetSKUFromHex( sRSKUFromCaseLabel))	OR
+			(  LEN(sRSKUFromCaseLabel) > 7 														AND
+				stProductInstruction.sRetailSKU =  sRSKUFromCaseLabel) ) 						THEN
+
+				stCACDataDB.sArchiveName := stProductInstruction.sRetailSKU;
+
+		ELSIF sPOFromCaseLabel <> ''  											AND
+			//LEN(sPOFromCaseLabel) = LEN(stProductInstruction.sProductionOrder)	AND
+			sRSKUFromCaseLabel = stProductInstruction.sRetailSKU				THEN
+
+			stCACDataDB.sArchiveName := sPOFromCaseLabel;
+
+		ELSIF stProductInstruction.sProductionOrder  <> '' THEN
+
+			stCACDataDB.sArchiveName := stProductInstruction.sProductionOrder;
+		ELSE
+			stCACDataDB.sArchiveName := F_SYSTEM_SystemTimeToFolderName(stSystemTime);
+		END_IF
+
+		stCACDataDB.bReanimated		:= TRUE;
+		stCACDataDB.bReadDataReq	:= TRUE;
+
+(*place for HectorDB block*)
+
+		IF	stCACDataDB.bDone	THEN
+
+			sCACRestored	:= stCACDataDB.sFileCodeName;
+
+			IF NOT  stCACDataDB.bError THEN
+
+				bCACDataFound	:= TRUE;
+				nCACRestored := nCACRestored + 1;
+				stCACData := stCACDataDB.stCACStatusDB;
+
+				IF F_ToUCase(stCACData.CaseRejectCode) = 'OK' THEN
+					bCACValid := TRUE;
+				END_IF
+				(* first and last Outers in CAC file *)
+				
+				IF stCACData.NumberOfOuters > 0 THEN
+					sFirstOuter := stCACData.Outer[1].Barcode;
+					sLastOuter := stCACData.Outer[stCACData.NumberOfOuters].Barcode;
+				END_IF
+				
+				IF stProductInstruction.nOutersPerCase = stCACData.NumberOfOuters 	AND
+					F_ToUCase(stCACData.CaseRejectCode) = 'OK' 						AND
+					stProductInstruction.bEnableOAC										THEN
+
+					nOuterIndex := 1;
+
+					FillInDBData();
+
+					eState := E_CAC_CREATEOACDATA;
+				ELSE
+					eState := E_CAC_DONE;
+				END_IF
+			ELSE
+
+				bError := TRUE;
+				nErrorID := stCACDataDB.nErrorID;
+				eErrorState := eState;
+
+				eState := E_CAC_DONE;
+			END_IF
+
+			stDiagCACDataDB	:= stCACDataDB;
+
+			MEMSET(ADR(stCACDataDB), 16#00, SIZEOF(stCACDataDB));
+		END_IF
+
+	(* delete OAC files *)
+	E_CAC_CREATEOACDATA:
+
+		stOACDataDB.bRestored			:= TRUE;
+		stOACDataDB.bCreateDataReq			:= TRUE;
+		
+		stOCVDataDB.bRestored			:= TRUE;
+		stOCVDataDB.bCreateDataReq			:= TRUE;
+
+		IF	stOACDataDB.bDone	THEN
+
+			IF NOT  stOACDataDB.bError THEN
+
+				nOACRestored := nOACRestored + 1;
+			ELSE
+				bError := TRUE;
+				nErrorID := stOACDataDB.nErrorID;
+				eErrorState := eState;
+			END_IF
+
+			MEMSET(ADR(stOACDataDB), 16#00, SIZEOF(stOACDataDB));
+
+			eState := E_CAC_CREATEOCVDATA;
+		END_IF
+
+	E_CAC_CREATEOCVDATA:
+
+		IF	stOCVDataDB.bDone	THEN
+
+			IF NOT  stOCVDataDB.bError THEN
+
+				nOCVRestored := nOCVRestored + 1;
+			ELSE
+				bError := TRUE;
+				nErrorID := stOCVDataDB.nErrorID;
+				eErrorState := eState;
+			END_IF
+
+			MEMSET(ADR(stOCVDataDB), 16#00, SIZEOF(stOCVDataDB));
+
+			IF nOuterIndex = stCACData.NumberOfOuters THEN
+
+				eState := E_CAC_DONE;
+			ELSE
+
+				nOuterIndex := LIMIT(1, nOuterIndex + 1, stProductInstruction.nOutersPerCase);
+		
+				FillInDBData();
+
+				eState := E_CAC_CREATEOACDATA;
+			END_IF
+		END_IF
+
+	(* complete *)
+	E_CAC_DONE:
+
+		(* update outputs *)
+		bBusy := FALSE;
+		bDone := TRUE;
+
+		eState := E_CAC_IDLE;
+
+(* unknown state *)
+ELSE
+
+	eState := E_CAC_IDLE;
+END_CASE
+]]></ST>
+    </Implementation>
+    <Action Name="FillInDBData" Id="{48a81c9c-d1bf-4894-820a-be06a078a126}">
+      <Implementation>
+        <ST><![CDATA[(************************************************************Fill In OAC Data****************************************************************************)
+
+IF F_InvalidateASCIIChar(F_CODE_GetItem(stCACData.Outer[nOuterIndex].Barcode, eCodeAIType.SerialCode, stCodeInfo_Outer)) >	0 	THEN
+
+	stOACDataDB.sFileCodeName	:='';
+ELSE
+	stOACDataDB.sFileCodeName	:= F_CodeToHex(F_CODE_GetItem(stCACData.Outer[nOuterIndex].Barcode , eCodeAIType.SerialCode, stCodeInfo_Outer));
+END_IF
+
+MEMMOVE(ADR(stOACDataDB.stOACStatusDB.stOACData), ADR(stCACData.Outer[nOuterIndex]), SIZEOF(stCACData.Outer[nOuterIndex]));
+
+stOACDataDB.stOACStatusDB.nTriggerID 				:=9999;
+
+FOR nOCVindex :=1 TO stOACDataDB.stOACStatusDB.stOACData.NumberOfPacks DO
+	stOACDataDB.stOACStatusDB.stOACData.PackCodeStatus[nOCVindex].8 := TRUE;
+END_FOR
+
+stOACDataDB.stOACStatusDB.bOuterPresent		:= TRUE;
+stOACDataDB.stOACStatusDB.bLabelApplied		:= TRUE;
+stOACDataDB.stOACStatusDB.bOuterCodeValid	:= TRUE;
+stOACDataDB.stOACStatusDB.bPackCodesValid	:= TRUE;
+(************************************************************Fill In OCV Data****************************************************************************)
+
+
+IF F_InvalidateASCIIChar(F_CODE_GetItem(stCACData.Outer[nOuterIndex].AggregationCodes[1] , eCodeAIType.SerialCode,
+										SEL(bUseInterimCodeForValidation, stCodeInfo_Pack, stCodeInfo_Intermediate))) >	0 	THEN
+
+	stOCVDataDB.sFileCodeName1	:= '';
+ELSE
+	stOCVDataDB.sFileCodeName1	:= F_CodeToHex(F_CODE_GetItem(stCACData.Outer[nOuterIndex].AggregationCodes[1] , eCodeAIType.SerialCode,
+																		SEL(bUseInterimCodeForValidation, stCodeInfo_Pack, stCodeInfo_Intermediate)));
+END_IF
+
+IF F_InvalidateASCIIChar(F_CODE_GetItem(stCACData.Outer[nOuterIndex].AggregationCodes[2] , eCodeAIType.SerialCode,   stCodeInfo_Pack)) >	0 	THEN
+
+	stOCVDataDB.sFileCodeName2	:='';
+ELSE
+	stOCVDataDB.sFileCodeName2	:= F_CodeToHex(F_CODE_GetItem(stCACData.Outer[nOuterIndex].AggregationCodes[2] , eCodeAIType.SerialCode,   stCodeInfo_Pack));
+END_IF
+
+MEMMOVE(ADR(stOCVDataDB.stOCVStatusDB.stOACData), ADR(stCACData.Outer[nOuterIndex]), SIZEOF(stCACData.Outer[nOuterIndex]));
+
+stOCVDataDB.stOCVStatusDB.nTriggerID 				:=9999;
+//stOCVDataDB.stOCVStatusDB.bPackCodesValid			:= TRUE;
+stOCVDataDB.stOCVStatusDB.stOACData.Barcode			:= '';
+stOCVDataDB.stOCVStatusDB.stOACData.OuterTimeStamp	:= '';
+
+FOR nOCVindex :=1 TO stOCVDataDB.stOCVStatusDB.stOACData.NumberOfPacks DO
+
+	stOCVDataDB.stOCVStatusDB.stOACData.PackCodeStatus[nOCVindex].8 := TRUE;
+
+	IF	stOCVDataDB.stOCVStatusDB.stOACData.PackCode[nOCVindex] <> '' THEN
+		stOCVDataDB.stOCVStatusDB.aOACPackStatus[nOCVindex] :=5;
+		stOCVDataDB.stOCVStatusDB.stOACData.PackCodeStatus[nOCVindex].5 := TRUE;
+	ELSE
+		stOCVDataDB.stOCVStatusDB.aOACPackStatus[nOCVindex] :=0;
+	END_IF
+
+	stOCVDataDB.stOCVStatusDB.aPackCodeFilledIn[nOCVindex] := E_PACK_CODERESTOREDCAC;
+	stOCVDataDB.stOCVStatusDB.aPackCodes[nOCVindex].sBuffer[1].strCode := stOCVDataDB.stOCVStatusDB.stOACData.PackCode[nOCVindex];
+	stOCVDataDB.stOCVStatusDB.aPackCodes[nOCVindex].sBuffer[1].nStatus := stOCVDataDB.stOCVStatusDB.aOACPackStatus[nOCVindex];
+	stOCVDataDB.stOCVStatusDB.aPackCodes[nOCVindex].sBuffer[1].nStringSize := LEN(stOCVDataDB.stOCVStatusDB.stOACData.PackCode[nOCVindex]);
+	stOCVDataDB.stOCVStatusDB.aPackCodes[nOCVindex].sBuffer[2].strCode := stOCVDataDB.stOCVStatusDB.stOACData.PackCode[nOCVindex];
+	stOCVDataDB.stOCVStatusDB.aPackCodes[nOCVindex].sBuffer[2].nStatus := stOCVDataDB.stOCVStatusDB.aOACPackStatus[nOCVindex];
+	stOCVDataDB.stOCVStatusDB.aPackCodes[nOCVindex].sBuffer[2].nStringSize := LEN(stOCVDataDB.stOCVStatusDB.stOACData.PackCode[nOCVindex]);
+END_FOR
+]]></ST>
+      </Implementation>
+    </Action>
+  </POU>
+</TcPlcObject>

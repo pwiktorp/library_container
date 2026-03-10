@@ -1,0 +1,55 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SCANNER_DiagnosticLog" Id="{7cd4c8e4-4a5b-4b11-88ae-726a3265e029}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SCANNER_DiagnosticLog
+VAR_INPUT
+	bLogData				: BOOL;
+	stCameraStatus			: ST_SCANNER;
+	nExpectedResp			: INT;
+	bAddScanNo				: BOOL;
+END_VAR
+VAR_OUTPUT
+	sCodeDiagnostig		: T_LongSTRING;
+END_VAR
+VAR
+	rtExecute					: R_TRIG;
+	nIndex		: INT;
+	sAppendedString				: STRING;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[rtExecute(CLK:=bLogData);
+
+IF rtExecute.Q THEN
+	
+	sAppendedString	:= '';
+	sCodeDiagnostig	:= '';
+	
+	IF bAddScanNo THEN
+		CONCAT2(ADR(sCodeDiagnostig), ADR('['), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+		sAppendedString := INT_TO_STRING(stCameraStatus.sTriggerID.nScanNo);
+		CONCAT2(ADR(sCodeDiagnostig), ADR(sAppendedString), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+		CONCAT2(ADR(sCodeDiagnostig), ADR('] - '), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+	END_IF
+	
+	CONCAT2(ADR(sCodeDiagnostig), ADR(stCameraStatus.sImageData.aCodeData[1].strDataString), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+	CONCAT2(ADR(sCodeDiagnostig), ADR(' [PN:'), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+	sAppendedString := BYTE_TO_STRING(stCameraStatus.sImageData.aCodeData[1].nProgramNo);
+	CONCAT2(ADR(sCodeDiagnostig), ADR(sAppendedString), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+	CONCAT2(ADR(sCodeDiagnostig), ADR(']'), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+	
+	IF nExpectedResp > 1 THEN
+		FOR nIndex := 2 TO nExpectedResp BY 1 DO
+				
+			CONCAT2(ADR(sCodeDiagnostig), ADR(' - '), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+			CONCAT2(ADR(sCodeDiagnostig), ADR(stCameraStatus.sImageData.aCodeData[nIndex].strDataString), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+			CONCAT2(ADR(sCodeDiagnostig), ADR(' [PN:'), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+			sAppendedString := BYTE_TO_STRING(stCameraStatus.sImageData.aCodeData[nIndex].nProgramNo);
+			CONCAT2(ADR(sCodeDiagnostig), ADR(sAppendedString), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+			CONCAT2(ADR(sCodeDiagnostig), ADR(']'), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+	
+		END_FOR
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_DuplicateInfo" Id="{3503b70f-d8cb-40cd-9464-8d1034367f4d}">
+    <Declaration><![CDATA[TYPE ST_DuplicateInfo :
+STRUCT
+	value 			: T_MaxString;
+	nOuterIndex 	: UINT;
+	PackIndex 		: UINT;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

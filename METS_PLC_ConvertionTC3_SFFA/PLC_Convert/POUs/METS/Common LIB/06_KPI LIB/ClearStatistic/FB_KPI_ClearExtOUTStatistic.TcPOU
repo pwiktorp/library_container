@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_KPI_ClearExtOUTStatistic" Id="{2aab11b5-4867-4f66-929c-8935652aa913}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_KPI_ClearExtOUTStatistic
+VAR_INPUT
+	bExecute				: BOOL;
+END_VAR
+VAR_IN_OUT
+	stOutersProcessing				: ST_KPI_OutersProcessing;
+	aConfirmCodeEfficiency			: ARRAY[1..2] OF ST_KPI_CodePos;
+	stPackConfirmationEfficiency		: ST_KPI_InspectionEfficency;
+	aValidCodeEfficiency			: ARRAY[1..2] OF ST_KPI_CodePos;
+	stOuterValidationEfficiency		: ST_KPI_InspectionEfficency;
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;
+END_VAR
+VAR
+	fbExecute 			: R_TRIG;
+	bTimerFlag			: BOOL;
+	tofDoneTimer			: TOF;
+
+	nCounter				: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+bTimerFlag:=FALSE;
+
+IF fbExecute.Q THEN
+
+	nCounter := nCounter +1;
+
+	stOutersProcessing.AtValidationCamera		:= 0;
+	stOutersProcessing.AtConfimrationCamera	:= 0;
+	MEMSET(ADR(aConfirmCodeEfficiency), 16#00, SIZEOF(aConfirmCodeEfficiency));
+	MEMSET(ADR(stPackConfirmationEfficiency), 16#00, SIZEOF(stPackConfirmationEfficiency));
+	MEMSET(ADR(aValidCodeEfficiency), 16#00, SIZEOF(aValidCodeEfficiency));
+	MEMSET(ADR(stOuterValidationEfficiency), 16#00, SIZEOF(stOuterValidationEfficiency));
+
+	bTimerFlag:=TRUE;
+END_IF
+
+tofDoneTimer(IN:=bTimerFlag,PT:=t#5s, Q=>bDone);]]></ST>
+    </Implementation>
+    <LineIds Name="FB_KPI_ClearExtOUTStatistic">
+      <LineId Id="21" Count="19" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

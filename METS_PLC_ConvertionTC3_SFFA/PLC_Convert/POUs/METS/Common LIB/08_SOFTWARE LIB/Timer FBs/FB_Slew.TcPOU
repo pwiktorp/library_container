@@ -1,0 +1,93 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_Slew" Id="{4d3f2a45-87dc-48df-9730-64a2940d260e}" SpecialFunc="None">
+    <Declaration><![CDATA[(* apply maximum rate of change value to a value *)
+FUNCTION_BLOCK FB_Slew
+VAR_INPUT
+	bOutputEnable	: BOOL;		(* TRUE = output moves towards fInput, FALSE = output set to 0 *)
+	bSlewEnable		: BOOL;		(* TRUE = rate of change of output limited to fSlewRate *)
+	bOutputHold		: BOOL;		(* TRUE = internal slew rate set to 0 to hold output at current value *)
+	fInput			: LREAL;	(* input reference *)
+	fSlewRate		: LREAL;	(* slew rate in input units per second *)
+END_VAR
+VAR_OUTPUT
+	fOutput			: LREAL;	(* output value *)
+END_VAR
+VAR
+	bInitOK			: BOOL;
+	fbTaskIndex		: GETCURTASKINDEX;
+	fTaskTime		: LREAL;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		No change
+
+-------------------------------------------------------------------------------------------------
+05/02/2010	1.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* task time not inititalised *)
+IF bInitOK = FALSE THEN
+
+	(* get task indexc and task cycle time (in s) *)
+	fbTaskIndex();
+	fTaskTime := UDINT_TO_LREAL(_TaskInfo[fbTaskIndex.Index].CycleTime) / 10000000.0;
+
+	bInitOK := TRUE;
+END_IF
+
+(* output is enabled *)
+IF bOutputEnable = TRUE THEN
+
+	(* slew output enabled *)
+	IF bSlewEnable = TRUE THEN
+
+		(* hold output at current level *)
+		IF bOutputHold = TRUE THEN
+
+			(* output is not modified *)
+			fOutput := fInput;
+
+		(* apply slew to fOutput *)
+		ELSE
+
+			(* input > output *)
+			IF fInput > fOutput THEN
+
+				fOutput := fOutput + MIN(fInput - fOutput, fSlewRate * fTaskTime);
+
+			(* input > output *)
+			ELSIF fInput < fOutput THEN
+
+				fOutput := fOutput - MIN(ABS(fInput - fOutput), fSlewRate * fTaskTime);
+
+			(* fInput = fOutput *)
+			ELSE
+
+				fOutput := fInput;
+			END_IF
+		END_IF
+
+	(* slew output disabled *)
+	ELSE
+
+		(* output = input *)
+		fOutput := fInput;
+	END_IF
+
+(* output is disabled *)
+ELSE
+
+	fOutput := 0.0;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Slew">
+      <LineId Id="29" Count="53" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

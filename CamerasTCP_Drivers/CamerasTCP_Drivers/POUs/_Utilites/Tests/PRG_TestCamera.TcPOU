@@ -1,0 +1,78 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="PRG_TestCamera" Id="{451635a6-1e3f-4b7d-88a1-ceba0201f7c7}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM PRG_TestCamera
+VAR
+	nMaxBytes: UDINT;
+	strTCPRxString: STRING(255);
+	
+	strTargetIPAddr		: T_IPv4Addr := '192.168.1.44';	
+	arrTargetIPAddr		: T_IPv4AddrArr;
+	nSyncOffset			: DINT;		
+	nSyncOffset_1		: DINT;	
+	tTaskTime			: TIME := T#200MS;
+	sString_1			: STRING(255);
+	sString_2			: STRING(255);
+	sConcuted			: STRING(1023);
+	bConcuted			: BOOL;
+	
+	nSize_1				: UINT;
+	nSize_2				: UINT;
+	nSize_3				: UDINT;
+	nStatusByte			: BYTE;
+	bitNO				: USINT := 6;
+	nBytesQuantity		: INT :=1;
+	nBytePosition		: INT :=5;
+	sString_4			: STRING(255);
+	strTCPRxDebug		: ARRAY[1..20] OF  STRING(100);
+	nSizeTCPRxDebug		: UINT;
+	sStringTest			: STRING(100) := '_STRING_W_PIERWSZEJ_TABLICY_';
+	nIndex				: INT;
+	nSizeTCPRxDebug_1	: UINT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+nMaxBytes := SIZEOF(strTCPRxString) - INT_TO_UDINT(LEN(strTCPRxString) - 1);
+
+arrTargetIPAddr := F_ScanIPv4AddrIds(strTargetIPAddr);
+nSyncOffset := arrTargetIPAddr[3] MOD 10;
+
+nSyncOffset_1		:= nSyncOffset * TIME_TO_DINT(tTaskTime);
+
+sString_1 := '_1st_RGST$07$04;$02CT=11;DS=HTTPS://Y2WM.CN/99.1000.1/AC12bTPL1003RC78N3TRBUQME1J4XR9ZC;OG=0;QS=1;UE=1.00;XP=19;YP=-5;AP=91;CS=05.6;SC=0056;PN=1;$03$04';
+sString_2 := '_2nd_RGST$07$04;$02CT=11;DS=HTTPS://Y2WM.CN/99.1000.1/AC12bTPL1003RC78N3TRBUQME1J4XR9ZC;OG=0;QS=1;UE=1.00;XP=19;YP=-5;AP=91;CS=05.6;SC=0056;PN=1;$03$04';
+
+bConcuted := CONCAT2(pSrcString1 := ADR(sString_1), pSrcString2 := ADR(sString_2), pDstString := ADR(sConcuted), SIZEOF(sConcuted));
+
+nSize_1 := LEN(sString_1);
+nSize_2 := LEN(sString_2);
+nSize_3 := LEN2(ADR(sConcuted));
+
+nStatusByte := ASC(MID(sString_1, nBytesQuantity, bitNO));
+nStatusByte.0;
+nStatusByte.1;
+nStatusByte.2;
+nStatusByte.3;
+nStatusByte.4;
+nStatusByte.5;
+nStatusByte.6;
+nStatusByte.7;
+
+sString_4	:= MID(sString_1, 4, 6);
+
+//strTCPRxDebug[1] := sStringTest;
+
+FOR nIndex := 1 TO 20 DO
+	strTCPRxDebug[nIndex] := CONCAT(CONCAT('_MESSAGE_NO_', INT_TO_STRING(nIndex)), '_'); 	
+END_FOR
+
+nSizeTCPRxDebug 	:= SIZEOF(strTCPRxDebug);
+nSizeTCPRxDebug_1	:= SIZEOF(strTCPRxDebug[1]);
+
+MEMMOVE(ADR(strTCPRxDebug[2]), ADR(strTCPRxDebug[1]), SIZEOF(strTCPRxDebug)-SIZEOF(strTCPRxDebug[1]));
+
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

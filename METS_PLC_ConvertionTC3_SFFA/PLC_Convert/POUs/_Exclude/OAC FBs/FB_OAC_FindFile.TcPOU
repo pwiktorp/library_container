@@ -1,0 +1,139 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_OAC_FindFile" Id="{f8e3a924-1b10-454b-b1e0-8ed378b1a955}" SpecialFunc="None">
+    <Declaration><![CDATA[(* converts strOuterBarcode to OAC filename and loads data *)
+FUNCTION_BLOCK FB_OAC_FindFile
+VAR_INPUT
+	bExecute				: BOOL;		(* set TRUE to load OAC file *)
+	strRetailSKU 			: T_CodeRSKU;
+	strOuterBarcode		: T_MaxString;	(* Outer barcode *)
+	strLocalOACPath		: T_FolderPath;	(* local OAC path *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;		(* TRUE = find file complete *)
+	bBusy				: BOOL;		(* TRUE = find file in progress *)
+	bError				: BOOL;		(* TRUE = error occurred *)
+	nErrorID			: UDINT;	(* error code *)
+	bOACFileFound		: BOOL;		(* TRUE = OAC file found *)
+	bOACDataValid			: BOOL;
+	stOACData			: ST_OAC_Data;	(* OAC data for strOuterBarcode *)
+	strOACFile			: T_OAC_Filename;	(* OAC filename *)
+	strOuterCodeAI		:T_MaxString;
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	eState				: E_OAC_State;
+	fbReadFile			: FB_XmlSrvRead;
+	fbDecodeGS1				: FB_SCANNER_DecodeGS1;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK := bExecute);
+
+
+CASE eState OF
+
+	(* idle *)
+	E_OAC_IDLE:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* initialise outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+			strOACFile := '';
+			(* convert strOuterBarcode to OAC filename *)
+			bOACFileFound := FALSE;
+			bOACDataValid	:= FALSE;
+			MEMSET(ADR(stOACData), 16#00, SIZEOF(stOACData));
+
+			(* generate OAC file name and clear data for last OAC file *)
+				(*fbDecodeGS1(strGS1String := CONCAT(']d2',strOuterBarcode), bDontParseAsGS1 := FALSE, strBarcode => strOuterCodeAI);*)
+			strOACFile := F_CONCAT3('OAC_', F_OUTER_BarcodeToHex(strOuterBarcode), '.xml');
+
+
+			eState := E_OAC_READFILE;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* read OAC file *)
+	E_OAC_READFILE:
+
+		(* read OAC file *)
+		fbReadFile(
+			sNetId		:= '',
+			ePath		:= PATH_GENERIC,
+			nMode		:= XMLSRV_SKIPMISSING,
+			pSymAddr	:= ADR(stOACData),
+			cbSymSize	:= SIZEOF(stOACData),
+			sFilePath	:= CONCAT(strLocalOACPath, strOACFile),
+			sXPath		:= '/Outer',
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* read file complete *)
+		IF fbReadFile.bBusy = FALSE THEN
+
+			(* read file completed OK *)
+			IF fbReadFile.bError = FALSE THEN
+
+				(* OAC file exists *)
+				bOACFileFound := TRUE;
+
+					IF strRetailSKU = stOACData.RetailSKU  AND stOACData.OuterRejectCode = 'OK'    THEN
+						(* OAC data is valid *)
+						bOACDataValid := TRUE;
+					END_IF
+
+			(* read file failed *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbReadFile.nErrId;
+			END_IF
+
+			eState := E_OAC_DONE;
+
+			(* close off fbReadFile *)
+			fbReadFile(bExecute := FALSE);
+		END_IF
+
+
+	(* complete *)
+	E_OAC_DONE:
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_OAC_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_OAC_IDLE;
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+	nErrorID := 0;
+	strOACFile := '';
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

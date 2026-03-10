@@ -1,0 +1,85 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_TCP_ClientPortCtrl" Id="{e3cab9de-cd8e-4d54-a23b-38d0fb19b3ae}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_TCP_ClientPortCtrl
+
+VAR_INPUT
+	bEnable				: BOOL;			(* set TRUE to enable TCP connection *)
+	strRemoteIPAddr		: T_IPv4Addr;	(* IP address for remote device *)
+	nRemotePortNo		: UINT;			(* port number for remote device *)	
+	tReconnectTime		: TIME:= DEFAULT_ADS_TIMEOUT;
+END_VAR
+
+VAR_OUTPUT	
+	eSocketState		: E_SocketConnectionState;
+	hSocket				: T_HSOCKET;
+	bError				: BOOL;
+	nErrorID			: UDINT;
+	bConnected			: BOOL;
+END_VAR
+
+VAR	
+	fbTCPSocketCtrl		: FB_ClientServerConnection;
+	eTCPState			: E_TCPIP_StateWP;
+	strTargetIPAddr		: T_IPv4Addr;
+	nTargetPortNo		: UDINT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CASE eTCPState OF
+	
+	E_TCPIP_StateWP.E_TCPIP_IDLE:
+	
+		IF bEnable THEN			
+			strTargetIPAddr	:= strRemoteIPAddr;
+			nTargetPortNo	:= nRemotePortNo;
+		
+			eTCPState		:= E_TCPIP_StateWP.E_TCPIP_CONNECT;	
+		END_IF
+	
+	E_TCPIP_StateWP.E_TCPIP_CONNECT:
+	
+		IF NOT bEnable OR fbTCPSocketCtrl.bError  THEN
+			eTCPState:= E_TCPIP_StateWP.E_TCPIP_DISCONNECT;
+		END_IF
+	
+	(* close TCP connection *)
+	E_TCPIP_StateWP.E_TCPIP_DISCONNECT:
+
+		(* TCP port has been closed, fbTCPSocketCtrl.bEnable FALSE in this state *)
+		IF eSocketState = eSOCKET_DISCONNECTED THEN
+			eTCPState := E_TCPIP_StateWP.E_TCPIP_IDLE;
+		END_IF
+		
+	(* unknown state *)
+ELSE
+
+	eTCPState := E_TCPIP_StateWP.E_TCPIP_IDLE;
+
+END_CASE
+
+
+(* TCP port connection ctrl *)
+fbTCPSocketCtrl(
+	sSrvNetID	:= '',
+	nMode		:= LISTEN_MODE_CLOSEALL, (*LISTEN_MODE_USEOPENED, CONNECT_MODE_ENABLEDBG, LISTEN_MODE_CLOSEALL*)
+	sRemoteHost	:= strTargetIPAddr,
+	nRemotePort	:= nTargetPortNo,
+	bEnable		:= eTCPState = E_TCPIP_StateWP.E_TCPIP_CONNECT,
+	tReconnect	:= tReconnectTime,
+	bError		=> bError,
+	nErrID		=> ,
+	hSocket		=> hSocket,  
+	eState		=> eSocketState
+);
+
+IF NOT fbTCPSocketCtrl.bBusy THEN
+	nErrorID:= fbTCPSocketCtrl.nErrId;
+END_IF
+
+bConnected:= eSocketState = eSOCKET_CONNECTED;
+
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

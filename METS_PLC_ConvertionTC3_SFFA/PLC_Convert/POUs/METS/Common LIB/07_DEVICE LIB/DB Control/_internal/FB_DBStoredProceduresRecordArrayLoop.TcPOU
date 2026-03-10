@@ -1,0 +1,254 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_DBStoredProceduresRecordArrayLoop" Id="{cd4c0ae6-c533-47bd-9300-716abd5c2266}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_DBStoredProceduresRecordArrayLoop
+(*Use Stored Procedures with declarate parameters and return a count of rows*)
+VAR_INPUT
+	sNetID	 			: T_AmsNetID				:='';
+	hDBID 				: UDINT					:=1;
+	sProcedureName 	: T_MaxString				:='';
+	cbParameterList		: UDINT;
+	pParameterList		: POINTER TO ARRAY[0..MAX_STORED_PROCEDURES_PARAMETERS] OF ST_DBParameter;
+	nStartIndex	 		: UDINT;
+	nRecordCount		: UDINT;
+	cbRecordArraySize 	: UDINT;
+	pDestAddr 			: DWORD;
+	bExecute			: BOOL;
+	tTimeout			: TIME						 := T#15s;
+END_VAR
+VAR_OUTPUT
+	bBusy				: BOOL;
+	bError				: BOOL;
+	nErrID				: UDINT;
+	sSQLState			: ST_DBSQLError			 := (sSQLState:='',nSQLErrorCode:=0);
+	nRecords			: UDINT;
+END_VAR
+{library private}
+VAR
+	state				: BYTE;
+
+	RisingEdge			: R_TRIG;
+	ADSRDWRITE1	: ADSRDWRT;
+	ADSREAD1			: ADSREAD;
+
+	procedureInfo		: ST_StoredProcedureRecordArrayInfo;
+	internParameterList	: ARRAY[0..MAX_STORED_PROCEDURES_PARAMETERS] OF ST_DBParameterIntern;
+
+	ReturnCode			: UDINT 					:= 0;
+	ReturnValues		: ARRAY [0..23] OF BYTE;
+	dummy				: ST_internalSQLError;
+
+	i					: UDINT					:= 0;
+	index				: UINT 						:= 0;
+
+	parameterCount		: UDINT					:= 0;
+	invokeId			: UDINT					:= 0;
+
+	tmp : ST_AlignTest;
+	align : UDINT;
+	nOffset: UDINT;
+	ADSWRITE1: ADSWRITE;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[RisingEdge(CLK:=bExecute);
+IF RisingEdge.Q THEN
+	state:=1;
+	bBusy := TRUE;
+	bError := FALSE;
+	nErrID := 0;
+	sSQLState.sSQLState := '';
+	sSQLState.nSQLErrorCode := 0;
+	nRecords := 0;
+END_IF
+
+CASE state OF
+	0:
+		;
+	1:
+		align := SIZEOF(tmp) - 8;
+
+		ReturnCode := 0;
+		invokeId := 0;
+
+		parameterCount := 0;
+
+		procedureInfo.hDBID 			:= hDBID;
+		procedureInfo.nRecordIndex 		:= nStartIndex;
+		procedureInfo.nRecordCount		:= nRecordCount;
+		procedureInfo.nRecordSize		:= cbRecordArraySize;
+		procedureInfo.sProcedureName 	:= sProcedureName;
+
+		MEMSET(ADR(ReturnValues), 0, SIZEOF(ReturnValues));
+		MEMSET(ADR(internParameterList), 0, SIZEOF(internParameterList));
+
+		IF cbParameterList > 0 THEN
+			parameterCount := cbParameterList / SIZEOF(pParameterList^[0]);
+		END_IF
+
+		procedureInfo.nParameterCount := parameterCount;
+
+		i:=0;
+
+		nOffset := SHL(align,16);
+		nOffset := nOffset + hDBID;
+
+		ADSWRITE1(WRITE:=FALSE);
+		ADSWRITE1(
+			NETID:= sNetID,
+			PORT:= AMSPORT_DATABASESRV,
+			IDXGRP:= DBADS_IGR_DBRECORDSELECT,
+			IDXOFFS:= nOffset,
+			LEN:= 0,
+			SRCADDR:= ,
+			WRITE:= TRUE,
+			TMOUT:= tTimeout);
+
+		state := 10;
+	10:
+		ADSWRITE1(WRITE:=FALSE);
+		IF NOT ADSWRITE1.BUSY THEN
+			state := 2;
+		END_IF
+	2:
+		WHILE  i < parameterCount DO
+			internParameterList[i].sParameterName := pParameterList^[i].sParameterName;
+			internParameterList[i].eParameterDataType := pParameterList^[i].eParameterDataType;
+			internParameterList[i].eParameterType := pParameterList^[i].eParameterType;
+			internParameterList[i].nParameterValueSize := pParameterList^[i].cbParameterValue;
+			IF pParameterList^[i].cbParameterValue > SIZEOF(internParameterList[i].arrValueBytes) THEN
+				MEMCPY(ADR(internParameterList[i].arrValueBytes), pParameterList^[i].pParameterValue, SIZEOF(internParameterList[i].arrValueBytes));
+			ELSE
+				MEMCPY(ADR(internParameterList[i].arrValueBytes), pParameterList^[i].pParameterValue, pParameterList^[i].cbParameterValue);
+			END_IF
+			i := i+1;
+		END_WHILE
+			state := 3;
+
+	3:
+
+		MEMSET(ADR(procedureInfo.arrParameterList), 0, SIZEOF(procedureInfo.arrParameterList));
+		MEMCPY(ADR(procedureInfo.arrParameterList), ADR(internParameterList), SIZEOF(internParameterList));
+
+		ADSRDWRITE1(WRTRD:= FALSE);
+		ADSRDWRITE1(
+			NETID:= sNetID,
+			PORT:= AMSPORT_DATABASESRV,
+			IDXGRP:= DBADS_IGR_DBSTOREDPROCEDURES_RETURNRECORDARRAY,
+			IDXOFFS:= 0,
+			WRITELEN:= 276 + (parameterCount * SIZEOF(internParameterList[0])),
+			SRCADDR:= ADR(procedureInfo),
+			READLEN:= SIZEOF(ReturnValues),
+			DESTADDR:= ADR(ReturnValues),
+			WRTRD:= TRUE,
+			TMOUT:= tTimeout);
+		state := 4;
+	4:
+		ADSRDWRITE1( WRTRD:=FALSE);
+		IF NOT ADSRDWRITE1.BUSY THEN
+			state := 5;
+		END_IF
+	5:
+		bError := ADSRDWRITE1.ERR;
+		nErrID := ADSRDWRITE1.ERRID;
+
+		IF NOT ADSRDWRITE1.ERR THEN
+			MEMCPY(ADR(ReturnCode), ADR(ReturnValues), SIZEOF(ReturnCode));
+			MEMCPY(ADR(nRecords), ADR(ReturnValues)+4, SIZEOF(nRecords));
+			MEMCPY(ADR(invokeId), ADR(ReturnValues)+8, SIZEOF(invokeId));
+
+			IF ReturnCode <> 0 THEN
+				bBusy 	:= FALSE;
+				bError 	:= TRUE;
+				nErrID 	:= ReturnCode;
+				MEMCPY(ADR(dummy), ADR(ReturnValues)+12, SIZEOF(dummy));
+				sSQLState.nSQLErrorCode := dummy.nSQLErrorCode;
+				sSQLState.sSQLState := dummy.sSQLState;
+				state := 0;
+			ELSE
+				sSQLState.sSQLState := '00000';
+				sSQLState.nSQLErrorCode := 0;
+
+				state := 6;
+			END_IF
+		ELSE
+			bBusy 	:= FALSE;
+			state := 0;
+		END_IF
+	6:
+		ADSREAD1( READ:=FALSE );
+		ADSREAD1(
+			NETID:= sNetID,
+			PORT:= AMSPORT_DATABASESRV,
+			IDXGRP:= DBADS_IGR_DBSTOREDPROCEDURES_RETURNRECORD,
+			IDXOFFS:= invokeId,
+			LEN:= cbRecordArraySize,
+			DESTADDR:= pDestAddr,
+			READ:= TRUE,
+			TMOUT:= tTimeout);
+		state := 7;
+	7:
+		ADSREAD1( READ:=FALSE, ERR=>bError, ERRID=>nErrID );
+		IF NOT ADSREAD1.BUSY THEN
+			IF NOT ADSREAD1.ERR THEN
+				IF cbParameterList > 0 THEN
+					parameterCount := cbParameterList / SIZEOF(pParameterList^[0]);
+					index := 0;
+					state := 8;
+				ELSE
+					bBusy := FALSE;
+					state := 0;
+				END_IF
+			ELSE
+				bBusy := FALSE;
+				bError := TRUE;
+				nErrID := ADSREAD1.ERRID;
+				state := 0;
+			END_IF
+		END_IF
+	8:
+		IF pParameterList^[index].eParameterType <> eDBParameter_Input AND pParameterList^[index].eParameterType <> eDBParameter_OracleCursor  THEN
+			ADSREAD1(READ:= FALSE);
+			ADSREAD1(
+				NETID:= sNetId,
+				PORT:= AMSPORT_DATABASESRV,
+				IDXGRP:= DBADS_IGR_DBSTOREDPROCEDURES,
+				IDXOFFS:= invokeId,
+				LEN:= pParameterList^[index].cbParameterValue,
+				DESTADDR:= pParameterList^[index].pParameterValue,
+				READ:= TRUE,
+				TMOUT:= tTimeout);
+			state := 9;
+		ELSE
+			IF index < parameterCount - 1 THEN
+				index := index +1;
+			ELSE
+				bBusy := FALSE;
+				state := 0;
+			END_IF
+		END_IF
+
+	9:
+		ADSREAD1(READ:= FALSE);
+		IF NOT ADSREAD1.BUSY THEN
+			IF ADSREAD1.ERR THEN
+				bBusy := FALSE;
+				bError := TRUE;
+				nErrID := ADSREAD1.ERRID;
+				state := 0;
+			ELSE
+				IF index < parameterCount - 1 THEN
+					index := index +1;
+					state := 8;
+				ELSE
+					bBusy := FALSE;
+					state := 0;
+				END_IF
+			END_IF
+		END_IF
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_DBStoredProceduresRecordArrayLoop">
+      <LineId Id="48" Count="195" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

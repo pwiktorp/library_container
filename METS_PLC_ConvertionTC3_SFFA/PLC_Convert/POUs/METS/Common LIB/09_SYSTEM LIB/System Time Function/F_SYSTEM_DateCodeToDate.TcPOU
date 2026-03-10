@@ -1,0 +1,112 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_SYSTEM_DateCodeToDate" Id="{d8e94cc5-ce87-459e-b33d-b0abf3f46b0a}" SpecialFunc="None">
+    <Declaration><![CDATA[(* converts encrypted date code to YYYYMMDD *)
+FUNCTION F_SYSTEM_DateCodeToDate : STRING(8)
+VAR_INPUT
+	strDateCode		: STRING(4);	(* encrypted date code *)
+	strCurrentDate	: STRING(8);	(* current date as YYYYMMDD *)
+END_VAR
+VAR
+	nBaseYear		: WORD;
+	nYear			: WORD;
+	nYearUnit		: WORD;
+	nDaysInYear		: UINT;
+	nWeekNo			: WORD;
+	nDayOfWeek		: WORD;
+	nDayOfYear		: uINT;
+	nMonth			: WORD;
+	nIndex			: WORD;
+	nWholeMonthDays	: WORD;
+	nDay			: WORD;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* strDateCode is valid length *)
+IF LEN(strDateCode) = 4 THEN
+
+	(* extract base year from current date *)
+	nBaseYear := STRING_TO_WORD(LEFT(strCurrentDate, 4));
+
+	(* extract last digit of year *)
+	nYearUnit := STRING_TO_WORD(MID(strDateCode, 1, 2));
+
+	(* year is current year or earlier in current decade *)
+	IF nYearUnit <= (nBaseYear MOD 10) + 1 THEN
+
+		nYear := nBaseYear - (nBaseYear MOD 10) + nYearUnit;
+
+	(* year is higher than current year so must be from previous decade *)
+	ELSE
+
+		nYear := nBaseYear - (nBaseYear MOD 10) + nYearUnit - 10;
+	END_IF
+
+	(* set no of days in year *)
+	nDaysInYear:= SEL(F_YearIsLeapYear(nYear), 365, 366);
+
+	(* extract WeekNo datecode *)
+	nWeekNo := STRING_TO_WORD(CONCAT(MID(strDateCode, 1, 3), MID(strDateCode, 1, 1))) - 15;
+
+	(* extract DayOfWeek from datecode *)
+	nDayOfWeek := STRING_TO_WORD(MID(strDateCode, 1, 4));
+
+	(* convert Year, WeekNo and DayOfWeek to DayOfYear*)
+	nDayOfYear := F_SYSTEM_DayOfYear(nYear, nWeekNo, nDayOfWeek);
+
+	(* DayOfYear is higher than DaysInYear *)
+	IF nDayOfYear > nDaysInYear THEN
+
+		(* actual date must be part of January in next year *)
+		nYear := nYear + 1;
+
+		(* update no of days in previous year *)
+		nDaysInYear:= SEL(F_YearIsLeapYear(nYear - 1), 365, 366);
+
+		(* apply correction to nDayOfYear *)
+		nDayOfYear := nDayOfYear - nDaysInYear;
+
+	(* DayOfYear is less than 0 *)
+	ELSIF nDayOfYear <= 0 THEN
+
+		(* actual date must be part of December from previous year *)
+		nYear := nYear - 1;
+
+		(* update no of days in year *)
+		nDaysInYear:= SEL(F_YearIsLeapYear(nYear), 365, 366);
+
+		(* apply correction to nDayOfYear *)
+		nDayOfYear := nDayOfYear + nDaysInYear;
+	END_IF
+
+	(* get month when corrected DayOfYear occurs *)
+	nMonth := F_GetMonthOfDOY(nYear, nDayOfYear);
+
+	(* reset no of days taken in full months *)
+	nWholeMonthDays := 0;
+
+	(* DayOfYear is not in January *)
+	IF nMonth > 1 THEN
+
+		(* for each complete month *)
+		FOR nIndex := 1 TO nMonth - 1 DO
+
+			(* add numnber of days in month *)
+			nWholeMonthDays := nWholeMonthDays + F_GetMaxMonthDays(nYear, nIndex);
+		END_FOR
+	END_IF
+
+	(* calculate date of month from DayOfYear *)
+	nDay := nDayOfYear - nWholeMonthDays;
+
+	(* generate Date string from Year, Month and Day *)
+	F_SYSTEM_DateCodeToDate := F_CONCAT3(WORD_TO_STRING(nYear), F_ZeroPadString(WORD_TO_STRING(nMonth), 2), F_ZeroPadString(WORD_TO_STRING(nDay), 2));
+
+(* strDateCode is not valid *)
+ELSE
+
+	F_SYSTEM_DateCodeToDate := '';
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

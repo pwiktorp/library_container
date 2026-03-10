@@ -1,0 +1,98 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_KPI_ClearGeneraStatistic" Id="{271a7364-2a8e-45ad-ae34-3ef3f2274936}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_KPI_ClearGeneraStatistic
+VAR_INPUT
+	bExecute				: BOOL;
+	stCTDateTime			: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	sProductionSite		: STRING(4);
+	sPCM				: STRING(4);
+	bForceNovReset		: BOOL;
+END_VAR
+VAR_IN_OUT
+
+	stPCMStatus			: ST_PCM_Status;
+
+	stMetsCameras			: ST_NOVRAM_METS_Cameras;
+	stMetsEfficiency		: ST_NOVRAM_METS_Inspection;
+	stCasePackerSignals		: ST_NOVRAM_METS_DualInputs;
+	stCaseInspactionLog		: ST_NOVRAM_METS_CaseInspactionLog;
+	
+	stShiftStatistic		: ST_NOVRAM_METS_EventCounters; 
+	stProdStatistic			: ST_NOVRAM_METS_EventCounters; 
+
+	stBarGraph			: ST_HMI_BarGraph;
+
+	stWriteOACFileStatistic		: ST_FILE_WriteFileStatistic;	(*Move to METSEfficency one day*)
+	stWriteCHMFileStatistic		: ST_FILE_WriteFileStatistic;	(*Move to METSEfficency one day*)
+
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;
+END_VAR
+VAR
+	fbExecute 			: R_TRIG;
+	bTimerFlag			: BOOL;
+	tofDoneTimer			: TOF;
+
+	nCounter				: INT;
+
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+bTimerFlag:=FALSE;
+
+IF fbExecute.Q THEN
+
+	nCounter := nCounter +1;
+
+	MEMSET(ADR(stMetsCameras), 16#00, SIZEOF(stMetsCameras));
+	MEMSET(ADR(stMetsEfficiency), 16#00, SIZEOF(stMetsEfficiency));
+	MEMSET(ADR(stCasePackerSignals), 16#00, SIZEOF(stCasePackerSignals));
+	MEMSET(ADR(stCaseInspactionLog), 16#00, SIZEOF(stCaseInspactionLog));
+
+	stMetsCameras.MachineID.ProductionSite 	:= sProductionSite;
+	stMetsCameras.MachineID.ProductionLine	:= sPCM;
+	stMetsCameras.StartDateTime 				:=  F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset );
+	stMetsCameras.CodingAndTrackingMode 	:= stPCMStatus.nOpMode;
+
+	stMetsEfficiency.MachineID.ProductionSite	 := sProductionSite;
+	stMetsEfficiency.MachineID.ProductionLine	:= sPCM;
+	stMetsEfficiency.StartDateTime 			:= F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset );
+	stMetsEfficiency.CodingAndTrackingMode 	:= stPCMStatus.nOpMode;
+	stMetsEfficiency.AcceptanceLevel  			:= stPCMStatus.nAcceptanceLevel;
+	stMetsEfficiency.PacksPerOuter			:= stPCMStatus.nPacksPerOuter;
+
+	stCasePackerSignals.MachineID.ProductionSite	 := sProductionSite;
+	stCasePackerSignals.MachineID.ProductionLine	:= sPCM;
+	stCasePackerSignals.StartDateTime 				:=  F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset );
+	stCasePackerSignals.CodingAndTrackingMode	 	:=stPCMStatus.nOpMode;
+
+	stCaseInspactionLog.MachineID.ProductionSite 	:= sProductionSite;
+	stCaseInspactionLog.MachineID.ProductionLine	:= sPCM;
+	stCaseInspactionLog.StartDateTime 				:=  F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset );
+	stCaseInspactionLog.CodingAndTrackingMode		:= stPCMStatus.nOpMode;
+	stCaseInspactionLog.nPacksPerCase  			:= stPCMStatus.nPacksPerCase;
+	stCaseInspactionLog.nOutersPerCase			:= stPCMStatus.nOutersPerCase;
+
+	MEMSET(ADR(stBarGraph), 16#00, SIZEOF(stBarGraph));
+
+	MEMSET(ADR(stWriteOACFileStatistic), 16#00, SIZEOF(stWriteOACFileStatistic));
+	MEMSET(ADR(stWriteCHMFileStatistic), 16#00, SIZEOF(stWriteCHMFileStatistic));
+
+	bTimerFlag:=TRUE;
+END_IF
+
+tofDoneTimer(IN:=bTimerFlag,PT:=t#5s, Q=>bDone);
+
+IF bForceNovReset THEN
+	MEMSET(ADR(stShiftStatistic), 16#00, SIZEOF(stShiftStatistic));
+	MEMSET(ADR(stProdStatistic), 16#00, SIZEOF(stProdStatistic));
+END_IF
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

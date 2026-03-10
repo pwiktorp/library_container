@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_SCANNER_MV4x0Options" Id="{39a10b07-d3b3-4c2d-a9f8-1ab330ff8068}" SpecialFunc="None">
+    <Declaration><![CDATA[ FUNCTION F_SCANNER_MV4x0Options : ST_SCANNER_Options
+VAR_INPUT
+	eScannerType	: E_SCANNER_DeviceType;
+	nImageBuffer	: INT;
+	nExpectedResp	: INT;
+END_VAR
+VAR
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[F_SCANNER_MV4x0Options.eScannerType := eScannerType;
+F_SCANNER_MV4x0Options.nImageBuffer := nImageBuffer;
+F_SCANNER_MV4x0Options.nExpectedResp := nExpectedResp;]]></ST>
+    </Implementation>
+    <LineIds Name="F_SCANNER_MV4x0Options">
+      <LineId Id="9" Count="2" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

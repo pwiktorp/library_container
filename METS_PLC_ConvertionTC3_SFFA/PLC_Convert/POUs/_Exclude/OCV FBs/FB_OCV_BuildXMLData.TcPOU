@@ -1,0 +1,343 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_OCV_BuildXMLData" Id="{97644b23-23c9-40f0-ac5a-e47659dc87c5}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_OCV_BuildXMLData
+VAR_INPUT
+	bExecute					: BOOL;
+	bAddXMLHeader			: BOOL;
+	nTabIndent					: BYTE;
+	nPacksPerOuter			: INT;
+	stOCVDataToImage		: ST_OUTER_Status;	(*  OCV queue status *)
+	ePackAggregationMode	: E_SYSTEM_PackAggregationMode ;
+END_VAR
+VAR_OUTPUT
+	bDone					: BOOL;
+	nOCVByte					: INT;		(* total bytes for OCV template *)
+	arrOCVImage				: ARRAY[0..20000] OF BYTE;
+	bBufferOverflow			: BOOL;
+END_VAR
+VAR
+	fbExecute					: R_TRIG;
+	strPrefix					: T_MaxString; (*STRING(1); fixes write issue*)
+	strString					: STRING(255);
+	nStringLen				: INT;
+	nMaxOCVImageSize			: UINT;
+	nControlSize				: UINT;
+	nMaxPackIndex			: INT;
+	nPackIndex				: INT;
+	(*nChecksum				: WORD;*)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+(* rising edge of bExecute *)
+IF fbExecute.Q = TRUE THEN
+
+	(* update outputs *)
+	bDone := FALSE;
+	bBufferOverflow	:=FALSE;
+
+	(* clear output array and reset byte counter *)
+	MEMSET(ADR(arrOCVImage), 16#00, SIZEOF(arrOCVImage));
+	nOCVByte := 0;
+	nControlSize := 0;
+	nMaxOCVImageSize := SIZEOF(arrOCVImage);
+
+	(* XML header required *)
+	IF bAddXMLHeader = TRUE THEN
+
+		(* no prefix required, include XML header *)
+		strString := cXML_HEADER;
+		nStringLen := LEN(strString);
+		MEMMOVE(ADR(arrOCVImage[nOCVByte]), ADR(strString), nStringLen);
+		nOCVByte := nOCVByte + nStringLen;
+		nControlSize :=	nOCVByte;
+
+		(* <Comment> tag *)
+		strString := '<!--File OAC builder. Version 2.2.000 Relase 06.09.2022 PTR -->$R$N';
+		AppendImageData();
+	END_IF
+
+	(* tab indent required *)
+	IF nTabIndent > 0 THEN
+
+		(* generate strPrefix with specified number of tabs *)
+		strPrefix := F_StringAddPrefix('$T', nTabIndent, '$T');
+
+	(* no tab index required *)
+	ELSE
+
+		(* clear strPrefix *)
+		strPrefix := '';
+	END_IF
+
+	(* <Pack> tag *)
+	strString := CONCAT(strPrefix, '<OCVPack>$R$N');
+	AppendImageData();
+
+
+	(* <nTriggerID> field *)
+	strString := F_CONCAT4(strPrefix, '$T<nTriggerID>', UDINT_TO_STRING(stOCVDataToImage.nTriggerID), '</nTriggerID>$R$N');
+	AppendImageData();
+
+
+	(* <strDataSourceTracker> field *)
+	strString := F_CONCAT4(strPrefix, '$T<sDataSourceTracker>', stOCVDataToImage.sDataSourceTracker, '</sDataSourceTracker>$R$N');
+	AppendImageData();
+
+
+	(* <stOACData> field *)
+	strString := CONCAT(strPrefix, '$T<stOACData>$R$N');
+	AppendImageData();
+
+
+	(* <ProductionDate> field *)
+	strString := F_CONCAT4(strPrefix, '$T$T<ProductionDate>', stOCVDataToImage.stOACData.ProductionDate, '</ProductionDate>$R$N');
+	AppendImageData();
+
+
+	(* <ProductionTime> field *)
+	strString := F_CONCAT4(strPrefix, '$T$T<ProductionTime>', stOCVDataToImage.stOACData.ProductionTime, '</ProductionTime>$R$N');
+	AppendImageData();
+
+
+	(* <ProductionTimeOffset> field *)
+	strString := F_CONCAT4(strPrefix, '$T$T<ProductionTimeOffset>', stOCVDataToImage.stOACData.ProductionTimeOffset, '</ProductionTimeOffset>$R$N');
+	AppendImageData();
+
+
+	(* <PackTimeStamp> field *)
+	strString := F_CONCAT4(strPrefix, '$T$T<PackTimeStamp>', stOCVDataToImage.stOACData.PackTimeStamp, '</PackTimeStamp>$R$N');
+	AppendImageData();
+
+
+	(* <strAggregationCodes[1]> field *)
+	strString := F_CONCAT6(strPrefix, '$T$T<AggregationCodes index="','1', '"><![CDATA[',stOCVDataToImage.stOACData.AggregationCodes[1], ']]]]><![CDATA[></AggregationCodes>$R$N');
+	AppendImageData();
+
+
+	(* <strAggregationCodes[2]> field *)
+	strString := F_CONCAT6(strPrefix, '$T$T<AggregationCodes index="', '2', '"><![CDATA[',stOCVDataToImage.stOACData.AggregationCodes[2], ']]]]><![CDATA[></AggregationCodes>$R$N');
+	AppendImageData();
+
+
+	(* <CodingAndTrackingMode> field *)
+	strString := F_CONCAT4(strPrefix, '$T$T<CodingAndTrackingMode>', INT_TO_STRING(stOCVDataToImage.stOACData.CodingAndTrackingMode), '</CodingAndTrackingMode>$R$N');
+	AppendImageData();
+
+
+	(* <NumberOfPacks> field *)
+	strString := F_CONCAT4(strPrefix, '$T$T<NumberOfPacks>', INT_TO_STRING(stOCVDataToImage.stOACData.NumberOfPacks), '</NumberOfPacks>$R$N');
+	AppendImageData();
+
+
+	(* <AcceptanceLevel> field *)
+	strString := F_CONCAT4(strPrefix, '$T$T<AcceptanceLevel>', INT_TO_STRING(stOCVDataToImage.stOACData.AcceptanceLevel), '</AcceptanceLevel>$R$N');
+	AppendImageData();
+
+
+	(* <NumberOfLinkedPacks> field *)
+	strString := F_CONCAT4(strPrefix, '$T$T<NumberOfLinkedPacks>', INT_TO_STRING(stOCVDataToImage.stOACData.NumberOfLinkedPacks), '</NumberOfLinkedPacks>$R$N');
+	AppendImageData();
+
+
+	(* max number of Packs*)
+	nMaxPackIndex := UDINT_TO_INT(SIZEOF(stOCVDataToImage.stOACData.PackCode) / SIZEOF(stOCVDataToImage.stOACData.PackCode[1]));
+
+	(* OCV data contains pack codes number of packs is valid *)
+	IF nPacksPerOuter > 0 AND nPacksPerOuter <= nMaxPackIndex THEN
+
+		(* for each pack code *)
+		FOR nPackIndex := 1 TO nPacksPerOuter DO
+			(* <PackCode index="xx"> field *)
+			strString := F_CONCAT6(strPrefix, '$T$T<PackCode index="', INT_TO_STRING(nPackIndex), '"><![CDATA[', stOCVDataToImage.stOACData.PackCode[nPackIndex], ']]]]><![CDATA[></PackCode>$R$N');
+			AppendImageData();
+		END_FOR
+
+		(* for each pack code *)
+		FOR nPackIndex := 1 TO nPacksPerOuter DO
+			(* <PackRejectCode index="xx"> field *)
+			strString := F_CONCAT6(strPrefix, '$T$T<PackRejectCode index="', INT_TO_STRING(nPackIndex), '">', stOCVDataToImage.stOACData.PackRejectCode[nPackIndex], '</PackRejectCode>$R$N');
+			AppendImageData();
+		END_FOR
+
+		(* for each pack code *)
+		FOR nPackIndex := 1 TO nPacksPerOuter DO
+			(* <PackRejectID index="xx"> field *)
+			strString := F_CONCAT6(strPrefix, '$T$T<PackRejectID index="', INT_TO_STRING(nPackIndex), '">', UINT_TO_STRING(stOCVDataToImage.stOACData.PackRejectID[nPackIndex]), '</PackRejectID>$R$N');
+			AppendImageData();
+		END_FOR
+
+		(* for each pack code *)
+		FOR nPackIndex := 1 TO nPacksPerOuter DO
+			(* <PackCodeStatus index="xx"> field *)
+			strString := F_CONCAT6(strPrefix, '$T$T<PackCodeStatus index="', INT_TO_STRING(nPackIndex), '">', WORD_TO_STRING(stOCVDataToImage.stOACData.PackCodeStatus[nPackIndex]), '</PackCodeStatus>$R$N');
+			AppendImageData();
+		END_FOR
+	END_IF
+
+	(* <Outer> closing tag *)
+	strString := CONCAT(strPrefix, '$T</stOACData>$R$N');
+	AppendImageData();
+
+
+	(* OCV data contains pack codes number of packs is valid *)
+	IF nPacksPerOuter > 0 AND nPacksPerOuter <= nMaxPackIndex THEN
+
+		(* for each pack code *)
+		FOR nPackIndex := 1 TO nPacksPerOuter DO
+
+		(* <stOCVDataToImage.aOACPackStatus index="xx"> field *)
+			strString := F_CONCAT6(strPrefix, '$T<aOACPackStatus index="', INT_TO_STRING(nPackIndex), '">',BYTE_TO_STRING(stOCVDataToImage.aOACPackStatus[nPackIndex]), '</aOACPackStatus>$R$N');
+			AppendImageData();
+		END_FOR
+
+	(* for each pack code *)
+		(*FOR nPackIndex := 1 TO nPacksPerOuter DO
+
+		(* <stOCVDataToImage.aOACPackStatus index="xx"> field *)
+			strString := F_CONCAT6(strPrefix, '$T<aPackSUPIResult index="', INT_TO_STRING(nPackIndex), '">',DINT_TO_STRING(stOCVDataToImage.aPackSUPIResult[nPackIndex]), '</aPackSUPIResult>$R$N');
+			AppendImageData();
+		END_FOR*)
+
+	END_IF
+
+	CASE ePackAggregationMode OF
+
+	E_SYSTEM_PAOL_2CAM, E_SYSTEM_PAOL_3CAM:
+
+		IF nPacksPerOuter > 0 AND nPacksPerOuter <= nMaxPackIndex THEN
+
+			(* for each pack code *)
+			FOR nPackIndex := 1 TO nPacksPerOuter DO
+
+			(* <sPackCodes index="xx"> field *)
+				strString := F_CONCAT4(strPrefix, '$T<sPackCodes index="', INT_TO_STRING(nPackIndex), '">$R$N');
+				AppendImageData();
+
+
+				(* <sBuffer index="1"> field *)
+				strString := CONCAT(strPrefix, '$T$T<sBuffer index="1">$R$N');
+				AppendImageData();
+
+
+				(* <strCode> field *)
+				strString := F_CONCAT4(strPrefix, '$T$T$T<strCode><![CDATA[', stOCVDataToImage.aPackCodes[nPackIndex].sBuffer[1].strCode  , ']]]]><![CDATA[></strCode>$R$N');
+				AppendImageData();
+
+
+				(* <nStringSize> field *)
+				strString := F_CONCAT4(strPrefix, '$T$T$T<nStringSize>', INT_TO_STRING(stOCVDataToImage.aPackCodes[nPackIndex].sBuffer[1].nStringSize)  , '</nStringSize>$R$N');
+				AppendImageData();
+
+
+				(* <nStringSize> field *)
+				strString := F_CONCAT4(strPrefix, '$T$T$T<nStatus>', BYTE_TO_STRING(stOCVDataToImage.aPackCodes[nPackIndex].sBuffer[1].nStatus)  , '</nStatus>$R$N');
+				AppendImageData();
+
+
+				(* close <sBuffer index="1"> field *)
+				strString := CONCAT(strPrefix, '$T$T</sBuffer>$R$N');
+				AppendImageData();
+
+
+				(* <sBuffer index="2"> field *)
+				strString := CONCAT(strPrefix, '$T$T<sBuffer index="2">$R$N');
+				AppendImageData();
+
+	
+				(* <strCode> field *)
+				strString := F_CONCAT4(strPrefix, '$T$T$T<strCode><![CDATA[', stOCVDataToImage.aPackCodes[nPackIndex].sBuffer[2].strCode  , ']]]]><![CDATA[></strCode>$R$N');
+				AppendImageData();
+
+
+				(* <nStringSize> field *)
+				strString := F_CONCAT4(strPrefix, '$T$T$T<nStringSize>', INT_TO_STRING(stOCVDataToImage.aPackCodes[nPackIndex].sBuffer[2].nStringSize)  , '</nStringSize>$R$N');
+				AppendImageData();
+
+
+				(* <nStringSize> field *)
+				strString := F_CONCAT4(strPrefix, '$T$T$T<nStatus>', BYTE_TO_STRING(stOCVDataToImage.aPackCodes[nPackIndex].sBuffer[2].nStatus)  , '</nStatus>$R$N');
+				AppendImageData();
+
+
+				(* close <sBuffer index="2"> field *)
+				strString := CONCAT(strPrefix, '$T$T</sBuffer>$R$N');
+				AppendImageData();
+
+
+				(* <sPackCodes index="xx"> field *)
+				strString := CONCAT(strPrefix, '$T</sPackCodes>$R$N');
+				AppendImageData();
+
+
+			END_FOR
+		END_IF
+
+	E_SYSTEM_PLAS_T01:
+
+		(* FOR each pack code *)(* OCV data contains pack codes number of packs is valid *)
+		IF nPacksPerOuter > 0 AND nPacksPerOuter <= nMaxPackIndex THEN
+	
+			(* for each pack code *)
+			FOR nPackIndex := 1 TO nPacksPerOuter DO
+
+			(* <stOCVDataToImage.aPackCodeFilledIn index="xx"> field *)
+				strString := F_CONCAT6(strPrefix, '$T<aPackCodeFilledIn index="', INT_TO_STRING(nPackIndex), '">',INT_TO_STRING(stOCVDataToImage.aPackCodeFilledIn[nPackIndex]), '</aPackCodeFilledIn>$R$N');
+				AppendImageData();
+			END_FOR
+		END_IF
+
+	E_SYSTEM_PLAS_T02, E_SYSTEM_PLAS_T03, E_SYSTEM_PLAS_T04:
+
+		(* FOR each pack code *)(* OCV data contains pack codes number of packs is valid *)
+		IF nPacksPerOuter > 0 AND nPacksPerOuter <= nMaxPackIndex THEN
+
+			(* for each pack code *)
+			FOR nPackIndex := 1 TO nPacksPerOuter DO
+
+			(* <stOCVDataToImage.aPackCodeFilledIn index="xx"> field *)
+				strString := F_CONCAT6(strPrefix, '$T<aPackCodeFilledIn index="', INT_TO_STRING(nPackIndex), '">',INT_TO_STRING(stOCVDataToImage.aPackCodeFilledIn[nPackIndex]), '</aPackCodeFilledIn>$R$N');
+				AppendImageData();
+			END_FOR
+		END_IF
+
+	END_CASE
+
+	(* <Outer> closing tag *)
+	strString := CONCAT(strPrefix, '</OCVPack>$R$N');
+	AppendImageData();
+
+	(* update outputs *)
+	bDone := TRUE;
+
+(* unknown state *)
+ELSIF bExecute = FALSE THEN
+
+	(* clear outputs *)
+	bDone := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <Action Name="AppendImageData" Id="{5eddc02a-8528-463e-afdc-5719b11be743}">
+      <Implementation>
+        <ST><![CDATA[nStringLen := LEN(strString);
+nControlSize := nControlSize + nStringLen;
+IF nControlSize <  nMaxOCVImageSize THEN
+	MEMMOVE(ADR(arrOCVImage[nOCVByte]), ADR(strString), nStringLen);
+	nOCVByte := nOCVByte + nStringLen;
+ELSE
+	bBufferOverflow	:=TRUE;
+	bDone := TRUE;
+	(*RETURN;*)
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="FB_OCV_BuildXMLData">
+      <LineId Id="26" Count="289" />
+    </LineIds>
+    <LineIds Name="FB_OCV_BuildXMLData.AppendImageData">
+      <LineId Id="0" Count="9" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

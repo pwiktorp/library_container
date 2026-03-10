@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_Interpolate" Id="{587f5cae-90f7-4d33-9df3-a71ef098788a}" SpecialFunc="None">
+    <Declaration><![CDATA[(* linear interpolation between 2 specified points (X,Y) using y=mx+c *)
+FUNCTION F_Interpolate : LREAL
+VAR_INPUT
+	fX1			: LREAL;	(* X for defined point 1 *)
+	fY1			: LREAL;	(* Y for defined point 1 *)
+	fX2			: LREAL;	(* X for defined point 2 *)
+	fY2			: LREAL;	(* Y for defined point 2 *)
+	fCurrX		: LREAL;	(* current X value *)
+END_VAR
+VAR
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* X values are identical *)
+IF fX2 = fX1 THEN
+
+	(* graph is a vertical line and cannot interpolate, output is fixed *)
+	F_Interpolate := fX1;
+
+(* X values are different *)
+ELSE
+
+	(* apply linear interpolation *)
+	F_Interpolate := (((fY2 - fY1) * (fCurrX - fX1)) / (fX2 - fX1)) + fY1;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="F_Interpolate">
+      <LineId Id="19" Count="11" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_SYSTEM_StringToTime" Id="{89c26b25-d99f-46ec-af3f-43509f352ec7}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_SYSTEM_StringToTime : TIME
+VAR_INPUT
+	stFileTime : T_FILETIME;
+END_VAR
+VAR
+	sTime : STRING;
+
+	sTime_HH : STRING;
+	sTime_MM : STRING;
+	sTime_SS : STRING;
+	sTime_MS : STRING;
+
+	sTime_HH_Complete : STRING;
+	sTime_MM_Complete : STRING;
+	sTime_SS_Complete : STRING;
+	sTime_MS_Complete : STRING;
+
+	sTime_Complete : STRING;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[sTime := F_SYSTEM_TimeSuperFine(FILETIME_TO_SYSTEMTIME(stFileTime));
+
+sTime_HH := LEFT(sTime,2);
+sTime_MM := MID(sTime,2,3);
+Stime_SS := MID(sTime,2,5);
+sTime_MS := RIGHT(sTime,3);
+
+sTime_HH_Complete := F_CONCAT3('T#', sTime_HH, 'h');
+sTime_MM_Complete := CONCAT(sTime_MM,'m');
+sTime_SS_Complete := CONCAT(sTime_SS,'s');
+sTime_MS_Complete := CONCAT(sTime_MS,'ms');
+sTime_Complete := F_CONCAT4(sTime_HH_Complete,
+						sTime_MM_Complete,
+						sTime_SS_Complete,
+						sTime_MS_Complete);
+
+F_SYSTEM_StringToTime := STRING_TO_TIME(sTime_Complete);
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

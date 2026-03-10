@@ -1,0 +1,80 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_PulseGenerator_Sync" Id="{dd9aa22b-874e-4743-a4a3-73d321ec66b0}" SpecialFunc="None">
+    <Declaration><![CDATA[(* generates one-shot pulses with user-defined period and and sync offset time *)
+(* uses GETCPUCOUNTER to synchronise rising edge of timer across multiple FBs *)
+FUNCTION_BLOCK FB_PulseGenerator_Sync
+VAR_INPUT
+	bEnable			: BOOL;		(* set TRUE to enable pulse generation *)
+	tPeriod			: TIME;		(* base period for pulse output *)
+	nSyncOffset		: DINT;		(* sync offset in ms for rising edge, >0 = phase delay, <0 = phase advance *)
+END_VAR
+VAR_OUTPUT
+	bOutput			: BOOL;		(* one-shot pulse output *)
+END_VAR
+VAR
+	fbCPUCounter	: GETCPUCOUNTER;
+	nSystemTime64	: T_ULARGE_INTEGER;
+	nSystemTime		: UDINT;
+	nLastSystemTime	: UDINT;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* enabled and tBaseTime is specified *)
+IF bEnable = TRUE AND tPeriod > T#0ms THEN
+
+	(* load global CPU counter value into 64-bit nSystemTime *)
+	fbCPUCounter(
+		cpuCntLoDW	=> nSystemTime64.dwLowPart,
+		cpuCntHiDW	=> nSystemTime64.dwHighPart
+	);
+
+	(* phase delay *)
+	IF nSyncOffset > 0 THEN
+
+		(* subtract nTimeOffset from system timer *)
+		nSystemTime64 := UInt64Sub64(nSystemTime64, UInt32x32To64(ABS(nSyncOffset), 10000));
+
+	(* phase advance *)
+	ELSIF nSyncOffset < 0 THEN
+
+		(* add nTimeOffset from system timer *)
+		nSystemTime64 := UInt64Add64(nSystemTime64, UInt32x32To64(ABS(nSyncOffset), 10000));
+	END_IF
+
+	(* convert nSystemTime from 1= 100ns to 1 = 1ms *)
+	nSystemTime64 := UInt64Div64(nSystemTime64, UInt32x32To64(10000, 1));
+
+	(* nSystemTime is sawtooth wave from 0 to tPeriod in ms *)
+	nSystemTime := nSystemTime64.dwLowPart MOD TIME_TO_UDINT(tPeriod);
+
+	(* nSystemTime has re-started, convert nLastSystemTime to tPeriod *)
+	IF nSystemTime < nLastSystemTime MOD TIME_TO_UDINT(tPeriod) THEN
+
+		bOutput := TRUE;
+
+	(* nSystemTime >= nLastSystemTime *)
+	ELSE
+
+		bOutput := FALSE;
+	END_IF
+
+	(* store last system time *)
+	nLastSystemTime := nSystemTime;
+
+(* disabled or tBaseTime = 0ms *)
+ELSE
+
+	bOutput := FALSE;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

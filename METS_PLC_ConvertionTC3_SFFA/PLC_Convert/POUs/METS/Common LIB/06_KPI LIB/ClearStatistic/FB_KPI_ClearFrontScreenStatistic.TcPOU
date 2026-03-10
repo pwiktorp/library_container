@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_KPI_ClearFrontScreenStatistic" Id="{b23b280f-0141-4a83-9355-f9d3a8ded128}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_KPI_ClearFrontScreenStatistic
+VAR_INPUT
+	bExecute				: BOOL;
+	stCTDateTime			: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	sProductionSite		: STRING(4);
+	sPCM				: STRING(4);
+END_VAR
+VAR_IN_OUT
+
+	stPCMStatus			: ST_PCM_Status;
+	stMetsEfficiency		: ST_NOVRAM_METS_Inspection;
+	stBarGraph			: ST_HMI_BarGraph;
+
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;
+END_VAR
+VAR
+	fbExecute 			: R_TRIG;
+	bTimerFlag			: BOOL;
+	tofDoneTimer			: TOF;
+
+	nCounter				: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+bTimerFlag:=FALSE;
+
+IF fbExecute.Q THEN
+
+	nCounter := nCounter +1;
+
+
+	MEMSET(ADR(stMetsEfficiency.PackProduced), 16#00, SIZEOF(stMetsEfficiency.PackProduced));
+	MEMSET(ADR(stMetsEfficiency.OutersProduced), 16#00, SIZEOF(stMetsEfficiency.OutersProduced));
+	MEMSET(ADR(stMetsEfficiency.CaseProduced), 16#00, SIZEOF(stMetsEfficiency.CaseProduced));
+
+	stMetsEfficiency.MachineID.ProductionSite	 := sProductionSite;
+	stMetsEfficiency.MachineID.ProductionLine	:= sPCM;
+	stMetsEfficiency.StartDateTime 			:= F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset );
+	stMetsEfficiency.CodingAndTrackingMode 	:= stPCMStatus.nOpMode;
+	stMetsEfficiency.AcceptanceLevel  			:= stPCMStatus.nAcceptanceLevel;
+	stMetsEfficiency.PacksPerOuter			:= stPCMStatus.nPacksPerOuter;
+
+	MEMSET(ADR(stBarGraph), 16#00, SIZEOF(stBarGraph));
+
+	bTimerFlag:=TRUE;
+END_IF
+
+tofDoneTimer(IN:=bTimerFlag,PT:=t#5s, Q=>bDone);]]></ST>
+    </Implementation>
+    <LineIds Name="FB_KPI_ClearFrontScreenStatistic">
+      <LineId Id="24" Count="26" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,174 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_FIND_OuterDuplicatesPiotr" Id="{6e1cddd3-dc8d-4795-b566-e6bd66516e06}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_FIND_OuterDuplicatesPiotr
+VAR_INPUT
+	bExecute	: BOOL;
+END_VAR
+VAR_IN_OUT
+
+	//stProductInstruction				: ST_PCM_Status;
+	
+	//stPackCodesDuplicated			: ST_RejectItems;
+	//stOuterBarcodeDuplicate			: ST_RejectItems;
+	//stOuterDuplicatedPackCodesFound	: ST_RejectItems;
+	//stCaseRejectReasons			: ST_RejectReasonsForCase;
+	
+	//stCACData 						: ST_CAC_Data;
+	
+	(* for AI mode*)	
+	stCase				: ST_LAB_CaseData;
+	
+END_VAR
+VAR_OUTPUT
+	//bDone 					: BOOL;
+	//bBusy					: BOOL;
+
+	//bCACValid				: BOOL;
+	//sRejectCode				: T_MaxString;
+	//bIsDuplicateOuters		: BOOL;
+	//bIsDuplicatePacks		: BOOL;
+END_VAR
+VAR
+
+	rtExecute	: R_TRIG;
+	
+	nOuterIndex			: UINT;
+	nPackIndex			: UINT;
+	//nOuterCheckIndex	: INT;
+	nInnerOuterIndex	: UINT;
+	//nPackCheckIndex		: INT;
+	nInnerPackIndex		: UINT;
+	
+	nDuplicateOuter1_Position	: UINT;
+	nDuplicateOuter2_Position	: UINT;
+	nDuplicatePack1_Position	: UINT;
+	nDuplicatePack2_Position	: UINT;
+	
+	aStatusErrorVal					: ARRAY[0..10] OF STRING(10);
+	aRejectCodePointer     		   	: ARRAY[0..10] OF STRING(10);
+	
+	nIteration				: UDINT;
+	nIterationAI			: UDINT;
+	
+	bIsDuplicateOuters		: BOOL;
+	bIsDuplicatePacks		: BOOL;
+END_VAR
+
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[rtExecute(CLK:=bExecute);
+
+IF rtExecute.Q THEN
+	
+	(* update outputs *)
+	//bDone := TRUE;
+	//bBusy := TRUE;
+
+	bIsDuplicateOuters:= FALSE;
+	bIsDuplicatePacks:= FALSE;
+	
+	MEMSET(ADR(aStatusErrorVal), 16#00, SIZEOF(aStatusErrorVal));
+	MEMSET(ADR(aRejectCodePointer), 16#00, SIZEOF(aRejectCodePointer));
+
+	nDuplicateOuter1_Position :=0;
+	nDuplicateOuter2_Position:=0;
+	nDuplicatePack1_Position:=0;
+	nDuplicatePack2_Position:=0;
+
+	(* clear outputs *)
+	//bCACValid := FALSE;
+	//sRejectCode := '';
+	
+	nIteration		:= 0;
+	nIterationAI	:= 0;
+	
+	
+//////////////////////	
+	FOR nOuterIndex := 1 TO GVL_test.nMax_Outers BY 1 DO
+	//////////////////////		
+		FOR nInnerOuterIndex := nOuterIndex + 1 TO GVL_test.nMax_Outers BY 1 DO
+			
+			IF stCase.aOuters[nOuterIndex].sOuterCode = stCase.aOuters[nInnerOuterIndex].sOuterCode AND 
+				stCase.aOuters[nOuterIndex].sOuterCode <> ''	THEN
+				 
+			 	IF NOT bIsDuplicateOuters THEN
+					nDuplicateOuter1_Position := nOuterIndex;
+					nDuplicateOuter2_Position := nInnerOuterIndex;
+				END_IF
+					
+				bIsDuplicateOuters := TRUE; 
+				
+				stCase.aOuters[nOuterIndex].nOuterRejectID			:=	200;
+				stCase.aOuters[nInnerOuterIndex].nOuterRejectID		:=	200;
+			 END_IF
+			 nIteration := nIteration + 1;
+		END_FOR
+		///////////////////////////
+		FOR  nPackIndex :=1 TO GVL_test.nMax_Packs BY 1 DO
+			FOR nInnerPackIndex := nPackIndex + 1  TO GVL_test.nMax_Packs BY 1 DO
+				
+				IF stCase.aOuters[nOuterIndex].aPacks[nPackIndex].sPackCode = stCase.aOuters[nOuterIndex].aPacks[nInnerPackIndex].sPackCode AND 
+					stCase.aOuters[nOuterIndex].aPacks[nPackIndex].sPackCode  <> ''										AND 
+					stCase.aOuters[nOuterIndex].aPacks[nInnerPackIndex].nPackStatus <> 200 	THEN
+					
+					IF NOT bIsDuplicatePacks AND NOT bIsDuplicateOuters THEN
+						nDuplicateOuter1_Position := nOuterIndex;
+						nDuplicateOuter2_Position :=  nOuterIndex;
+						nDuplicatePack1_Position := nPackIndex;
+						nDuplicatePack2_Position := nInnerPackIndex;
+					END_IF
+						
+					bIsDuplicatePacks := TRUE;
+					stCase.aOuters[nOuterIndex].nOuterRejectID		:= 200;					
+					stCase.aOuters[nOuterIndex].aPacks[nPackIndex].nPackRejectID		:= 200;
+					stCase.aOuters[nOuterIndex].aPacks[nInnerPackIndex].nPackRejectID	:= 200;
+				END_IF
+				nIteration := nIteration + 1;
+			END_FOR
+			/////////////////////////////////
+			FOR nInnerOuterIndex := nOuterIndex + 1 TO GVL_test.nMax_Outers BY 1 DO
+				FOR nInnerPackIndex := 1  TO GVL_test.nMax_Packs BY 1 DO
+
+					IF stCase.aOuters[nOuterIndex].aPacks[nPackIndex].sPackCode = stCase.aOuters[nInnerOuterIndex].aPacks[nInnerPackIndex].sPackCode AND 
+						stCase.aOuters[nOuterIndex].aPacks[nPackIndex].sPackCode  <> ''									AND 
+						stCase.aOuters[nInnerOuterIndex].aPacks[nInnerPackIndex].nPackRejectID <> 200 	THEN
+						
+						IF NOT bIsDuplicatePacks AND NOT bIsDuplicateOuters THEN
+							nDuplicateOuter1_Position := nOuterIndex;
+							nDuplicateOuter2_Position :=  nInnerOuterIndex;
+							nDuplicatePack1_Position := nPackIndex;
+							nDuplicatePack2_Position := nInnerPackIndex;
+						END_IF
+							
+						bIsDuplicatePacks := TRUE;
+						stCase.aOuters[nOuterIndex].nOuterRejectID			:= 200;						
+						stCase.aOuters[nInnerOuterIndex].nOuterRejectID		:= 200;
+						
+						stCase.aOuters[nOuterIndex].aPacks[nPackIndex].nPackRejectID			:= 200;
+						stCase.aOuters[nInnerOuterIndex].aPacks[nInnerPackIndex].nPackRejectID	:= 200;
+					END_IF
+					nIteration := nIteration + 1;
+				END_FOR
+			END_FOR
+		/////////////////////////////////		
+		END_FOR
+	//////////////////////	
+	END_FOR
+//////////////////////	
+
+
+	
+ELSIF bExecute = FALSE THEN
+	
+	(* clear outputs *)
+	//bDone := FALSE;
+	//bBusy := FALSE;
+	;
+
+END_IF			
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

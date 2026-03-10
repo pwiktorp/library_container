@@ -1,0 +1,76 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_PLAS_AddInterimCodeToQ" Id="{406d52c9-c063-4ccd-ae49-9e919b315dae}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_PLAS_AddInterimCodeToQ
+VAR_INPUT
+	bExecute								: BOOL;
+	sCurrentCodeRead						: T_MaxString;
+END_VAR
+VAR_IN_OUT
+	aInterimCodeQueue					: ARRAY[1..cMAX_INTERMEDIATE_CODE_QUEUE] OF T_MaxString;
+END_VAR
+VAR_OUTPUT
+	bDone									: BOOL;
+	bDuplicatFound						: BOOL;
+END_VAR
+VAR
+	fbExecute								: R_TRIG;
+	nIndex									: INT;
+	sLastDupCodeFound					: T_MaxString;
+	nDiagonosticError1					: INT;
+	nDiagonosticError2					: INT;
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK := bExecute);
+
+(* move shift reg *)
+IF fbExecute.Q  THEN
+
+	bDuplicatFound := FALSE;
+
+	FOR nIndex := 2 TO cMAX_INTERMEDIATE_CODE_QUEUE DO
+
+		IF aInterimCodeQueue[nIndex] = sCurrentCodeRead 			AND
+			aInterimCodeQueue[nIndex] <> cCODE_OVERWIRTTEN 	AND
+			aInterimCodeQueue[nIndex] <> ''							THEN
+
+			sLastDupCodeFound			:= sCurrentCodeRead;
+
+			aInterimCodeQueue[nIndex] 	:=	cCODE_OVERWIRTTEN;
+			aInterimCodeQueue[1]			:=	cCODE_OVERWIRTTEN;
+
+			bDuplicatFound	:= TRUE;
+
+			nDiagonosticError1 := nDiagonosticError1 +1;
+			EXIT;
+		END_IF
+	END_FOR
+
+	IF sLastDupCodeFound = sCurrentCodeRead 	AND
+		sLastDupCodeFound <> '' 				THEN
+
+		aInterimCodeQueue[1]			:=	cCODE_OVERWIRTTEN;
+
+		bDuplicatFound	:= TRUE;
+
+		nDiagonosticError2 := nDiagonosticError2 +1;
+	END_IF
+
+	IF NOT bDuplicatFound THEN
+		aInterimCodeQueue[1]			:= sCurrentCodeRead;
+	END_IF
+
+	bDone := TRUE;
+
+(* no action required, bExecute has been reset *)
+ELSE
+	bDone := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_PLAS_AddInterimCodeToQ">
+      <LineId Id="21" Count="44" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

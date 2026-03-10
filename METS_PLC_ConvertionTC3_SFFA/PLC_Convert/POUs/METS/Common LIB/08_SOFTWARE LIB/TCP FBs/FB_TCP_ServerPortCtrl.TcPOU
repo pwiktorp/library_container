@@ -1,0 +1,121 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_TCP_ServerPortCtrl" Id="{a7483346-00c2-45e9-8044-03bdfabce72d}" SpecialFunc="None">
+    <Declaration><![CDATA[(* TCP port ctrl for Server-Client devices *)
+FUNCTION_BLOCK FB_TCP_ServerPortCtrl
+VAR_INPUT
+	bEnable				: BOOL;			(* set TRUE to enable TCP connection *)
+	eMode				: E_SocketAcceptMode;	(* specifies which connections to accept *)
+	strRemoteIPAddr		: T_IPv4Addr;	(* IP address for remote device *)
+	strLocalIPAddr		: T_IPv4Addr;	(* IP address for local device *)
+	nLocalPortNo		: UINT;			(* port number for local device *)
+	tReconnectTime		: TIME;			(* TCP reconnect time *)
+END_VAR
+VAR_OUTPUT
+	bConnected			: BOOL;			(* TRUE = TCP port is currently open *)
+	bError				: BOOL;			(* TRUE = error occurred when opening TCP port *)
+	nErrorID			: UDINT;		(* TRUE = error code *)
+	hSocket				: T_HSocket;	(* TCP socket handle *)
+	nSyncOffset			: DINT;			(* sync offset value to spread TCP Server access load *)
+	eSocketState		: E_SocketConnectionState;	(* TCP socket state *)
+END_VAR
+VAR
+	strTargetIPAddr		: T_IPv4Addr;
+	arrTargetIPAddr		: T_IPv4AddrArr;
+	nTargetPortNo		: UDINT;
+	eTCPState			: E_TCPIP_State;
+	bServerHndOK		: BOOL;
+	hServer				: T_HSERVER;
+	fbTCPPortCtrl		: FB_ServerClientConnection;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		nRemotePort input removed as it is not used
+
+-------------------------------------------------------------------------------------------------
+06/09/2012	1.41.00	PB		FB now re-connects properly if strRemoteIPAddr or nRemotePortNo are changed while TCP connection is active.
+							bError and nErrorID now linked directly to FB_ServerClientConnection.
+22/11/2011	1.34.00	PB		Initial release.
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CASE eTCPState OF
+
+	(* TCP connetion not active *)
+	E_TCPIP_IDLE:
+
+		(* TCP connection is enabled *)
+		IF bEnable = TRUE THEN
+
+			(* target IP address and port number *)
+			strTargetIPAddr := strRemoteIPAddr;
+			nTargetPortNo := nLocalPortNo;
+
+			(* convert target IP address to bytes *)
+			arrTargetIPAddr := F_ScanIPv4AddrIds(strTargetIPAddr);
+			nSyncOffset := arrTargetIPAddr[3] MOD 10;
+
+			eTCPState := E_TCPIP_CONNECT;
+		END_IF
+
+
+	(* open TCP connection *)
+	E_TCPIP_CONNECT:
+
+		(* close TCP connection *)
+		IF bEnable = FALSE THEN
+
+			eTCPState := E_TCPIP_DISCONNECT;
+
+		(* TCP connect error or remote IP address or local port number have changed while connection is active *)
+		ELSIF fbTCPPortCtrl.bError = TRUE OR (strRemoteIPAddr <> strTargetIPAddr AND strRemoteIPAddr <> '') OR (nLocalPortNo <> nTargetPortNo AND nLocalPortNo <> 0) THEN
+
+			eTCPState := E_TCPIP_DISCONNECT;
+		END_IF
+
+
+	(* close TCP connection *)
+	E_TCPIP_DISCONNECT:
+
+		(* TCP port has been closed *)
+		IF eSocketState = eSOCKET_DISCONNECTED THEN
+
+			eTCPState := E_TCPIP_IDLE;
+		END_IF
+
+
+(* unknown state *)
+ELSE
+
+	eTCPState := E_TCPIP_IDLE;
+END_CASE
+
+(* create local server handle *)
+bServerHndOK := F_CreateServerHnd('', strLocalIPAddr, nTargetPortNo, LISTEN_MODE_CLOSEALL(* OR CONNECT_MODE_ENABLEDBG*), FALSE, hServer);
+
+
+(* TCP port connection ctrl *)
+fbTCPPortCtrl(
+	eMode		:= eMode,
+	sRemoteHost	:= strTargetIPAddr,
+	nRemotePort	:= nTargetPortNo,
+	bEnable		:= bServerHndOK AND eTCPState = E_TCPIP_CONNECT,
+	tReconnect	:= tReconnectTime,
+	hServer		:= hServer,
+	bError		=> bError,
+	nErrID		=> nErrorID,
+	hSocket		=> hSocket,
+	eState		=> eSocketState
+);
+
+(* connected status *)
+bConnected := eSocketState = eSOCKET_CONNECTED;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_TCP_ServerPortCtrl">
+      <LineId Id="40" Count="70" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

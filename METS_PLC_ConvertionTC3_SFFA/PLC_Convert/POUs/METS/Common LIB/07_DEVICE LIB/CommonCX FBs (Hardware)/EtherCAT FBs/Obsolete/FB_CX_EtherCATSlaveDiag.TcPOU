@@ -1,0 +1,147 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CX_EtherCATSlaveDiag" Id="{33d26595-7c18-4f50-8820-c99e500e8f52}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_CX_EtherCATSlaveDiag
+(*
+Version history:
+DATE		|	Version/Author 		|	Remark
+----------------------------------------------------------------------------------------------------
+23.04.19	|	1.000.001	PSA		|	Original Version.
+									|	Gets diag info on EtherCAT Slaves
+*)
+VAR_INPUT
+	sAmsNetID						: T_AMSNetID;
+	_ScanSlaves						: BOOL;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+
+	_Consistent						: BOOL;
+	_SlaveCount						: BOOL;
+	_SlaveAddrs						: BOOL;
+	_Error							: BOOL;
+	_nSlavesConfigured				: UINT;
+	_nSlavesScanned					: UINT;
+	_nCount							: UINT;
+	_nPosition						: UINT;
+	_nSlaveCount					: UINT;
+	_ErrorID						: UDINT;
+	_sName							: STRING;
+	_ConfiguredSlaves				: ARRAY[0..cMAX_ETHERCAT_SLAVES] OF ST_EcSlaveConfigData;
+	_ScannedSlaves					: ARRAY[0..cMAX_ETHERCAT_SLAVES] OF ST_EcSlaveScannedData;
+	_ConfiguredNames				: ARRAY[0..cMAX_ETHERCAT_SLAVES] OF STRING;
+	_ConfiguredSlaveAddrs			: ARRAY[0..cMAX_ETHERCAT_SLAVES] OF UINT;
+	_fbEcGetConfSlaves				: FB_EcGetConfSlaves;
+	_fbEcGetScannedSlaves			: FB_EcGetScannedSlaves;
+	_fbEcGetSlaveCount				: FB_EcGetSlaveCount;
+	_fbEcGetAllSlaveAddr			: FB_EcGetAllSlaveAddr;
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* Scan the configured (expected) slaves *)
+_fbEcGetConfSlaves(
+	sNetId:= sAmsNetID, 
+	pArrEcConfSlaveInfo:= ADR(_ConfiguredSlaves), 
+	cbBufLen:= SIZEOF(_ConfiguredSlaves), 
+	bExecute:= _ScanSlaves, 
+	tTimeout:= , 
+	bBusy=> , 
+	bError=> , 
+	nErrorId=> , 
+	nSlaves=> _nSlavesConfigured);
+	
+(* Scan the actual fitted slave *)
+_fbEcGetScannedSlaves(
+	bExecute:= _ScanSlaves AND NOT _fbEcGetConfSlaves.bBusy, 
+	sNetId:= sAmsNetID, 
+	pArrEcScannedSlaveInfo:= ADR(_ScannedSlaves), 
+	cbBufLen:= SIZEOF(_ScannedSlaves), 
+	tTimeout:= , 
+	bBusy=> , 
+	bError=> , 
+	nErrorId=> , 
+	nSlaves=> _nSlavesScanned);
+		
+IF _ScanSlaves AND NOT _fbEcGetConfSlaves.bBusy AND NOT _fbEcGetScannedSlaves.bBusy THEN
+	
+	_ScanSlaves := FALSE;			(* Reset to false once called  *)
+	(* Reset some variables before running *)
+	_Consistent := TRUE;
+	_nPosition := 0;
+	_sName := '';
+	MEMSET(ADR(_ConfiguredNames), 0, SIZEOF(_ConfiguredNames));
+
+	FOR _nCount := 0 TO TO_UINT(cMAX_ETHERCAT_SLAVES) DO
+		
+		_ConfiguredNames[_nCount] := _ConfiguredSlaves[_nCount].sName;
+		_Consistent := _Consistent AND (_ConfiguredSlaves[_nCount].stSlaveIdentity.productCode = _ScannedSlaves[_nCount].stSlaveIdentity.productCode);
+		
+		(* Only get the first discrepancy *)
+		IF NOT _Consistent AND _nPosition = 0 THEN
+			
+			_nPosition := _nCount;
+			_sName := _ConfiguredSlaves[_nCount].sName;
+			
+		END_IF
+		
+	END_FOR
+	
+END_IF
+(* ----------------------------------------------- *)
+
+(* Get the number of slaves present *)
+_fbEcGetSlaveCount(
+	sNetId:= sAmsNetID, 
+	bExecute:= _SlaveCount, 
+	tTimeout:= T#5.0S, 
+	nSlaves=> _nSlaveCount);
+
+IF _SlaveCount AND NOT _fbEcGetSlaveCount.bBusy THEN
+	
+	_SlaveCount := FALSE;			(* Reset to false once called  *)
+	
+END_IF
+(* ----------------------------------------------- *)
+	
+(* Get the Addresses of each of the slaves *)
+_fbEcGetAllSlaveAddr(
+	sNetId:= sAmsNetID, 
+	pAddrBuf:= ADR(_ConfiguredSlaveAddrs), 
+	cbBufLen:= SIZEOF(_ConfiguredSlaveAddrs), 
+	bExecute:= _SlaveAddrs, 
+	tTimeout:= T#5.0S);
+	
+IF _SlaveAddrs AND NOT _fbEcGetAllSlaveAddr.bBusy THEN
+	
+	_SlaveAddrs := FALSE;			(* Reset to false once called  *)
+	
+END_IF
+(* ----------------------------------------------- *)
+
+(* Any error will cause the error bit to go high *)
+_Error := _fbEcGetConfSlaves.bError OR _fbEcGetScannedSlaves.bError OR _fbEcGetSlaveCount.bError OR _fbEcGetAllSlaveAddr.bError;
+
+(* Get the correct error ID *)
+IF _fbEcGetConfSlaves.bError THEN
+
+	_ErrorID := _fbEcGetConfSlaves.nErrorId;
+	
+ELSIF _fbEcGetScannedSlaves.bError THEN
+
+	_ErrorID := _fbEcGetScannedSlaves.nErrorId;
+	
+ELSIF _fbEcGetSlaveCount.bError THEN 
+
+	_ErrorID := _fbEcGetSlaveCount.nErrId;
+	
+ELSIF _fbEcGetAllSlaveAddr.bError THEN
+		
+	_ErrorID := _fbEcGetAllSlaveAddr.nErrId;
+		
+END_IF
+(* ----------------------------------------------- *)]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

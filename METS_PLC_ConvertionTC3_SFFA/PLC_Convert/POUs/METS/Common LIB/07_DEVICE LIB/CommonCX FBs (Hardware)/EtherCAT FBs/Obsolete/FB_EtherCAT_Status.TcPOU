@@ -1,0 +1,60 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_EtherCAT_Status" Id="{7bcfd5f3-c09d-4fe0-9000-f8d5913992ca}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_EtherCAT_Status
+(*
+Version history:
+DATE		|	Version/Author 		|	Remark
+----------------------------------------------------------------------------------------------------
+16.03.12	|	2.000.001	PSA		|	Original Version.
+									|	Collates the EtherCAT IO Status structure together.
+*)
+VAR_INPUT
+	bExecute						: BOOL;
+	nSlaves							: UINT;
+	ArrEcConfSlaveInfo 				: ARRAY[0..cMAX_ETHERCAT_SLAVES] OF ST_EcSlaveConfigData;
+	arrSlaveStates					: ARRAY[0..cMAX_ETHERCAT_SLAVES] OF ST_EcSlaveState;
+END_VAR
+VAR_IN_OUT
+	EtherCATStatus					: ST_EtherCATStatus;
+END_VAR
+VAR_OUTPUT
+	bNodeHasError					: BOOL;
+	nNodeWithError					: UINT;
+	sNodeWithErrorName				: STRING(16);
+END_VAR
+VAR
+	nSlaveCount						: UINT;
+	fbTrig							: R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbTrig(CLK := bExecute);
+
+IF fbTrig.Q THEN
+	IF nSlaves > 0 THEN
+		(* Reset Error Data *)
+		bNodeHasError := FALSE;
+		nNodeWithError := 0;
+		sNodeWithErrorName := '';
+		FOR nSlaveCount := 0 TO nSlaves - 1 DO
+
+			EtherCATStatus.arrSlaveInfo[nSlaveCount].nAddr := ArrEcConfSlaveInfo[nSlaveCount].nAddr;
+			EtherCATStatus.arrSlaveInfo[nSlaveCount].edeviceState := arrSlaveStates[nSlaveCount];
+			EtherCATStatus.arrSlaveInfo[nSlaveCount].nlinkState := arrSlaveStates[nSlaveCount].linkState;
+			EtherCATStatus.arrSlaveInfo[nSlaveCount].sType := ArrEcConfSlaveInfo[nSlaveCount].sType;
+			EtherCATStatus.arrSlaveInfo[nSlaveCount].sName := ArrEcConfSlaveInfo[nSlaveCount].sName;
+
+			IF EtherCATStatus.arrSlaveInfo[nSlaveCount].edeviceState.deviceState <> 8 THEN
+				bNodeHasError := TRUE;
+				nNodeWithError := nSlaveCount;
+				sNodeWithErrorName := EtherCATStatus.arrSlaveInfo[nSlaveCount].sName;
+				EXIT;
+			END_IF
+
+		END_FOR
+	END_IF
+END_IF
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

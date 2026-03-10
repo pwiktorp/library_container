@@ -1,0 +1,143 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_FSS2_WriteFile" Id="{1b7bf902-bfe9-4150-914c-70b742b7d3a8}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_FSS2_WriteFile
+VAR_INPUT
+	bExecute			: BOOL;			(* scan for valid Outer in arrOuterStatus *)
+	strLocalCHMPath					: STRING(255);
+	strCHMFile						: T_CHM_Filename;
+	nOutersPerCase						: UINT;
+END_VAR
+VAR_IN_OUT
+	stAgregationData	 			: ST_CHM_Data;		(* case data to be written to XML *)
+	stWriteCHMFileStatistic			: ST_FILE_WriteFileStatistic;
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;			(* TRUE = write OAC file complete *)
+	bBusy				: BOOL;			(* TRUE = write OAC file in progress *)
+	bError				: BOOL;			(* TRUE = write OAC file error *)
+	nErrorID				: UDINT;		(* error ID *)
+	nImigeProcessingSize				:UDINT;
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	eState				: E_XML_CtrlState;
+	eErrorState			: E_XML_CtrlState;
+
+	fbBuildCHMData		: FB_FSS2_BuildXMLData;
+	fbWriteFile			: FB_FILE_WriteByByte;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* monitor bExecute for rising edge *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_XML_IDLE:
+
+		(* rising edge on bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			eErrorState := eState;
+			(* generate XML  file name and clear data for last XML file *)
+
+			strCHMFile := F_CONCAT3('CHM_','XXXXXXXXX', '.xml');
+
+			eState := E_XML_GENERATEIMAGE;
+
+		(* disabled *)
+		ELSIF bExecute = FALSE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* build image in XML format *)
+	E_XML_GENERATEIMAGE:
+
+		(* build XML data *)
+		fbBuildCHMData(
+			bExecute		:= TRUE,
+			nCartonsPerMasterCase	:=nOutersPerCase,
+			stAgregationData := stAgregationData
+		);
+
+		(* build XML data complete *)
+		IF fbBuildCHMData.bDone = TRUE THEN
+
+			eState := E_XML_WRITEXML;
+			nImigeProcessingSize	:= fbBuildCHMData.nImageByte;
+
+			(* close off fbBuildXMLData *)
+			fbBuildCHMData(bExecute := FALSE, stAgregationData := stAgregationData);
+		END_IF
+
+
+	(* write XML image *)
+	E_XML_WRITEXML:
+
+		(* write XML template to file *)
+		fbWriteFile(
+			bExecute	:= TRUE,
+			pSourceAddr	:= ADR(fbBuildCHMData.arrXMLImage),
+			nSourceSize	:= fbBuildCHMData.nImageByte,
+			strPathFile	:= CONCAT(strLocalCHMPath, strCHMFile),
+			tTimeout	:= T#1s
+		);
+
+		(* file write complete *)
+		IF fbWriteFile.bDone = TRUE THEN
+
+			(* file write completed OK *)
+			IF fbWriteFile.bError = FALSE THEN
+
+				;
+
+			(* file write error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbWriteFile.nErrorID;
+				eErrorState := eState;
+			END_IF
+
+			eState := E_XML_DONE;
+
+			(* close of fbWriteFile *)
+			fbWriteFile(bExecute := FALSE);
+		END_IF
+
+
+	(* XML file complete *)
+	E_XML_DONE:
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_XML_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_XML_IDLE;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_FSS2_WriteFile">
+      <LineId Id="27" Count="105" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

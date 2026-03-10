@@ -1,0 +1,158 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_MC2_EL7201Torque" Id="{8c15375d-ceb0-4822-a61c-090e800b3125}" SpecialFunc="None">
+    <Declaration><![CDATA[(* EL7201 torque monitoring/scaling via EtherCAT *)
+FUNCTION_BLOCK FB_MC2_EL7201Torque
+VAR_INPUT
+	bEnable				: BOOL;		(* TRUE = enable torque monitor *)
+	nTorqueFeedback		: INT;		(* EL7201 torque feedback value *)
+	tFilterTime			: TIME;		(* torque filter time *)
+	sParamSet			: ST_AxisParameterSet;	(* axis parameter set *)
+END_VAR
+VAR_IN_OUT
+	sAxis				: AXIS_REF;	(* NC axis structure *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;		(* set TRUE when torque scaling is active *)
+	bBusy				: BOOL;		(* set TRUE when init in progress *)
+	bError				: BOOL;		(* set TRUE if an error occurs during init *)
+	nErrorID			: UDINT;	(* error code *)
+	fTorque				: LREAL;	(* torque output, 100% = rated motor current *)
+	fTorqueFiltered		: LREAL;	(* filtered torque output *)
+	fCurrent			: LREAL;	(* motor current in Amps *)
+END_VAR
+VAR
+	eState				: E_TORQUE_Scaling;
+	eErrorState			: E_TORQUE_Scaling;
+	fbReadSDO			: FB_EcCoESdoRead;
+	nRatedCurrent		: UDINT;
+	fRatedCurrent		: LREAL;
+	fbTorqueFilter		: FB_MovingAverageTimer;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		No change
+
+-------------------------------------------------------------------------------------------------
+21/03/2012	1.09.01	PB		Torque and current values updated for release version of EL7201 firmware.
+21/12/2011	1.08.00	PB		Initial release.
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CASE eState OF
+
+	(* IDLE *)
+	E_TORQUE_IDLE:
+
+		(* torque monitoring enabled *)
+		IF bEnable = TRUE THEN
+
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+			eErrorState := eState;
+
+			eState := E_TORQUE_RATEDCURRENT;
+
+		(* no action *)
+		ELSE
+
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* read Rated Motor Current *)
+	E_TORQUE_RATEDCURRENT:
+
+		(* read Index 16#8011:12, Rated Motor Current *)
+		fbReadSDO(
+			sNetId		:=  sParamSet.sAmsNetId,
+			nSlaveAddr	:=  sParamSet.nPort,
+			nSubIndex	:= 16#12,
+			nIndex		:= 16#8011,
+			pDstBuf		:= ADR(nRatedCurrent),
+			cbBufLen	:= SIZEOF(nRatedCurrent),
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s,
+		);
+
+		(* Read Index complete *)
+		IF fbReadSDO.bBusy = FALSE THEN
+
+			(* Read Index completed OK *)
+			IF fbReadSDO.bError = FALSE THEN
+
+				(* convert data value to amps *)
+				fRatedCurrent := UDINT_TO_LREAL(nRatedCurrent) / 1000.0;
+
+				eState := E_TORQUE_MONITOR;
+
+			(* Read Index error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbReadSDO.nErrId;
+				eErrorState := eState;
+
+				eState := E_TORQUE_IDLE;
+			END_IF
+
+			(* close fbReadSDO *)
+			fbReadSDO(bExecute := FALSE);
+		END_IF
+
+
+	(* MONITOR *)
+	E_TORQUE_MONITOR:
+
+		(* torque monitoring enabled *)
+		IF bEnable = TRUE THEN
+
+			bDone := TRUE;
+			bBusy := FALSE;
+
+			(* calculate torque and motor current *)
+			fTorque := INT_TO_LREAL(nTorqueFeedback) / 10.0;
+			fCurrent := fRatedCurrent * (fTorque / 100.0);
+
+			(* torque average filter, disabled if tFilterTime = T#0ms *)
+			fbTorqueFilter(
+				bEnable			:= tFilterTime > T#0ms,
+				fInput			:= fTorque,
+				tSamplePeriod	:= T#0ms,		(* T#0ms = new sample on every cycle *)
+				tAveragePeriod	:= tFilterTime,
+				fAverage		=> fTorqueFiltered
+			);
+
+		(* torque monitor has been disabled or EtherCAT has dropped out of OP state *)
+		ELSE
+
+			bDone := FALSE;
+			bBusy := FALSE;
+
+			eState := E_TORQUE_IDLE;
+		END_IF
+
+
+(* unknown state *)
+ELSE
+
+	bDone := FALSE;
+	bBusy := FALSE;
+
+	eState := E_TORQUE_IDLE;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_MC2_EL7201Torque">
+      <LineId Id="41" Count="106" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

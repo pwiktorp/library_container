@@ -1,0 +1,253 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_FILE_WriteByByte" Id="{a95f0c34-90a3-4622-87b0-555497d1ab62}" SpecialFunc="None">
+    <Declaration><![CDATA[(* write data from the source array to the target file in byte form *)
+FUNCTION_BLOCK FB_FILE_WriteByByte
+VAR_INPUT
+	bExecute			: BOOL;			(* set TRUE to write file *)
+	pSourceAddr			: POINTER TO BYTE;	(* pointer to array of bytes containing data to be written *)
+	nSourceSize			: UDINT;		(* number of bytes to write to file *)
+	strPathFile			: T_MaxString;	(* full path\file of output file *)
+	tTimeout			: TIME;			(* timeout for each file operation *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;			(* TRUE = file access complete *)
+	bBusy				: BOOL;			(* TRUE = file access in progress *)
+	bError				: BOOL;			(* TRUE = error occurred during process *)
+	nErrorID			: UDINT;		(* error code *)
+	nBytesWritten		: UDINT;		(* number of bytes written to specified file *)
+END_VAR
+VAR
+	eState				: E_FILE_State;
+	eErrorState			: E_FILE_State;
+	fbExecute			: R_TRIG;
+	bReWriteFile		: BOOL;
+	fbOpenFile			: FB_FileOpen;
+	hFileHandle			: UINT;
+	fbWriteFile			: FB_FileWrite;
+	fbCloseFile			: FB_FileClose;
+	nFileWrites			: BYTE;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Moved from Sewtec_CaseTrace.lib
+
+-------------------------------------------------------------------------------------------------
+21/03/2012	1.37.04	PB		Number of bytes written by FB_FileWrite now checked against nSourceSize, re-write file if valus is incorrect
+							Attempt to write file 3 times before returning error
+02/03/2010	1.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* load XML file on rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle state *)
+	E_FILE_IDLE:
+
+		(* start new cycle *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+			eErrorState := eState;
+			bReWriteFile := FALSE;
+			nFileWrites := 0;
+
+			eState := E_FILE_OPEN;
+
+		(* reset status outputs when no cycle is required and bExecute is reset *)
+		ELSIF bExecute = FALSE THEN
+
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+	(* open file *)
+	E_FILE_OPEN:
+
+		(* open specified file for writing in binary mode *)
+		fbOpenFile(
+			sNetId		:= '',
+			sPathName	:= strPathFile,
+			nMode		:= FOPEN_MODEWRITE OR FOPEN_MODEBINARY,
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= t#1s,
+			hFile		=> hFileHandle
+		);
+
+		(* file open completed *)
+		IF fbOpenFile.bBusy = FALSE THEN
+
+			(* file open completed OK *)
+			IF fbOpenFile.bError = FALSE THEN
+
+				eState := E_FILE_WRITE;
+
+			(* file open error *)
+			ELSE
+
+				(* no previous error has occurred *)
+				IF bError = FALSE THEN
+
+					(* log error code and failure state *)
+					bError := TRUE;
+					nErrorID := fbOpenFile.nErrId;
+					eErrorState := eState;
+				END_IF
+
+				(* abandon attempt to read file *)
+				eState := E_FILE_DONE;
+			END_IF
+
+			(* close off fbOpenFile *)
+			fbOpenFile(bExecute := FALSE);
+		END_IF
+
+
+	(* write file *)
+	E_FILE_WRITE:
+
+		(* write data to open file *)
+		fbWriteFile(
+			sNetId		:= '',
+			hFile		:= hFileHandle,
+			pWriteBuff	:= pSourceAddr,
+			cbWriteLen	:= nSourceSize,
+			bExecute	:= TRUE,
+			tTimeout	:= tTimeout,
+			cbWrite		=> nBytesWritten
+		);
+
+		(* file write completed *)
+		IF fbWriteFile.bBusy = FALSE THEN
+
+			(* file write completed OK *)
+			IF fbWriteFile.bError = FALSE THEN
+
+				(* number of bytes written was correct *)
+				IF nBytesWritten = nSourceSize THEN
+
+					bReWriteFile := FALSE;
+
+				(* number of bytes written was not correct *)
+				ELSE
+
+					(* set re-write flag *)
+					bReWriteFile := TRUE;
+				END_IF
+
+				eState := E_FILE_CLOSE;
+
+			(* file write error *)
+			ELSE
+
+				(* no previous error has occurred *)
+				IF bError = FALSE THEN
+
+					(* log error code and failure state *)
+					bError := TRUE;
+					nErrorID := fbWriteFile.nErrId;
+					eErrorState := eState;
+				END_IF
+
+				(* abandon write and close file *)
+				eState := E_FILE_CLOSE;
+			END_IF
+
+			(* close off fbReadFile *)
+			fbWriteFile(bExecute := FALSE);
+		END_IF
+
+
+	(* close file *)
+	E_FILE_CLOSE:
+
+		(* close and release file for future use *)
+		fbCloseFile(
+			sNetId		:= '',
+			hFile		:= hFileHandle,
+			bExecute	:= TRUE,
+			tTimeout	:= t#1s,
+		);
+
+		(* file close completed *)
+		IF fbCloseFile.bBusy = FALSE THEN
+
+			(* count number of open-write-close attempts *)
+			nFileWrites := nFileWrites + 1;
+
+			(* file close completed OK *)
+			IF fbCloseFile.bError = FALSE THEN
+
+				(* file write OK *)
+				IF bReWriteFile = FALSE THEN
+
+					eState := E_FILE_DONE;
+
+				(* file write failed *)
+				ELSE
+
+					(* 3 write attempts failed *)
+					IF nFileWrites >= 3 THEN
+
+						bError := TRUE;
+						nErrorID := 16#FFFFFFFF;
+						eErrorState := eState;
+
+						eState := E_FILE_DONE;
+
+					(* re-try to write file *)
+					ELSE
+
+						eState := E_FILE_OPEN;
+					END_IF
+				END_IF
+
+			(* file close error *)
+			ELSE
+
+				(* no error occurred with FileOpen or FileRead *)
+				IF bError = FALSE THEN
+
+					(* log error code and failure state *)
+					bError := TRUE;
+					nErrorID := fbCloseFile.nErrId;
+					eErrorState := eState;
+				END_IF
+
+				eState := E_FILE_DONE;
+			END_IF
+
+			(* close off fbCloseFile *)
+			fbCloseFile(bExecute := FALSE);
+		END_IF
+
+
+	(* file access complete *)
+	E_FILE_DONE:
+
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		(* return to IDLE state *)
+		eState := E_FILE_IDLE;
+
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_FILE_WriteByByte">
+      <LineId Id="40" Count="202" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,66 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SignalDelay" Id="{d97e31a8-d275-43d5-96e7-d828dc337302}" SpecialFunc="None">
+    <Declaration><![CDATA[(* applies specified time delay to input signal up to 100 PLC cycles *)
+FUNCTION_BLOCK FB_SignalDelay
+VAR_INPUT
+	bInput			: BOOL;		(* input signal *)
+	tTimeDelay		: TIME;		(* delay time, max 100 PLC cycles *)
+END_VAR
+VAR_OUTPUT
+	bInputDelay		: BOOL;		(* delayed input signal *)
+END_VAR
+VAR
+	fbTaskIndex		: GETCURTASKINDEX;
+	nTaskTime		: INT;
+
+	nMaxIndex		: INT;
+	nIndex			: INT;
+	arrInput		: ARRAY[1..100] OF BOOL;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* 1st pass of FB *)
+IF nTaskTime = 0 THEN
+
+	(* get current task index *)
+	fbTaskIndex();
+
+	(* task time in ms *)
+	nTaskTime := MAX(UDINT_TO_INT(_TaskInfo[fbTaskIndex.Index].CycleTime / 10000), 1);
+
+	(* max number of samples supported *)
+	nMaxIndex := SIZEOF(arrInput) / SIZEOF(arrInput[1]);
+END_IF
+
+(* delay required *)
+IF tTimeDelay > T#0ms THEN
+
+	(* calculate output index *)
+	nIndex := LIMIT(0, TIME_TO_INT(tTimeDelay) / nTaskTime, nMaxIndex);
+
+	(* update output with delayed input sample *)
+	bInputDelay := arrInput[nIndex];
+
+(* no delay required *)
+ELSE
+
+	bInputDelay := bInput;
+END_IF
+
+(* shift array by 1 location *)
+MEMMOVE(ADR(arrInput[2]), ADR(arrInput[1]), TO_UDINT(MAX(0,nMaxIndex - 1)));
+
+(* add latest input state to array *)
+arrInput[1] := bInput;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

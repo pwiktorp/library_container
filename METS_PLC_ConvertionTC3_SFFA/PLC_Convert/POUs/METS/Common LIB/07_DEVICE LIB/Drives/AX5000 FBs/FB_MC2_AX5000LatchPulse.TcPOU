@@ -1,0 +1,190 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_MC2_AX5000LatchPulse" Id="{b65cc504-3f19-4821-8869-95a496995d54}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_MC2_AX5000LatchPulse
+VAR_INPUT
+	bExecute			: BOOL;		(* set TRUE to arm Probe1 in AX5000 *)
+	bAbort				: BOOL;		(* set TRUE to cancel Probe1 in AX5000 *)
+	bFallingEdge		: BOOL;		(* set TRUE to detect negative (falling) edge *)
+	bModuloPos			: BOOL;		(* set TRUE to return latch pos as modulo pos *)
+	bWindowOnly			: BOOL;		(* set TRUE to only latch position if within specified window *)
+	fStartPos			: LREAL;	(* start of latch pos window *)
+	fEndPos				: LREAL;	(* end of latch pos window *)
+	sProbeData			: ST_AX5000_TouchProbe;	(* AX5000 status values *)
+	sAxisParamSet		: ST_AxisParameterSet;	(* NC Axis parameter set *)
+END_VAR
+VAR_IN_OUT
+	sAxis				: AXIS_REF;	(* NC axis structure *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;		(* TRUE = position latched *)
+	bBusy				: BOOL;		(* TRUE = Probe1 armed and waiting for latch signal *)
+	bAborted			: BOOL;		(* TRUE = Probe1 aborted before latch signal was seen *)
+	nCtrlByte			: BYTE;		(* AX5000 ctrl byte (low byte of MDT Control Word) *)
+	fLatchedPos			: LREAL;	(* latched axis position *)
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	nState				: INT;
+	nLatchedPos			: DINT;
+	bEdgeDetected		: BOOL;
+	fbInWindow			: FB_InWindow;
+	bReArmProbe1		: BOOL;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		No change
+
+-------------------------------------------------------------------------------------------------
+05/02/10	1.09.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+
+The following system setup is required to use this FB:
+
+AX5000 Startup values
+S-0-0169 = 3	P->S
+S-0-0405 = 1	P->S
+S-0-0303 = 405	P->S
+S-0-0305 = 410	P->S
+S-0-0307 = 409	P->S
+S-0-0170 = 3	S->O
+
+AX5000 Process data
+S-0-0130
+S-0-0131
+Link AX5000.AT.ProbeValue1PositiveEdge to ST_AX5000_TouchProbe.nPosEdge only
+Link AX5000.AT.ProbeValue1NegativeEdge to ST_AX5000_TouchProbe.nNegEdge only
+
+NC Axis
+Delete Axis.Enc.Outputs.nCtrl1 link
+Link Axis.Enc.Outputs.nOutData1 to PLC ST_AX5000_TouchProbe.nHardCounts
+
+PLC
+Link ST_AX5000_TouchProbe.nStatusWord to AX5000.AT.DriveStatusWord (dual link for Drive param)
+Link AX5000_CtrlOut byte to AX5000.MDT.MasterControlWord, Offset 0
+
+------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK:= bExecute);
+
+CASE nState OF
+
+	(* IDLE *)
+	0:
+		IF fbExecute.Q = TRUE OR bReArmProbe1 = TRUE THEN
+
+			(* clear outputs *)
+			fLatchedPos := 0;
+			bDone := FALSE;
+			bBusy := TRUE;
+			bAborted := FALSE;
+
+			(* arm Probe1 to AX5000 *)
+			nCtrlByte.7 := TRUE;
+
+			(* store edge detection for internal use *)
+			bEdgeDetected := FALSE;
+			nState := 1;	(* go ARMED state *)
+
+		(* complete FB and return to IDLE state *)
+		ELSIF bExecute = FALSE AND bAbort = FALSE THEN
+
+			bDone := FALSE;
+			bAborted := FALSE;
+		END_IF
+
+	(* ARMED *)
+	1:
+		(* rising edge detected by AX5000 *)
+		IF sProbeData.nStatusWord.7 = TRUE AND bFallingEdge = FALSE THEN
+
+			(* log rising edge position *)
+			nLatchedPos := sProbeData.nPosEdge;
+			bEdgeDetected := TRUE;
+
+		(* falling edge detected by AX5000 *)
+		ELSIF sProbeData.nStatusWord.6 = TRUE AND bFallingEdge = TRUE THEN
+
+			(* log falling edge position *)
+			nLatchedPos := sProbeData.nNegEdge;
+			bEdgeDetected := TRUE;
+		END_IF
+
+		(* edge detected *)
+		IF bEdgeDetected = TRUE THEN
+
+			(* convert hard counts to axis position *)
+			fLatchedPos := (DINT_TO_LREAL(nLatchedPos - sProbeData.nHardCounts) *  sAxisParamSet.fEncScaleFactorNumerator) + sAxis.NcToPlc.ActPos;
+
+			(* return latch pos as axis modulo pos *)
+			IF bModuloPos = TRUE THEN
+
+				(* convert latch pos to modulo pos *)
+				fLatchedPos := LMOD(fLatchedPos,  sAxisParamSet.fEncModuloFactor);
+			END_IF
+
+			(* if enabled, check latched position is within required window *)
+			fbInWindow(
+				bEnable			:= bWindowOnly,
+				fStartPos		:= fStartPos,
+				fEndPos			:= fEndPos,
+				fModuloFactor	:=  sAxisParamSet.fEncModuloFactor,
+				fActPos			:= fLatchedPos
+			);
+
+			(* window disabled or latched position was within specified window *)
+			IF bWindowOnly = FALSE  OR fbInWindow.bInWindow = TRUE THEN
+
+				(* do not re-arm probe *)
+				bReArmProbe1 := FALSE;
+
+			(* window enabled and latched position was outside specified window *)
+			ELSE
+
+				(* clear latched pos and re-arm probe for next pulse *)
+				fLatchedPos := 0;
+				bReArmProbe1 := TRUE;
+			END_IF
+
+			(* clear Probe1*)
+			nCtrlByte.7 := FALSE;
+			nState := 3;
+		END_IF
+
+	(* DONE *)
+	3:
+
+		(* status bits have been reset to FALSE by AX5000 *)
+		IF sProbeData.nStatusWord.7 = FALSE AND sProbeData.nStatusWord.6 = FALSE THEN
+
+			(* update outputs *)
+			bBusy := FALSE;
+			IF bAborted = FALSE THEN
+				bDone := TRUE;
+			END_IF
+
+			nState := 0;
+		END_IF
+END_CASE
+
+(* abort Probe1 *)
+IF bAbort = TRUE AND bBusy = TRUE THEN
+
+	nCtrlByte.7 := FALSE;
+	bReArmProbe1 := FALSE;
+
+	bDone := FALSE;
+	bAborted := TRUE;
+
+	nState := 3;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_MC2_AX5000LatchPulse">
+      <LineId Id="67" Count="112" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,293 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SYSTEM_CreateFolders" Id="{0de33ca1-4ff0-4d59-bb86-8f06c96f36cc}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SYSTEM_CreateFolders
+VAR_INPUT
+	bExecute				: BOOL;		(* set TRUE to generate system folders *)
+	sBasePath			: T_FolderName;	(* CaseTrace base folder path *)
+	aBaseFolder			: ARRAY[1..cSYSTEM_FOLDER_LIMIT] OF T_FolderName;
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;		(* TRUE = system folders complete *)
+	bBusy				: BOOL;		(* TRUE = system folders in progress *)
+	bError				: BOOL;		(* TRUE = system folders error *)
+	nErrorID				: UDINT;	(* error code *)
+	bSystemFolderOK		: BOOL;		(* TRUE = system folders OK *)
+	sStatus					: STRING(25);	(* system folder status *)
+	sLocalArchiveDBPath		: T_FolderPath;	(*local ArchiveDB path*)
+	sLocalBridgePath 			: T_FolderPath;	(* local Bridge path *)
+	sLocalPCMPath 			: T_FolderPath;	(* local PCM path *)
+	sLocalPCMIncomingPath 	: T_FolderPath;	(* local PCM/Incoming path *)
+	sLocalOCVPath 			: T_FolderPath;	(* local OCV path *)
+	sLocalOACPath 			: T_FolderPath;	(* local OAC path *)
+	sLocalCACPath 			: T_FolderPath;	(* local CAC path *)
+	sLocalPACPath 			: T_FolderPath;	(* local PAC path *)
+	sLocalOHMPath 			: T_FolderPath;	(* local OHM path *)
+	sLocalCHMPath 			: T_FolderPath;	(* local CHM path *)
+	sLocalPHMPath			: T_FolderPath;	(* local PHM path *)
+	sLocalKPIPath 			: T_FolderPath;	(* local KPI path *)
+	sLocalHMIPath 			: T_FolderPath;	(* local HMI path *)
+	sLocalSettingsPath		 	: T_FolderPath;	(* local Setting*)
+	sLocalBackupsPath			: T_FolderPath; (*local Setting/Backup path*)
+	sLocalTemplatesPath		: T_FolderPath;	(* local Templates path *)
+	sLocalOrcaPath			: T_FolderPath;	(* local Orca path *)
+	sLocalSystemLogPath			: T_FolderPath;	(* local Log path *)
+	sLocaCameraPath			: T_FolderPath;	(* local Camera path *)
+
+END_VAR
+VAR
+	fbExecute				: R_TRIG;
+	eState				: E_SYSTEM_MaintainFolders;
+	eErrorState			: E_SYSTEM_MaintainFolders;
+	nMaxIndex			: INT;
+	nIndex				: INT;
+	eCmdType		: E_EnumCmdType;
+	fbFindFolder		: FB_EnumFindFileEntry;
+	fbCreateFolder			: FB_CreateDir;
+
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_FOLDER_IDLE:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			(* max number of BASE folders and start with 1st folder *)
+			nMaxIndex := UDINT_TO_INT(SIZEOF(aBaseFolder) / SIZEOF(aBaseFolder[1]));
+			nIndex := 1;
+			eCmdType := eEnumCmd_First;
+
+			//eState := E_FOLDER_CREATEBASEPATH;
+			eState := E_FOLDER_ININT_CHECK;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+	E_FOLDER_ININT_CHECK:
+					eCmdType := eEnumCmd_First;
+					eState := E_FOLDER_CHECK;
+	
+	E_FOLDER_CHECK:
+
+		(* find folder *)
+		fbFindFolder(
+			sNetId		:= '',
+			sPathName	:= CONCAT(sBasePath, aBaseFolder[nIndex]),
+			eCmd		:= eCmdType,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* find folder complete *)
+		IF fbFindFolder.bBusy = FALSE THEN
+
+			(* find folder completed OK *)
+			IF fbFindFolder.bError = FALSE THEN
+
+				(* folder found *)
+				IF fbFindFolder.stFindFile.fileAttributes.bDirectory = TRUE THEN
+
+				
+						(* all BASE folders completed *)
+				IF nIndex = nMaxIndex THEN
+
+					eState := E_FOLDER_DONE;
+
+				(* more BASE folders *)
+				ELSE
+					nIndex := nIndex + 1;
+					eCmdType := eEnumCmd_Abort;
+					eState := E_FOLDER_ININT_CHECK;
+				END_IF
+
+				(* end of list *)
+				ELSIF fbFindFolder.bEOE = TRUE THEN
+
+						eState := E_FOLDER_CREATEBASEPATH;
+				END_IF
+
+			(* find folder completed OK *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbFindFolder.nErrID;
+				eErrorState := eState;
+
+				eState := E_FOLDER_DONE;
+			END_IF
+
+			(* close off fbFindFolder *)
+			fbFindFolder(bExecute := FALSE);
+		END_IF
+		
+	(* create BASE folders *)
+	E_FOLDER_CREATEBASEPATH:
+
+		(* create folder *)
+		fbCreateFolder(
+			sNetId		:= '',
+			sPathName	:= CONCAT(sBasePath, aBaseFolder[nIndex]),
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* create folder complete *)
+		IF fbCreateFolder.bBusy = FALSE THEN
+
+			(* create folder completed OK or folder already exists *)
+			IF fbCreateFolder.bError = FALSE OR (fbCreateFolder.bError = TRUE AND fbCreateFolder.nErrId = cFAILED_OBJECT_ALREADY_EXIST) THEN
+
+				(* all BASE folders completed *)
+				IF nIndex = nMaxIndex THEN
+
+					eState := E_FOLDER_DONE;
+
+				(* more BASE folders *)
+				ELSE
+
+					(* next BASE folder *)
+					nIndex := nIndex + 1;
+					eState := E_FOLDER_ININT_CHECK;
+				END_IF
+
+			(* create folder error *)
+			ELSE
+
+				(* no error active *)
+				IF bError = FALSE THEN
+
+					(* update outputs *)
+					bError := TRUE;
+					nErrorID := fbCreateFolder.nErrId;
+					eErrorState := eState;
+					sStatus := CONCAT(sBasePath, aBaseFolder[nIndex]);
+				END_IF
+
+				eState := E_FOLDER_DONE;
+			END_IF
+
+			(* close off fbCreateFolder *)
+			fbCreateFolder(bExecute := FALSE);
+		END_IF
+
+
+	(* done *)
+	E_FOLDER_DONE:
+
+		(* no error occurred *)
+		IF bError = FALSE THEN
+
+			(* update status *)
+			bSystemFolderOK 		:= TRUE;
+			sStatus 				:= 'Folders OK';
+
+			(* populate local folder paths *)
+			sLocalBridgePath		:= CONCAT(sBasePath, aBaseFolder[1]);
+			sLocalPCMPath 		:= CONCAT(sBasePath, aBaseFolder[28]);
+			sLocalPCMIncomingPath		:= CONCAT(sBasePath, aBaseFolder[31]);
+			sLocalOCVPath 		:= CONCAT(sBasePath, aBaseFolder[21]);
+			sLocalOACPath 		:= CONCAT(sBasePath, aBaseFolder[19]);
+			sLocalCACPath 		:= CONCAT(sBasePath, aBaseFolder[4]);
+			sLocalPACPath 		:= CONCAT(sBasePath, aBaseFolder[32]);
+			sLocalOHMPath 		:= CONCAT(sBasePath, aBaseFolder[23]);
+			sLocalCHMPath		:= CONCAT(sBasePath, aBaseFolder[9]);
+			sLocalPHMPath		:= CONCAT(sBasePath, aBaseFolder[33]);
+			sLocalKPIPath 		:= CONCAT(sBasePath, aBaseFolder[15]);
+			sLocalHMIPath	 	:= CONCAT(sBasePath, aBaseFolder[14]);
+			sLocalSettingsPath 		:= CONCAT(sBasePath, aBaseFolder[37]);
+			sLocalBackupsPath 	:= CONCAT(sBasePath, aBaseFolder[38]);
+			sLocalTemplatesPath	:= CONCAT(sBasePath, aBaseFolder[39]);
+			sLocalOrcaPath		:= CONCAT(sBasePath, aBaseFolder[40]);
+			sLocalSystemLogPath		:= CONCAT(sBasePath, aBaseFolder[41]);
+			sLocaCameraPath		:= CONCAT(sBasePath, aBaseFolder[42]);
+			sLocalArchiveDBPath		:= CONCAT(sBasePath, aBaseFolder[43]);
+
+		(* else *)
+		ELSE
+
+			(* clear local paths *)
+			sLocalBridgePath := '';
+			sLocalPCMPath := '';
+			sLocalPCMIncomingPath	:= '';
+			sLocalOCVPath := '';
+			sLocalOACPath := '';
+			sLocalCACPath := '';
+			sLocalPACPath := '';
+			sLocalOHMPath := '';
+			sLocalCHMPath := '';
+			sLocalPHMPath := '';
+			sLocalKPIPath := '';
+			sLocalHMIPath := '';
+			sLocalSettingsPath 	:= '';
+			sLocalBackupsPath :='';
+			sLocalTemplatesPath :='';
+			sLocalOrcaPath :='';
+			sLocalSystemLogPath	:='';
+			sLocaCameraPath		:='';
+			sLocalArchiveDBPath	:='';
+		END_IF
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_FOLDER_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_FOLDER_IDLE;
+
+	(* reset outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+	nErrorID := 0;
+	bSystemFolderOK := FALSE;
+	sStatus := '';
+	sLocalBridgePath := '';
+	sLocalPCMPath := '';
+	sLocalPCMIncomingPath	:= '';
+	sLocalOCVPath := '';
+	sLocalOACPath := '';
+	sLocalCACPath := '';
+	sLocalPACPath := '';
+	sLocalOHMPath := '';
+	sLocalCHMPath := '';
+	sLocalPHMPath := '';
+	sLocalKPIPath := '';
+	sLocalHMIPath := '';
+	sLocalSettingsPath 	:= '';
+	sLocalBackupsPath :='';
+	sLocalTemplatesPath :='';
+	sLocalOrcaPath :='';
+	sLocalSystemLogPath	:='';
+	sLocaCameraPath		:='';
+	sLocalArchiveDBPath	:='';
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

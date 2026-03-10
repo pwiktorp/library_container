@@ -1,0 +1,119 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MovingWindowTimer" Id="{57b297bf-f931-445e-8a11-d82fe6d2af16}" SpecialFunc="None">
+    <Declaration><![CDATA[(* Returns the difference between new value and historical value.
+Values are added to a buffer on a fixed timebase, oldest value is deleted after 120 samples.
+Time difference between assessed values is specified by tWindowPeriod *)
+FUNCTION_BLOCK FB_MovingWindowTimer
+VAR_INPUT
+	bEnable			: BOOL;
+	fInput			: LREAL;	(* input position *)
+	tSamplePeriod	: TIME;		(* time period between each new value being logged, T#0ms = every cycle *)
+	tWindowPeriod	: TIME;		(* time period over which to asses change of input value *)
+END_VAR
+VAR_OUTPUT
+	bRunning		: BOOL;		(* moving window being calculated without problem *)
+	bError			: BOOL;		(* error condition active *)
+	bNewValue		: BOOL;		(* set TRUE when a new value is logged and output is updated *)
+	fDeltaPerSec	: LREAL;	(* change in input value per second *)
+	fDeltaPerMin	: LREAL;	(* change in input value per minute *)
+	fDeltaPerHour	: LREAL;	(* change in input value per hour *)
+END_VAR
+VAR
+	fbEnable		: R_TRIG;
+	fbTaskTime		: FB_SYSTEM_TaskInfo;
+	fTaskCycleTime	: LREAL;
+	arrValue		: ARRAY[1..120] OF LREAL;
+	nMaxSamples		: UINT;
+	fSamplePeriod	: LREAL;
+	fWindowPeriod	: LREAL;
+	nSamples		: UINT;
+	fTimer			: LREAL;
+	nLoggedSamples	: UINT;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		LREAL now used in place of REAL
+
+-------------------------------------------------------------------------------------------------
+07/03/2012	1.09.00	PB		TaskTime and MaxSamples are calculated and arrValue is cleared on rising edge of bEnable
+05/02/2010	1.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* detect rising edge of bEnable *)
+fbEnable(CLK := bEnable);
+
+(* moving window enabled *)
+IF bEnable = TRUE THEN
+
+	(* on rising edge of bEnable *)
+	IF fbEnable.Q = TRUE THEN
+
+		(* time base of current task *)
+		fbTaskTime();
+		fTaskCycleTime := fbTaskTime.fTaskTimeMicrosecs / 1000;
+
+		(* clear array *)
+		MEMSET(ADR(arrValue), 16#00, SIZEOF(arrValue));
+
+		(* calculate max no of samples that can be handled *)
+		nMaxSamples := SIZEOF(arrValue) / SIZEOF(arrValue[1]);
+	END_IF
+
+	fSamplePeriod := MAX(fTaskCycleTime, TIME_TO_REAL(tSamplePeriod));
+	fWindowPeriod := MAX(fTaskCycleTime, TIME_TO_REAL(tWindowPeriod));
+	nSamples := lREAL_TO_UINT(F_SafeDIV(fWindowPeriod, fSamplePeriod));
+
+	(* no of samples specified exceeds size of array *)
+	IF nSamples > nMaxSamples THEN
+
+		(* set ERROR flag, use maximum number of samples allowed *)
+		bError := TRUE;
+		nSamples := nMaxSamples;
+	END_IF
+
+	(* update timer *)
+	fTimer := fTimer + fTaskCycleTime;
+
+	(* time to store new sample *)
+	IF fTimer >= fSamplePeriod THEN
+
+		bNewValue := TRUE;
+		nLoggedSamples := MIN(nLoggedSamples + 1, nSamples);
+
+		(* shift data by 1 element in fArray and add new sample to array *)
+		MEMMOVE(ADR(arrValue[2]), ADR(arrValue[1]), SIZEOF(arrValue[1]) * (nMaxSamples - 1));
+		arrValue[1] := fInput;
+
+		(* remove complete sample time from timer *)
+		fTimer := fTimer - fSamplePeriod;
+
+		(* calculate position change over specified number of samples *)
+		fDeltaPerSec := F_SafeDIV((arrValue[1] - arrValue[nLoggedSamples]) * 1000.0, (fSamplePeriod * UINT_TO_REAL(nLoggedSamples)));
+		fDeltaPerMin := fDeltaPerSec * 60.0;
+		fDeltaPerHour := fDeltaPerMin * 60.0;
+
+	(* no new sample *)
+	ELSE
+
+		bNewValue := FALSE;
+	END_IF
+
+(* moving window disabled *)
+ELSE
+
+	bRunning := FALSE;
+	bError := FALSE;
+	bNewValue := FALSE;
+	fDeltaPerSec := 0.0;
+	fDeltaPerMin := 0.0;
+	nLoggedSamples := 0;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

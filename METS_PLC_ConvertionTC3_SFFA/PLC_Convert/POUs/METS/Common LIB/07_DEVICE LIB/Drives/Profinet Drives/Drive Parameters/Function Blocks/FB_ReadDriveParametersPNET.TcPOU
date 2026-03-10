@@ -1,0 +1,177 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_ReadDriveParametersPNET" Id="{faa8f75f-0f80-44bf-9f99-2c87015d6d59}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ReadDriveParametersPNET
+(* ---------------------------------------------------------------------------
+//  
+// ---------------------------------------------------------------------------
+// functionality: Parameter Read
+// ---------------------------------------------------------------------------
+// change log table:
+// version        date          Version/Author         changes applied
+//  1.0         01.06.2020        N Bailey            Creation of the original
+// ===========================================================================
+*)
+VAR_INPUT
+	i_xRead									:BOOL;				(*Read Data*)
+	i_siDriveID								:USINT:=1; 			(*The ID is 1 for the controller unit, 2 for the drive object A and 3 for the drive*)
+																(*object B of a double/triple drive. The drive ID is set in the starter software. 1 – 16 is possible.*)
+	i_AMSNETID_ProfinetMasterEthercat			:T_AmsNetId:='';		(*NetID of Profibus Master EL6631*)
+	i_uiAdsPortOfDrive						:UINT; 				(*ADSAddress (Acyclic Services) on ADS tab in profinet device - This maps to iProfinetPort*)
+	i_pGobalDriveSema						:POINTER TO BOOL; 	(*Global Sema for Drive*)
+END_VAR
+VAR_IN_OUT
+	iq_stParameters 							:ST_Parameters;  		(*Parameters , this must include the datatype*)
+END_VAR
+VAR_OUTPUT
+	q_xDone									:BOOL;
+	q_xError									:BOOL;
+	q_xBusy									:BOOL;
+END_VAR
+VAR
+	fbReadParameters						:FB_Dpv1ReadPNET;
+	usiRequestRef 							:USINT;
+	abDpv1ReqData							:ARRAY[0..iMAX_DPV1_SIZE]OF BYTE;
+	abDpv1ResData    						:ARRAY [1..iMAX_DPV1_SIZE_PNET_RES] OF BYTE;
+	astDpv1Parameter 						:ARRAY [1..iMAX_DPV1_PARAMS] OF ST_Dpv1ParamAddrEx;(* list of parameters *)
+	astDpv1ValueHeaderEx 					:ARRAY [1..iMAX_DPV1_PARAMS] OF ST_Dpv1ValueHeaderEx;(* list of values *)
+	usiNumberOfParameters					:USINT; (*1 to 39*)
+	xRead									:BOOL;
+	udiDpvReqDataLen						:UDINT;
+	udiDpv1ResDataLen						:UDINT;
+	xReadBusy								:BOOL;
+	xReadError								:BOOL;
+	xErrorValues								:BOOL;
+	udiReadErrID								:UDINT;
+	bReadErrorClass							:BYTE;
+	bReadErrorCode							:BYTE;
+	fbRTRIG_ReadBusyComplete				:BOOL;
+	iState									:INT;
+	fbRTRIG_Read							:R_trig;
+	iLoop									:INT;
+	iParameterNumber						:INT;
+	stDataPtnAdrInfo							:ST_DataPntAdr;
+	fbTON_TimeOut							:ton;
+END_VAR
+
+VAR CONSTANT
+	ctDpv1ReadPNetTimeOut					:TIME:=T#3S;
+	ctOverallTimeOut							:TIME:=T#5S;
+	cusiNumOfElements						:USINT:=1;
+	cusiNumOfValues							:USINT:=1;
+	cusiAttributeValue							:USINT:=16#10;
+	cudiDpvReqDataLen						:UDINT:=240;
+	cudiDpv1ResDataLen						:UDINT:=240;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Trigger Write*)
+fbRTRIG_Read(CLK:=i_xRead);
+
+(*TimeOut*)
+fbTON_TimeOut(In:=q_xBusy,Pt:=ctOverallTimeOut);
+
+ CASE iState  OF
+	 
+	0:(*Not Active*)
+		xRead:=FALSE;
+		q_xBusy := FALSE;
+		IF fbRTRIG_Read.Q THEN
+			iState:=5;
+			q_xDone := FALSE;
+            q_xError := FALSE;
+			q_xBusy := TRUE;
+		END_IF
+	5:(*Wait for Sema*)
+		IF TestAndSet(i_pGobalDriveSema^) THEN
+			iState:=10;
+			usiNumberOfParameters:=0;
+		END_IF
+	10:(*Init*)
+		(*Transfer TO Dpv datatype*)
+		FOR iLoop := 1 TO cPARAMETER_STORAGE_SIZE DO
+			astDpv1Parameter[iLoop].iParameterNumber := iq_stParameters.astParameterList[iLoop].uiParameter;
+			IF astDpv1Parameter[iLoop].iParameterNumber> 0 THEN
+			   usiNumberOfParameters:=usiNumberOfParameters + 1;
+			END_IF
+			astDpv1Parameter[iLoop].iSubIndex := iq_stParameters.astParameterList[iLoop].uiSubIndex;
+			astDpv1Parameter[iLoop].iNumOfElements:=cusiNumOfElements;
+			astDpv1Parameter[iLoop].iNumOfValues:=cusiNumOfValues;
+			astDpv1Parameter[iLoop].iAttribute:=cusiAttributeValue;
+			astDpv1Parameter[iLoop].eFormat:=iq_stParameters.astParameterList[iLoop].eFormat;
+			stDataPtnAdrInfo:=FC_ReturnPointerForType(i_eFormat:=iq_stParameters.astParameterList[iLoop].eFormat, i_pstParameter:=ADR(iq_stParameters.astParameterList[iLoop]));
+			astDpv1Parameter[iLoop].iDataAddr:=stDataPtnAdrInfo.pAddress;
+			astDpv1Parameter[iLoop].iDataSize:=stDataPtnAdrInfo.udiSize;
+    	END_FOR;
+		(*Number of Parameters*)
+		IF usiNumberOfParameters < 1 THEN
+			usiNumberOfParameters:=39;
+		ELSIF usiNumberOfParameters > 39 THEN
+			usiNumberOfParameters:=39;
+		END_IF;
+		(*Create DPV1 telegram*)
+		F_CreateDpv1ReadReqPkgPNET(pDpv1ReqData:=ADR(abDpv1ReqData), iNumOfParams:=usiNumberOfParameters, iDriveId:=i_siDriveID,
+						   stDpv1Parameter:=astDpv1Parameter );
+		iState:=20;
+	
+	20:(*Read Initiate*)
+		xRead:=TRUE;
+		IF xReadBusy THEN
+			iState:=30;
+		END_IF
+		IF fbTON_TimeOut.Q THEN 
+			iState:=50;
+		END_IF
+		
+	30:(*Read In Progress*)
+		IF NOT xReadBusy THEN
+			iState:=40;
+		END_IF
+		IF fbTON_TimeOut.Q THEN 
+			iState:=50;
+		END_IF
+		
+	40:(*PNET Read Complete*)
+		(*swaps the byte order of parameters with data types with more than one byte in the DPV1 telegram*)
+		F_SplitDpv1ReadResPkgPNET(pDpv1ResData:= ADR(abDpv1ResData), stDpv1Parameter:= astDpv1Parameter, stDpv1ValueHeaderEx:=astDpv1ValueHeaderEx);
+		IF xReadError THEN
+			iState:=50;
+		ELSE
+			iState:=100;
+		END_IF
+	
+	50:(*Error*)
+		q_xError:=TRUE;
+		i_pGobalDriveSema^:=FALSE;
+		iState:=0;
+		
+	100:(*Read Complete*)
+		q_xDone :=TRUE;
+		i_pGobalDriveSema^:=FALSE;
+		iState:=0;
+ END_CASE;
+
+(*Read Parameters*)
+fbReadParameters(
+	bExecute:=xRead, 
+	aNetId:=i_AMSNETID_ProfinetMasterEthercat , 
+	iProfinetPort:=i_uiAdsPortOfDrive, 
+	iDriveId:=i_siDriveID, 
+	pDpv1ReqData:=ADR(abDpv1ReqData), 
+	iDpv1ReqDataLen:=cudiDpvReqDataLen , 
+	pDpv1ResData:=ADR(abDpv1ResData) , 
+	iDpv1ResDataLen:=cudiDpv1ResDataLen , 
+	tTmOut:=ctDpv1ReadPNetTimeOut, 
+	bBusy=>xReadBusy, 
+	bError=> xReadError, 
+	bErrorValues=> xErrorValues, 
+	iErrId=> udiReadErrID, 
+	iErrorClass=>bReadErrorClass , 
+	iErrorCode=> bReadErrorCode, 
+	iRequestRef:=usiRequestRef);
+	]]></ST>
+    </Implementation>
+    <LineIds Name="FB_ReadDriveParametersPNET">
+      <LineId Id="62" Count="104" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

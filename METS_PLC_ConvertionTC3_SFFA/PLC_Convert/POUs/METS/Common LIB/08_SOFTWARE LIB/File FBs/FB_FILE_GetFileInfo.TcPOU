@@ -1,0 +1,190 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_FILE_GetFileInfo" Id="{3ff494b3-da32-4f86-b1b4-c18f0e81093e}" SpecialFunc="None">
+    <Declaration><![CDATA[(* check if a file exists by attempting to read the file attributes *)
+FUNCTION_BLOCK FB_FILE_GetFileInfo
+VAR_INPUT
+	bExecute			: BOOL;			(* set TRUE to get file info *)
+	strPathSource		: T_MaxString;	(* folder path for SOURCE file, wildcard chars '*' and '?' can be used *)
+	strFileName		: T_MaxString;	(* name of file to be copied, wildcard chars '*' and '?' can be used *)
+	tTimeout			: TIME;			(* timeout for each file operation *)
+END_VAR
+VAR_OUTPUT
+	bDone			: BOOL;			(* TRUE = file access complete *)
+	bBusy			: BOOL;			(* TRUE = file access in progress *)
+	bError			: BOOL;			(* TRUE = error occurred during process *)
+	nErrorID			: UDINT;		(* error code *)
+	bFileExists		: BOOL;			(* TRUE = specified file exists *)
+	bFileSizeNotZero	: BOOL;			(* TRUE = file size >0 bytes *)
+	bFileNotFound		: BOOL;			(* TRUE = specified file not found *)
+	nFileSizeLo		: UDINT;		(* file size low part (<4Gb) *)
+	nFileSizeHi		: UDINT;		(* file size high part (>4Gb) *)
+	strFileFound		: T_MaxString;	(* full name of file found *)
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	eState			: E_FILE_State;
+	eErrorState		: E_FILE_State;
+	fbReadFileAttrib	: FB_EnumFindFileEntry;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* compare files on rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* initialise before scan *)
+	E_FILE_IDLE:
+
+		(* start new cycle *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+			eErrorState := eState;
+			bFileExists := FALSE;
+			bFileSizeNotZero := FALSE;
+			bFileNotFound := FALSE;
+			nFileSizeLo := 0;
+			nFileSizeHi := 0;
+			strFileFound := '';
+
+			eState := E_FILE_READ;
+
+		(* reset status outputs when no cycle is required and bExecute is reset *)
+		ELSIF bExecute = FALSE THEN
+
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+			bFileExists := FALSE;
+			bFileSizeNotZero := FALSE;
+			bFileNotFound := FALSE;
+			nFileSizeLo := 0;
+			nFileSizeHi := 0;
+			strFileFound := '';
+		END_IF
+
+
+	(* read file *)
+	E_FILE_READ:
+
+		(* read file attributes of file *)
+		fbReadFileAttrib(
+			sNetId		:= '',
+			sPathName	:= CONCAT(strPathSource, strFileName),
+			eCmd		:= eEnumCmd_First,
+			bExecute	:= TRUE,
+			tTimeout	:= tTimeout
+		);
+
+		(* file read completed *)
+		IF fbReadFileAttrib.bBusy = FALSE THEN
+
+			(* file read completed OK *)
+			IF fbReadFileAttrib.bError = FALSE THEN
+
+				(* file was found *)
+				IF fbReadFileAttrib.bEOE = FALSE THEN
+
+					(* update outputs *)
+					bFileExists := TRUE;
+					nFileSizeLo := fbReadFileAttrib.stFindFile.fileSize.dwLowPart;
+					nFileSizeHi := fbReadFileAttrib.stFindFile.fileSize.dwHighPart;
+					strFileFound := fbReadFileAttrib.stFindFile.sFileName;
+
+					(* file size > 0 bytes *)
+					IF nFileSizeLo > 0 OR nFileSizeHi > 0 THEN
+
+						bFileSizeNotZero := TRUE;
+					END_IF
+
+					(* release internal resources *)
+					eState := E_FILE_ABORT;
+
+				(* file was not found *)
+				ELSE
+
+					(* internal resources released automatically, no need to abort *)
+					bFileNotFound := TRUE;
+					eState := E_FILE_DONE;
+				END_IF
+
+			(* file read error *)
+			ELSE
+
+				(* no previous error *)
+				IF bError = FALSE THEN
+
+					(* log error code and failure state *)
+					bError := TRUE;
+					nErrorID := fbReadFileAttrib.nErrID;
+					eErrorState := eState;
+				END_IF
+
+				(* abort to release resources *)
+				eState := E_FILE_ABORT;
+			END_IF
+
+			(* close off fbReadFileAttrib *)
+			fbReadFileAttrib(bExecute := FALSE);
+		END_IF
+
+
+	(* abort fbReadFileAttrib to release all resources *)
+	E_FILE_ABORT:
+
+		(* abort fbReadFileAttrib to release internal resources *)
+		fbReadFileAttrib(
+			eCmd		:= eEnumCmd_Abort,
+			bExecute	:= TRUE
+		);
+
+		(* abort file attricute read complete *)
+		IF fbReadFileAttrib.bBusy = FALSE THEN
+
+			(* abort file attricute read completed OK *)
+			IF fbReadFileAttrib.bError = FALSE THEN
+
+				(* move to COMPARE file attributes state *)
+				eState := E_FILE_DONE;
+
+			(* abort error *)
+			ELSE
+
+				(* no error occurred in previous states *)
+				IF bError = FALSE THEN
+
+					(* log error code and failure state *)
+					bError := TRUE;
+					nErrorID := fbReadFileAttrib.nErrID;
+					eErrorState := eState;
+				END_IF
+
+				eState := E_FILE_DONE;
+			END_IF
+
+			(* close off fbReadFileAttrib *)
+			fbReadFileAttrib(bExecute := FALSE);
+		END_IF
+
+
+	(* file access complete *)
+	E_FILE_DONE:
+
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		(* return to IDLE state *)
+		eState := E_FILE_IDLE;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_FILE_GetFileInfo">
+      <LineId Id="26" Count="153" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

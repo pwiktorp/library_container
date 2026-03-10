@@ -1,0 +1,466 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_CAC_MoveToArchive" Id="{d26b30c1-1e09-407b-a746-97ebd64b08dd}" SpecialFunc="None">
+    <Declaration><![CDATA[(* reads CAC files from CAC folder, deletes OAC file and copies CAC file into Archive *)
+FUNCTION_BLOCK FB_CAC_MoveToArchive
+VAR_INPUT
+	bExecute			: BOOL;		(* set TRUE to archive OAC files *)
+	strLocalOACPath		: STRING(255);	(* path to CaseTrace OAC folder *)
+	strLocalCACPath		: STRING(255);	(* path to CaseTrace CAC folder *)
+	strLocalOCVPath		: STRING(255);	(* path to CaseTrace OAC folder *)
+	nConfirmationPack1	: INT;
+	nConfirmationPack2	: INT;
+	bUseInterimCodeForValidation		: BOOL;
+	sSystemTime			: TIMESTRUCT;
+	strPITCode				: T_CodePIT;
+	strProductionOrder			: T_CodePO;
+END_VAR
+VAR_IN_OUT
+	stCodeInfo_Pack			: ST_CodeInfo;
+	stCodeInfo_Intermediate		: ST_CodeInfo;
+END_VAR
+VAR_OUTPUT
+	bDone 				: BOOL;		(* TRUE = OAC archive complete *)
+	bBusy 				: BOOL;		(* TRUE = OAC archive active *)
+	bError 				: BOOL;		(* TRUE = OAC archive error *)
+	nErrorID			: UDINT;	(* error code *)
+	nOACFilesDeleted	: UDINT;
+	nCACFilesDeleted	: UDINT;
+	nOCVFilesDeleted	: UDINT;
+	strCACFile			: T_CAC_Filename;
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	eState				: E_CAC_State;
+	eErrorState			: E_CAC_State;
+
+	fbFindCACFile		: FB_EnumFindFileEntry;
+	eCmdType			: E_EnumCmdType;
+	fbReadCACData		: FB_XmlSrvRead;
+	stCACData			: ST_CAC_Data;
+	strDateFolder		: STRING(11);
+	nOuterIndex			: INT;
+	strOACFile			: T_OAC_Filename;
+	strOCVFile			: T_OAC_Filename;
+	strSerialCode			: STRING;
+	aOCVFileCodeName		: ARRAY[1..2] OF T_MaxString;
+	fbCreateFolder		: FB_CreateDir;
+	fbDeleteFile		: FB_FileDelete;
+	fbCopyFile			: FB_FILE_CopyByByte;
+	(*fbMoveFile			: FB_FileRename;*)
+	fbDeleteFile2			: FB_FileDelete;
+END_VAR
+
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* monitor bExecute for rising edge *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_CAC_IDLE:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+			nOACFilesDeleted := 0;
+			nCACFilesDeleted := 0;
+			nOCVFilesDeleted := 0;
+
+			(* initiliase vars *)
+			eCmdType := eEnumCmd_First;
+			eErrorState := eState;
+			MEMSET(ADR(strCACFile), 16#00, SIZEOF(strCACFile));
+
+			eState := E_CAC_FINDFILE;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* clear outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* build list of CAC files for archiving *)
+	E_CAC_FINDFILE:
+
+		(* build list *)
+		fbFindCACFile(
+			sNetId		:= '',
+			sPathName	:= CONCAT(strLocalCACPath, 'CAC_*.xml'),
+			eCmd		:= eCmdType,
+			bExecute	:= TRUE,
+			tTimeout	:= T#5s
+		);
+
+		(* find CAC file complete *)
+		IF fbFindCACFile.bBusy = FALSE THEN
+
+			(* find CAC file completed OK *)
+			IF fbFindCACFile.bError = FALSE THEN
+
+				(* end of CAC file list *)
+				IF fbFindCACFile.bEOE = TRUE OR eCmdType = eEnumCmd_Abort THEN
+
+					eState := E_CAC_DONE;
+
+				(* next CAC file *)
+				ELSE
+
+					(* next CAC file *)
+					strCACFile := fbFindCACFile.stFindFile.sFileName;
+					eCmdType := eEnumCmd_Next;
+					MEMSET(ADR(stCACData), 16#00, SIZEOF(stCACData));
+
+					eState := E_CAC_READDATA;
+				END_IF
+
+			(* find CAC file error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbFindCACFile.nErrID;
+				eErrorState := eState;
+
+				eState := E_CAC_DONE;
+			END_IF
+
+			(* close off fbFindCACFile *)
+			fbFindCACFile(bExecute := FALSE);
+		END_IF
+
+
+	(* load CAC file *)
+	E_CAC_READDATA:
+
+		(* load CAC data *)
+		fbReadCACData(
+			sNetId		:= '',
+			ePath		:= PATH_GENERIC,
+			nMode		:= XMLSRV_SKIPMISSING,
+			pSymAddr	:= ADR(stCACData),
+			cbSymSize	:= SIZEOF(stCACData),
+			sFilePath	:= CONCAT(strLocalCACPath, strCACFile),
+			sXPath		:= '/Case',
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* load CAC data complete *)
+		IF fbReadCACData.bBusy = FALSE THEN
+
+			(* load CAC data completed OK *)
+			IF fbReadCACData.bError = FALSE THEN
+
+				(* date folder as YYYYMMD\ *)
+				(*strDateFolder := F_CONCAT3(F_DateCodeToDate(F_CASE_BarcodeToDateCode(stCACData.Barcode), sSystemTime), '\', '');*)
+				(*strSerialCode := F_CODE_GetItem(stCACData.Barcode, eCodeAIType.SerialCode, stMAchineConfig.stCodeInfo_Case);
+				strDateFolder := LEFT(strSerialCode ,7);*)
+				IF strPITCode <> '' THEN
+					strDateFolder := strPITCode;
+				ELSIF strProductionOrder  <> '' THEN
+					strDateFolder := strProductionOrder;
+				ELSE
+					strDateFolder := F_SYSTEM_SystemTimeToFolderName(sSystemTime);
+				END_IF
+
+				eState := E_CAC_CREATEFOLDER;
+
+			(* load CAC data error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbReadCACData.nErrId;
+				eErrorState := eState;
+
+				eState := E_CAC_FINDFILE;
+			END_IF
+
+			(* close off fbReadCACData *)
+			fbReadCACData(bExecute := FALSE);
+		END_IF
+
+
+	(* create folders *)
+	E_CAC_CREATEFOLDER:
+
+		(* create date archive folder *)
+		fbCreateFolder(
+			sNetId		:= '',
+			sPathName	:= F_CONCAT4(strLocalCACPath, 'Archive\', strDateFolder, '\'),
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* create folder complete *)
+		IF fbCreateFolder.bBusy = FALSE THEN
+
+			(* create folder completed OK or folder already exists *)
+			IF fbCreateFolder.bError = FALSE OR (fbCreateFolder.bError = TRUE AND fbCreateFolder.nErrId = 16#70C) THEN
+
+				(* OAC data was active when CAC file was produced *)
+				IF stCACData.CodingAndTrackingMode >= 7 THEN
+
+					(* OAC file management required, generate OAC file name *)
+					strOACFile := F_CONCAT3('OAC_', F_OUTER_BarcodeToHex(stCACData.Outer[1].Barcode), '.xml');
+					(*strOACFile := F_CONCAT3('OAC_', F_SCANNER_RemoveAIBrackets(stOACData.Barcode), '.xml');*)
+
+					nOuterIndex := 1;
+
+					eState := E_CAC_DELETEFILE;
+
+				(* OAC data was not active when CAC file was produced *)
+				ELSE
+
+					(* OAC file management not required*)
+					eState := E_CAC_COPYFILE;
+				END_IF
+
+			(* create folder error *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbCreateFolder.nErrId;
+				eErrorState := eState;
+
+				eState := E_CAC_FINDFILE;
+			END_IF
+
+			(* close off fbCreateFolder *)
+			fbCreateFolder(bExecute := FALSE);
+		END_IF
+
+
+	(* delete OAC files *)
+	E_CAC_DELETEFILE:
+
+		(* delete OAC file *)
+		fbDeleteFile(
+			sNetId		:= '',
+			sPathName	:= CONCAT(strLocalOACPath, strOACFile),
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* delete file complete *)
+		IF fbDeleteFile.bBusy = FALSE THEN
+
+			(* delete file completed OK *)
+			IF fbDeleteFile.bBusy = FALSE THEN
+
+				(* update counter *)
+				nOACFilesDeleted := nOACFilesDeleted + 1;
+			END_IF
+
+			(* all OAC files archived *)
+			IF nOuterIndex = stCACData.NumberOfOuters THEN
+
+				aOCVFileCodeName[1]	:=	F_CODE_GetItem(stCACData.Outer[1].AggregationCodes[1] , eCodeAIType.SerialCode,
+																	SEL(bUseInterimCodeForValidation, stCodeInfo_Pack, stCodeInfo_Intermediate));
+				strOCVFile := F_CONCAT3('OCV_', F_CodeToHex(aOCVFileCodeName[1]), '.xml');
+				nOuterIndex := 1;
+				eState := E_CAC_DELETEOCV1;
+				(*eState := E_CAC_COPYFILE;*)
+
+			(* more OAC files to be archived *)
+			ELSE
+
+				nOuterIndex := nOuterIndex + 1;
+				(* generate next OAC file name *)
+				strOACFile := F_CONCAT3('OAC_', F_OUTER_BarcodeToHex(stCACData.Outer[nOuterIndex].Barcode), '.xml');
+				(*strOACFile := F_CONCAT3('OAC_', F_SCANNER_RemoveAIBrackets(stOACData.Barcode), '.xml');*)
+
+			END_IF
+
+			(* close off fbDeleteFile *)
+			fbDeleteFile(bExecute := FALSE);
+		END_IF
+
+	E_CAC_DELETEOCV1:
+		(* delete 1st OCV file *)
+		fbDeleteFile(
+			sNetId		:= '',
+			sPathName	:= CONCAT(strLocalOCVPath, strOCVFile),
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* delete file complete *)
+		IF fbDeleteFile.bBusy = FALSE THEN
+
+			(* delete file completed OK *)
+			IF fbDeleteFile.bBusy = FALSE THEN
+
+				(* update counter *)
+				nOCVFilesDeleted := nOCVFilesDeleted + 1;
+			END_IF
+
+			(* all OAC files archived *)
+			IF nOuterIndex = stCACData.NumberOfOuters THEN
+
+				aOCVFileCodeName[2]	:=	F_CODE_GetItem(stCACData.Outer[1].AggregationCodes[2] , eCodeAIType.SerialCode,   stCodeInfo_Pack); (*no reason to have 2 diffrent intermediate codes*)
+				strOCVFile := F_CONCAT3('OCV_', F_CodeToHex(aOCVFileCodeName[2]), '.xml');
+				nOuterIndex := 1;
+				eState := E_CAC_DELETEOCV2;
+
+			(* more OAC files to be archived *)
+			ELSE
+
+				(* generate next OAC file name *)
+				nOuterIndex := nOuterIndex + 1;
+				aOCVFileCodeName[1]	:=	F_CODE_GetItem(stCACData.Outer[nOuterIndex].AggregationCodes[1] , eCodeAIType.SerialCode,
+																				SEL(bUseInterimCodeForValidation, stCodeInfo_Pack, stCodeInfo_Intermediate));
+				strOCVFile := F_CONCAT3('OCV_', F_CodeToHex(aOCVFileCodeName[1]), '.xml');
+			END_IF
+
+			(* close off fbDeleteFile *)
+			fbDeleteFile(bExecute := FALSE);
+		END_IF
+
+	E_CAC_DELETEOCV2:
+		(* delete 2nd OCV file *)
+		fbDeleteFile(
+			sNetId		:= '',
+			sPathName	:= CONCAT(strLocalOCVPath, strOCVFile),
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* delete file complete *)
+		IF fbDeleteFile.bBusy = FALSE THEN
+
+			(* delete file completed OK *)
+			IF fbDeleteFile.bBusy = FALSE THEN
+
+				(* update counter *)
+				nOCVFilesDeleted := nOCVFilesDeleted + 1;
+			END_IF
+
+			(* all OAC files archived *)
+			IF nOuterIndex = stCACData.NumberOfOuters THEN
+
+				eState := E_CAC_COPYFILE;
+
+			(* more OAC files to be archived *)
+			ELSE
+
+				(* generate next OAC file name *)
+				nOuterIndex := nOuterIndex + 1;
+				aOCVFileCodeName[2]	:=	F_CODE_GetItem(stCACData.Outer[nOuterIndex].AggregationCodes[2] , eCodeAIType.SerialCode,   stCodeInfo_Pack);
+				strOCVFile := F_CONCAT3('OCV_', F_CodeToHex(aOCVFileCodeName[2]), '.xml');
+			END_IF
+
+			(* close off fbDeleteFile *)
+			fbDeleteFile(bExecute := FALSE);
+		END_IF
+
+	(* copy CAC file to archive folder *)
+	E_CAC_COPYFILE:
+
+		(* copy CAC file *)
+		fbCopyFile(
+			bExecute		:= TRUE,
+			strPathSource	:= CONCAT(strLocalCACPath, strCACFile),
+			strPathTarget	:= F_CONCAT5(strLocalCACPath, 'Archive\', strDateFolder, '\',strCACFile),
+			strFileName		:= '',
+			tTimeout		:= T#1s
+		);
+
+		(* copy file complete *)
+		IF fbCopyFile.bBusy = FALSE THEN
+
+			(* copy file completed OK or CAC file not found *)
+			IF fbCopyFile.bError = FALSE THEN
+
+				eState := E_CAC_MOVEFILE;
+
+			(* copy command error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbCopyFile.nErrorId;
+				eErrorState := eState;
+
+				eState := E_CAC_FINDFILE;
+			END_IF
+
+			(* close off fbCopyFile *)
+			fbCopyFile(bExecute := FALSE);
+		END_IF
+
+
+	(* delete CAC to archive folder *)
+	E_CAC_MOVEFILE:
+
+		(* delete CAC file *)
+		fbDeleteFile2(
+			sNetId		:= '',
+			sPathName	:= CONCAT(strLocalCACPath, strCACFile),
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* delete file complete *)
+		IF fbDeleteFile2.bBusy = FALSE THEN
+
+			(* delete  file completed OK *)
+			IF fbDeleteFile2.bError = FALSE THEN
+
+				(* update counter *)
+				nCACFilesDeleted := nCACFilesDeleted + 1;
+
+				eState := E_CAC_FINDFILE;
+
+			(* delete command error or file not found *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbDeleteFile2.nErrId;
+				eErrorState := eState;
+
+				eState := E_CAC_FINDFILE;
+			END_IF
+
+			(* close off fbDeleteFile2 *)
+			fbDeleteFile2(bExecute := FALSE);
+		END_IF
+
+
+	(* complete *)
+	E_CAC_DONE:
+
+		(* update outputs *)
+		bBusy := FALSE;
+		bDone := TRUE;
+
+		eState := E_CAC_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_CAC_IDLE;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_CAC_MoveToArchive">
+      <LineId Id="52" Count="403" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

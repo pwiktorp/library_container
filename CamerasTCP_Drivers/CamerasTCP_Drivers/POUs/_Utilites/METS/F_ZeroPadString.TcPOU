@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_ZeroPadString" Id="{5a04378a-423e-4424-91d3-8c5b08c305bd}" SpecialFunc="None">
+    <Declaration><![CDATA[(* append leading zeroes to a string to make up to specified length, max 19 chars *)
+FUNCTION F_ZeroPadString : STRING(19)
+VAR_INPUT
+	strString		: STRING(19);	(* initial string *)
+	nPadLength 		: BYTE;		(* string length required *)
+END_VAR
+VAR
+	nMaxLength		: BYTE;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+03/08/2012	1.39.00	PB		String lengths reduced to 19 characters.
+							Trap added to prevent PLC from crashing if nPadLength > 19.
+12/11/2010	1.07.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* max string length *)
+nMaxLength := SIZEOF(F_ZeroPadString) - 1;
+
+(* initial string *)
+F_ZeroPadString := strString;
+
+(* string length is shorter than required/max length *)
+WHILE LEN(F_ZeroPadString) < MIN(nPadLength, nMaxLength) DO
+
+	(* append leading '0' char to string *)
+	F_ZeroPadString := CONCAT('0', F_ZeroPadString);
+END_WHILE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

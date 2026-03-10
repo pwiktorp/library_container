@@ -1,0 +1,207 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CX_EtherCATDevState" Id="{3c26ae66-7c8a-463e-97ef-00e54f4d1ec7}" SpecialFunc="None">
+    <Declaration><![CDATA[(* monitor state of EtherCAT slave devices *)
+FUNCTION_BLOCK FB_CX_EtherCATDevState
+VAR_INPUT
+	bExecute			: BOOL;		(* set TRUE to read EtherCAT slave device states *)
+	strAMSNetID			: T_AmsNetId;	(* EtherCAT master AMS Net ID *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;		(* TRUE = read device state complete *)
+	bBusy				: BOOL;		(* TRUE = read device state in progress *)
+	bError				: BOOL;		(* TRUE = read device state error *)
+	nErrorID			: UDINT;	(* error ID *)
+	nDevices			: INT;		(* number of devices *)
+	arrDevStatus		: ARRAY[1000..1512] OF ST_CX_EtherCATDeviceState;	(* array of device states *)
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	eState				: E_CX_EtherCATState;
+	eErrorState			: E_CX_EtherCATState;
+	arrDevAddr			: ARRAY[1..256] OF UINT;
+	arrDevState			: ARRAY[1..256] OF ST_EcSlaveState;
+	nMaxIndex			: INT;
+	nMaxAddr			: INT;
+
+	fbReadDevAddr		: FB_EcGetAllSlaveAddr;
+	fbReadDevState		: FB_EcGetAllSlaveStates;
+	nIndex				: INT;
+	nEcDevState			: WORD;
+	sStatusBits			: ST_EcSlaveStateBits;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_CX_EtherCATState.IDLE:
+
+		(* update arrDevStatus *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			(* max supported devices and max supported device address *)
+			nMaxIndex := TO_INT(SIZEOF(arrDevAddr) / SIZEOF(arrDevAddr[1]));
+			nMaxAddr := TO_INT(SIZEOF(arrDevStatus) / SIZEOF(arrDevStatus[1000]));
+			eErrorState := 0;
+
+			(* clear internal arrays *)
+			MEMSET(ADR(arrDevAddr), 16#00, SIZEOF(arrDevAddr));
+			MEMSET(ADR(arrDevState), 16#00, SIZEOF(arrDevState));
+
+			eState := E_CX_EtherCATState.READADDR;
+
+		(* bExecuet has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* get device addresses *)
+	E_CX_EtherCATState.READADDR:
+
+		(* read list of all EtherCAT device addresses present on the network *)
+		fbReadDevAddr(
+			sNetId		:= strAMSNetID,
+			pAddrBuf	:= ADR(arrDevAddr),
+			cbBufLen	:= SIZEOF(arrDevAddr),
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* read device addresses complete *)
+		IF fbReadDevAddr.bBusy = FALSE THEN
+
+			(* read device addresses completed OK *)
+			IF fbReadDevAddr.bError = FALSE THEN
+
+				(* total devices on the EtherCAT network *)
+				nDevices := TO_INT(fbReadDevAddr.nSlaves);
+
+				eState := E_CX_EtherCATState.READSTATE;
+
+			(* read device addresses error *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbReadDevAddr.nErrId;
+				eErrorState := 0;
+
+				eState := E_CX_EtherCATState.DONE;
+			END_IF
+
+			(* close off fbReadDevAddr *)
+			fbReadDevAddr(bExecute:= FALSE);
+		END_IF
+
+
+	(* get device states *)
+	E_CX_EtherCATState.READSTATE:
+
+		(* read list of device states for all EtherCAT devices *)
+		fbReadDevState(
+			sNetId		:= strAMSNetID,
+			pStateBuf	:= ADR(arrDevState),
+			cbBufLen	:= SIZEOF(arrDevState),
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* read device states complete *)
+		IF fbReadDevState.bBusy = FALSE THEN
+
+			(* read device states completed OK *)
+			IF fbReadDevState.bError = FALSE THEN
+
+				eState := E_CX_EtherCATState.MAP;
+
+			(* read device states error *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbReadDevState.nErrId;
+				eErrorState := 0;
+
+				eState := E_CX_EtherCATState.DONE;
+			END_IF
+
+			(* close off fbReadDevState *)
+			fbReadDevState(bExecute:= FALSE);
+		END_IF
+
+
+	(* map to arrDevStatus *)
+	E_CX_EtherCATState.MAP:
+
+		(* clear arrDevStatus *)
+		MEMSET(ADR(arrDevStatus), 16#00, SIZEOF(arrDevStatus));
+
+		(* for each device in list up to max supported devices *)
+		FOR nIndex := 1 TO MIN(nDevices, nMaxIndex) DO
+
+			(* device present and address will fit into arrDevStatus *)
+			IF arrDevAddr[nIndex] > 0 AND arrDevAddr[nDevices] < 1000 + nMaxAddr THEN
+
+				(* device exists *)
+				arrDevStatus[arrDevAddr[nIndex]].bPresent := TRUE;
+
+				(* update device and link status *)
+				arrDevStatus[arrDevAddr[nIndex]].nDeviceState := arrDevState[nIndex].deviceState;
+				arrDevStatus[arrDevAddr[nIndex]].nLinkState := arrDevState[nIndex].linkState;
+
+				(* convert EtherCAT State to Device Status String *)
+				MEMMOVE(ADR(nEcDevState), ADR(arrDevState[nIndex]), SIZEOF(nEcDevState));
+				arrDevStatus[arrDevAddr[nIndex]].strStatus := F_ConvStateToString(nEcDevState);
+
+				(* convert ST_EcSlaveState to status bits and extarct OP and ERROR states *)
+				sStatusBits := F_ConvSlaveStateToBits(arrDevState[nIndex]);
+				arrDevStatus[arrDevAddr[nIndex]].bOpMode := sStatusBits.bOp;
+				arrDevStatus[arrDevAddr[nIndex]].bError := sStatusBits.bError;
+			END_IF
+		END_FOR
+
+		eState := E_CX_EtherCATState.DONE;
+
+
+	(* done *)
+	E_CX_EtherCATState.DONE:
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_CX_EtherCATState.IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_CX_EtherCATState.IDLE;
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

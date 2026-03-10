@@ -1,0 +1,83 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_SYSTEM_CameraMonitor" Id="{dd985c45-fe59-457a-bb9a-cc8c6c4abcf6}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_SYSTEM_CameraMonitor : BOOL
+VAR_INPUT
+	bPCMLoaded					: BOOL;
+	bSettingsValid					: BOOL;
+	bEnablePacks					: BOOL;
+	bEnableAggregation				: BOOL;
+	bEnableCaseLabel				: BOOL;
+	nOuterSystemCameraGroup		: INT;
+	nCaseSystemCameraGroup		: INT;
+	bValidateOCVOnly					: BOOL;
+END_VAR
+
+
+VAR
+	nIndex	 : INT;
+	bPackSystemCamaraStatus	 : BOOL;
+	bOuterSystemCamaraStatus	 : BOOL;
+	bCaseSystemCamaraStatus	 : BOOL;
+	bCurrentCamaraStatus	 : BOOL;
+
+END_VAR
+(*All VAR_IN_OUT variables have been moved to the end of the declaration due to compatibility reasons*)
+VAR_IN_OUT
+	aCameraStatus						: ARRAY[1..cMAX_CAMERA_NUMBER] OF ST_SCANNER;
+	aCameraSettings					: ARRAY[1..cMAX_CAMERA_NUMBER] OF ST_SCANNER_Config;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bPackSystemCamaraStatus := TRUE;
+bOuterSystemCamaraStatus := TRUE;
+bCaseSystemCamaraStatus := TRUE;
+
+IF bEnablePacks  AND
+	nOuterSystemCameraGroup > 1 AND  nOuterSystemCameraGroup <= cMAX_CAMERA_NUMBER THEN
+
+	FOR nIndex :=1 TO nOuterSystemCameraGroup -1  DO
+		bPackSystemCamaraStatus := bPackSystemCamaraStatus AND (aCameraStatus[nIndex].bReady OR aCameraStatus[nIndex].sManualCtrlScanner.bConfigure OR aCameraSettings[nIndex].bDisableCameraUse);
+	END_FOR
+ELSE
+	bPackSystemCamaraStatus := TRUE;
+END_IF
+
+
+IF bEnableAggregation AND nOuterSystemCameraGroup < nCaseSystemCameraGroup AND NOT bValidateOCVOnly AND
+	nOuterSystemCameraGroup > 0  AND nOuterSystemCameraGroup <= cMAX_CAMERA_NUMBER AND
+	nCaseSystemCameraGroup > 1  AND nCaseSystemCameraGroup <= cMAX_CAMERA_NUMBER  THEN
+
+	FOR nIndex :=nOuterSystemCameraGroup TO nCaseSystemCameraGroup-1  DO
+		bOuterSystemCamaraStatus := bOuterSystemCamaraStatus AND (aCameraStatus[nIndex].bReady OR aCameraStatus[nIndex].sManualCtrlScanner.bConfigure OR aCameraSettings[nIndex].bDisableCameraUse);
+	END_FOR
+
+ELSIF bEnableAggregation AND nOuterSystemCameraGroup < nCaseSystemCameraGroup AND bValidateOCVOnly AND
+	nOuterSystemCameraGroup > 0  AND nOuterSystemCameraGroup <= cMAX_CAMERA_NUMBER AND
+	nCaseSystemCameraGroup > 1  AND nCaseSystemCameraGroup <= cMAX_CAMERA_NUMBER  THEN
+
+	FOR nIndex :=nOuterSystemCameraGroup TO nCaseSystemCameraGroup-4  DO
+		bOuterSystemCamaraStatus := bOuterSystemCamaraStatus AND (aCameraStatus[nIndex].bReady OR aCameraStatus[nIndex].sManualCtrlScanner.bConfigure OR aCameraSettings[nIndex].bDisableCameraUse);
+	END_FOR
+ELSE
+	bOuterSystemCamaraStatus := TRUE;
+END_IF
+
+
+IF bEnableCaseLabel AND NOT bValidateOCVOnly AND
+		nCaseSystemCameraGroup > 0 AND nCaseSystemCameraGroup <= cMAX_CAMERA_NUMBER THEN
+
+	FOR nIndex :=nCaseSystemCameraGroup TO  cMAX_CAMERA_NUMBER  DO
+		bCaseSystemCamaraStatus := bCaseSystemCamaraStatus AND (aCameraStatus[nIndex].bReady OR aCameraStatus[nIndex].sManualCtrlScanner.bConfigure OR aCameraSettings[nIndex].bDisableCameraUse);
+	END_FOR
+ELSE
+	bCaseSystemCamaraStatus := TRUE;
+END_IF
+
+
+F_SYSTEM_CameraMonitor := bPackSystemCamaraStatus AND bOuterSystemCamaraStatus AND bCaseSystemCamaraStatus  AND bPCMLoaded AND bSettingsValid;]]></ST>
+    </Implementation>
+    <LineIds Name="F_SYSTEM_CameraMonitor">
+      <LineId Id="26" Count="46" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

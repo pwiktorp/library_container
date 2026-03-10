@@ -1,0 +1,171 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CHM_SaveFLG_File" Id="{b81fc1cd-1e91-4114-9520-b197889a9d31}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_CHM_SaveFLG_File
+VAR_INPUT
+	bExecute							: BOOL;					(* set TRUE to write Case Produced file *)
+	sPath							: STRING(255);			(* path for target file C:\CaseTrace*)
+	sFLGFileName					: T_CHM_Filename;
+END_VAR
+VAR_OUTPUT
+	bDone							: BOOL;					(* TRUE = XML file write complete *)
+	bBusy							: BOOL;					(* TRUE = XML file write in progress *)
+	bError							: BOOL;					(* TRUE = XML file write error *)
+	nErrorID						: UDINT;				(* file write error code *)
+	sFileName						: STRING(255);		(* CAC file name generated from sCaseData *)
+	nImigeProcessingSize				:UDINT;
+END_VAR
+VAR
+	fbExecute						: R_TRIG;
+	eState							: E_XML_CtrlState;
+	eErrorState						: E_XML_CtrlState;
+	aXMLImage						: ARRAY[0..2048] OF BYTE;
+	nImageByte						: UDINT;
+
+	sString						: STRING(255);
+
+	fbWriteFile					: FB_FILE_WriteByByte;
+
+
+	nTotalFilesWritten				: UDINT;
+	nGoodFilesWritten				: UDINT;
+	nBadFilesWritten				: UDINT;
+	nFileWriteErrors				: UDINT;
+
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute triggers new sequence *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* waiting for trigger *)
+	E_XML_IDLE:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* reset internal values *)
+			MEMSET(ADR(aXMLImage), 16#00, SIZEOF(aXMLImage));
+			nImageByte := 0;
+			eErrorState := eState;
+			IF FIND(sFLGFileName, '.xml') <> 0 THEN
+				sFLGFileName := DELETE(sFLGFileName, 4,  FIND(sFLGFileName, '.xml'));
+			END_IF
+
+			sFilename := CONCAT(sFLGFileName,'.flg');
+
+
+			(* update outputs *)
+			bBusy := TRUE;
+			bDone := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			eState := E_XML_GENERATEIMAGE;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* update outputs *)
+			bBusy := FALSE;
+			bDone := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+			sFileName := '';
+			eErrorState := E_XML_IDLE;
+		END_IF
+
+
+	(* generate XML image in memory *)
+	E_XML_GENERATEIMAGE:
+
+				(* XML file version *)
+		sString := cXML_HEADER;
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN2(ADR(sString)));
+		nImageByte := nImageByte + LEN2(ADR(sString));
+
+
+			 (* XPath leading tag *)
+			sString := '<SequenceHeader xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">$R$N';
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN2(ADR(sString)));
+			nImageByte := nImageByte + LEN2(ADR(sString));
+
+(***********MESSAGE HEADER CONTENT***********)
+
+				(* nFLGFileName *)
+				sString := F_CONCAT3('$T<nFileName>',sFLGFileName, '</nFileName>$R$N');
+				MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN2(ADR(sString)));
+				nImageByte := nImageByte + LEN2(ADR(sString));
+
+
+			sString := '</SequenceHeader>$R$N';
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN2(ADR(sString)));
+			nImageByte := nImageByte + LEN2(ADR(sString));
+
+		eState := E_XML_WRITEXML;
+		nImigeProcessingSize	:= nImageByte;
+
+	(* write XML file *)
+	E_XML_WRITEXML:
+
+		(* write XML image to file *)
+		fbWriteFile(
+			bExecute	:= TRUE,
+			pSourceAddr	:= ADR(aXMLImage),
+			nSourceSize	:= nImageByte,
+			strPathFile	:= CONCAT(sPath, sFileName),
+			tTimeout	:= T#1s,
+		);
+
+		(* file write complete *)
+		IF fbWriteFile.bDone = TRUE THEN
+
+			nTotalFilesWritten := nTotalFilesWritten + 1;
+
+			(* file write completed OK *)
+			IF fbWriteFile.bError = FALSE THEN
+
+				(* correct no of bytes written to file *)
+				IF fbWriteFile.nBytesWritten = nImageByte THEN
+
+					nGoodFilesWritten := nGoodFilesWritten + 1;
+
+					eState := E_XML_DONE;
+
+
+				(* incorrect no of bytes written to file *)
+				ELSE
+
+					nBadFilesWritten := nBadFilesWritten + 1;
+				END_IF
+
+			(* file write error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbWriteFile.nErrorID;
+				eErrorState := eState;
+				nFileWriteErrors := nFileWriteErrors + 1;
+
+				eState := E_XML_DONE;
+			END_IF
+
+			(* close of fbWriteFile *)
+			fbWriteFile(bExecute := FALSE);
+		END_IF
+
+	(* sequence complete *)
+	E_XML_DONE:
+
+		(* update outputs *)
+		bBusy := FALSE;
+		bDone := TRUE;
+
+		eState := E_XML_IDLE;
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

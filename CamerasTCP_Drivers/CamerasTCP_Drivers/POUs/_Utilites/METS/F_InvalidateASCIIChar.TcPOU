@@ -1,0 +1,40 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_InvalidateASCIIChar" Id="{3f805e3a-e41f-4959-af84-5d644a9f56f8}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_InvalidateASCIIChar : INT
+VAR_INPUT
+	sCode		: STRING(255);
+END_VAR
+VAR
+	nCodeLen	: INT;
+	nCharIndex		: INT;
+	sChar			: STRING(1);
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* reset output *)
+F_InvalidateASCIIChar := 0;
+
+(* strPackCode contains data *)
+IF LEN(sCode) = 0 THEN
+
+	F_InvalidateASCIIChar := -1;
+
+ELSIF LEN(sCode) > 0 THEN
+
+	(* check each char in the code *)
+	FOR nCharIndex := 1 TO LEN(sCode) DO
+
+		(* get char from string *)
+		sChar := MID(sCode, 1, nCharIndex);
+
+		(* check if every char valid for proccessig*)
+		IF (F_ToASC(sChar) < 16#21 OR  F_ToASC(sChar) >  16#7A) AND   F_ToASC(sChar) <> 16#7C THEN	(*  16#7C -> '|'*)
+
+			(* update valid char counter *)
+			F_InvalidateASCIIChar := F_InvalidateASCIIChar + 1;
+		END_IF
+	END_FOR
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,555 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_PCM_Validate" Id="{56b0f071-a78a-4d20-9d18-4b738cb379d4}" SpecialFunc="None">
+    <Declaration><![CDATA[(* validates PCM data structure to ensure critical fields have valid data *)
+FUNCTION_BLOCK FB_PCM_Validate
+VAR_INPUT
+	bExecute				: BOOL;			(* set TRUE to validate data *)
+	sLocalPCMPath		: T_FolderPath;		(* local PCM path *)
+	sProductionSite		: STRING(4);
+	sProductionLine		: STRING(4);
+	bPassthrough			: BOOL;
+	bUseInterimCodeForValidation	: BOOL;
+END_VAR
+VAR_IN_OUT
+	stPCMData			: ST_PCM_Data;
+	stPCMStatus			: ST_PCM_Status;	(* PCMstatus *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;			(* TRUE = validation complete *)
+	bError				: BOOL;			(* TRUE = validation error *)
+	nErrorID				: INT;
+	bValid				: BOOL;			(* TRUE = data validated OK, not reset when bExecute goes FALSE *)
+	bDataChanged			: BOOL;			(* TRUE = PCM data has changed *)
+	bFileWritten			: BOOL;			(* TRUE = current PCM file write complete *)
+	sFieldName			: STRING(255);	(* field name where data validation failed, not reset when bExecute goes FALSE *)
+	sFieldData			: STRING(255);	(* data from field where data validation failed, not reset when bExecute goes FALSE *)
+	bProductInstructionValid	: BOOL;
+END_VAR
+VAR
+	fbExecute				: R_TRIG;
+	fbAutoValidate			: TON;
+	stPCMDataLast			: ST_PCM_Data;
+	nLastOpMode			: INT;
+
+	sLastPackGTIN 			: T_CodeGTIN;
+	sLastOuterGTIN 		: T_CodeGTIN;
+	sLastCaseGTIN 			: T_CodeGTIN;
+	sLastBatchNumber		: T_CodeBATCH;
+	sLastProductionOrder	: T_CodePO;
+	sLastRetailSKU 			: T_CodeRSKU;
+	sLastPackBrandSpec 			: T_CodeBRAND;
+	sLastOuterBrandSpec 		: T_CodeBRAND;
+	sLastCaseBrandSpec 			: T_CodeBRAND;
+
+	sLastPitCode	 		: T_CodePIT;
+
+	fbTrackingModeDecode	: FB_PCM_TrackingModeDecode;
+	fbWritePCMFile		: FB_PCM_WriteFile;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* validate data on rising edge of bExecute *)
+fbExecute(CLK:= stPCMStatus.bLoaded AND bExecute);
+
+(* auto-validate timer, active when OPI data is loaded *)
+fbAutoValidate(
+	IN	:= stPCMStatus.bLoaded,
+	PT	:= T#200ms
+);
+
+(* auto-validation is required, wait until XML Write is complete *)
+IF fbAutoValidate.Q = TRUE AND fbWritePCMFile.bBusy = FALSE THEN
+
+	(* current OPI data has changed compared with last OPI data *)
+	IF MEMCMP(ADR(stPCMData), ADR(stPCMDataLast), SIZEOF(stPCMData)) <> 0 THEN
+
+		(* set DataChanged flag and copy sOPIData *)
+		bDataChanged := TRUE;
+		stPCMDataLast := stPCMData;
+	END_IF
+
+	(* reset timer *)
+	fbAutoValidate(IN := FALSE);
+
+(* no auto-update required *)
+ELSE
+
+	(* reset output *)
+	bDataChanged := FALSE;
+END_IF
+
+(**************If sPCM data changed - populate to older structures, to keep consitency**************)
+
+fbTrackingModeDecode(
+			sTrackingLevels := stPCMData.ProductInformation.Product.HierarchyDataList.TrackingLevels);
+
+IF bPassthrough OR stPCMData.ProductInformation.TrackingIndicator = 'N'  THEN
+	stPCMStatus.nOpMode 			:= 1;
+ELSE
+	stPCMStatus.nOpMode 			:= fbTrackingModeDecode.nOpMode;
+END_IF
+
+(* Operating mode has changed *)
+IF  stPCMStatus.nOpMode <> nLastOpMode THEN
+
+	(* suppress bOpModeChanged when PCM is first loaded *)
+	IF nLastOpMode <> 0 THEN
+
+		(* set flag to indicate <CodingAndTrackingMode> has changed *)
+		stPCMStatus.bOpModeChanged := TRUE;
+	END_IF
+
+	(* log current value to allow change of nOpMode to be detected *)
+	nLastOpMode := stPCMStatus.nOpMode;
+
+(* PCM data not valid or nOpMode has not changed *)
+ELSE
+	(* reset flag *)
+	stPCMStatus.bOpModeChanged := FALSE;
+END_IF
+
+(*********************************************************************************************)
+
+(* request to re-validate or OPI data has changed *)
+IF fbExecute.Q  OR bDataChanged OR stPCMStatus.bOpModeChanged THEN
+
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bError := FALSE;
+	sFieldName := '';
+	sFieldData := '';
+
+	IF stPCMData.ProductInformation.FactoryID <> '' THEN
+		stPCMStatus.sProductionSite := stPCMData.ProductInformation.FactoryID;
+	ELSE
+		stPCMStatus.sProductionSite := sProductionSite;
+	END_IF
+
+	(*<Reference ID> must exist in PCM *)
+	IF LEN(stPCMData.MessageHeader.ReferenceID)  <> 0 THEN
+
+		(* <ProductionLine> must be same in PCM and Settings *)
+		IF stPCMData.ProductInformation.LineID = sProductionLine THEN
+
+			stPCMStatus.sProductionLine 	:= stPCMData.ProductInformation.LineID;
+			stPCMStatus.sLocalFactoryProductLine	:= stPCMData.ProductInformation.LineSystemNo;
+
+			(* <RetailSKU> must more than 5  chars *)
+			IF LEN(stPCMData.ProductInformation.ProductNo) >  5 THEN
+
+				stPCMStatus.sEndMarket		:= stPCMData.ProductInformation.Product.EndMarket;
+				stPCMStatus.sOuterType		:= stPCMData.ProductInformation.Product.OuterType;
+
+				stPCMStatus.sRetailSKU 			:= stPCMData.ProductInformation.ProductNo;
+				stPCMStatus.stGS1_AI_Definition.stAI_240.sDataField		:= stPCMData.ProductInformation.ProductNo;
+
+				stPCMStatus.sBatchNumber		:=  stPCMData.ProductInformation.Product.BatchID;
+				stPCMStatus.stGS1_AI_Definition.stAI_10.sDataField		:= stPCMData.ProductInformation.Product.BatchID;
+
+				stPCMStatus.sProductDescription 	:= stPCMData.ProductInformation.Description;
+				stPCMStatus.sProductionOrder		:= stPCMData.ProductInformation.Product.ProductionOrder;
+				stPCMStatus.stGS1_AI_Definition.stAI_91.sDataField		:= stPCMData.ProductInformation.Product.ProductionOrder;
+
+				stPCMStatus.sOuterGTIN 			:= stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataOUT.GTIN;
+				stPCMStatus.stGS1_AI_Definition.stAI_01_Lvl2.sDataField		:= stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataOUT.GTIN;
+
+				stPCMStatus.sCaseGTIN			:= stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataCS.GTIN;
+				stPCMStatus.stGS1_AI_Definition.stAI_01_Lvl3.sDataField		:= stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataCS.GTIN;
+
+				stPCMStatus.sOuterBrandSpec		:= stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataOUT.BCODE9;
+				stPCMStatus.stGS1_AI_Definition.stNON_GS1_02.sDataField		:= stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataOUT.BCODE9;
+
+				stPCMStatus.sCaseBrandSpec		:= stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataCS.BCODE9;
+				stPCMStatus.stGS1_AI_Definition.stNON_GS1_03.sDataField		:= stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataCS.BCODE9;
+
+				stPCMStatus.sPitCode			:= stPCMData.ProductInformation.Product.PITCode;
+
+				(* <CodingAndTrackingMode - OpMode> must be 1 to 11 *)
+				IF stPCMStatus.nOpMode >= 1 AND stPCMStatus.nOpMode <= 11 THEN
+
+					(* Determine functionality required for selected mode *)
+					stPCMStatus.bEnablePassThrough := stPCMStatus.nOpMode = 1;
+					stPCMStatus.bEnableCaseLabels 	:= stPCMStatus.nOpMode >= 4;	(* apply Case label *)
+					stPCMStatus.bEnableOuterLabels 	:= stPCMStatus.nOpMode >= 5 AND NOT bUseInterimCodeForValidation ;
+					stPCMStatus.bEnableAggregation 	:= stPCMStatus.nOpMode >= 7;	(* aggregate Outers to Case *)
+					stPCMStatus.bEnableOAC			:= stPCMStatus.nOpMode >= 7;
+					(*stPCMStatus.bEnableOHM 		:= stPCMStatus.nOpMode >= 7;*)
+
+					stPCMStatus.bEnablePacks := FALSE;
+
+					IF stPCMStatus.nOpMode >= 7 AND bError = FALSE THEN
+
+							(*Expected number of outers in one case*)
+						stPCMStatus.nOutersPerCase := LREAL_TO_INT(F_SafeDIV(STRING_TO_LREAL(stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataCS.UnitQty),
+																STRING_TO_LREAL(stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataOUT.UnitQty)));
+						stPCMStatus.nOutersPerCase := LIMIT(0, stPCMStatus.nOutersPerCase  , cMAX_OUTERS_PER_CASE);
+
+						stPCMStatus.nCaseAcceptanceLevelOuters := STRING_TO_REAL(stPCMData.ProductInformation.Settings.ToleranceThresholdOUT.GoodReadPercentageCS);
+					END_IF
+
+					(* <CodingAndTrackingMode> is 11 and no previous error is active *)
+					IF stPCMStatus.nOpMode = 11 AND bError = FALSE THEN
+
+						stPCMStatus.sPackGTIN 		:=	stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataPK.GTIN;
+						stPCMStatus.stGS1_AI_Definition.stAI_01_Lvl1.sDataField		:= stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataPK.GTIN;
+
+						stPCMStatus.sPackBrandSpec		:= stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataPK.BCODE9;
+						stPCMStatus.stGS1_AI_Definition.stNON_GS1_01.sDataField		:= stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataPK.BCODE9;
+
+							(*Expected number of packs in one outer*)
+						stPCMStatus.nPacksPerOuter := LREAL_TO_INT(F_SafeDIV(STRING_TO_LREAL(stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataOUT.UnitQty),
+																STRING_TO_LREAL(stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataPK.UnitQty)));
+						stPCMStatus.nPacksPerOuter := LIMIT(0, stPCMStatus.nPacksPerOuter  , cMAX_PACKS_PER_OUTER);
+
+							(*Expected number of packs in one case*)
+						stPCMStatus.nPacksPerCase := LREAL_TO_INT(F_SafeDIV(STRING_TO_LREAL(stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataCS.UnitQty),
+																STRING_TO_LREAL(stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataPK.UnitQty)));
+
+						stPCMStatus.nAcceptanceLevel := (STRING_TO_INT(stPCMData.ProductInformation.Settings.ToleranceThresholdPK.GoodReadPercentageOUT)*stPCMStatus.nPacksPerOuter) /100;
+
+						stPCMStatus.nCaseAcceptanceLevelPacks := STRING_TO_REAL(stPCMData.ProductInformation.Settings.ToleranceThresholdPK.GoodReadPercentageCS);
+						stPCMStatus.nOuterAcceptanceLevelPacks := STRING_TO_REAL(stPCMData.ProductInformation.Settings.ToleranceThresholdPK.GoodReadPercentageOUT);
+
+
+						(* <AmountOfPacks> must be 1 to max number of packs supported by OAC data *)
+						IF stPCMStatus.nPacksPerOuter > 0 AND stPCMStatus.nPacksPerOuter <=  cMAX_PACKS_PER_OUTER THEN
+
+							(* <AcceptanceLevel> must be less than or equal to <AmountOfPacks> *)
+							IF stPCMStatus.nAcceptanceLevel >= 0 AND stPCMStatus.nAcceptanceLevel <= stPCMStatus.nPacksPerOuter THEN
+
+								stPCMStatus.bEnablePacks := TRUE;
+
+							(* <AcceptanceLevel> in invalid *)
+							ELSE
+
+								bError := TRUE;
+								nErrorID	:= 1;
+								stPCMStatus.sFieldName := '<AcceptanceLevel>';
+								stPCMStatus.sFieldData := INT_TO_STRING(stPCMStatus.nAcceptanceLevel);
+							END_IF
+
+						(* <AmountOfPacks> in invalid *)
+						ELSE
+
+							bError := TRUE;
+							nErrorID	:= 2;
+							stPCMStatus.sFieldName := '<AmountOfPacks>';
+							stPCMStatus.sFieldData := INT_TO_STRING(stPCMStatus.nPacksPerOuter);
+						END_IF
+					END_IF
+
+				(* <CodingAndTrackingMode> invalid *)
+				ELSE
+
+					(* reset functionality required *)
+					stPCMStatus.bEnablePassThrough	:= FALSE;
+					stPCMStatus.bEnableCaseLabels 	:= FALSE;
+					stPCMStatus.bEnableAggregation	:= FALSE;
+					stPCMStatus.bEnableOuterLabels 	:= FALSE;
+					stPCMStatus.bEnableOAC 		:= FALSE;
+					stPCMStatus.bEnableOHM 		:= FALSE;
+					stPCMStatus.bEnablePacks 		:= FALSE;
+
+
+					bError := TRUE;
+					nErrorID	:= 3;
+					stPCMStatus.sFieldName := '<CodingAndTrackingMode>';
+					stPCMStatus.sFieldData := INT_TO_STRING(stPCMStatus.nOpMode);
+				END_IF
+
+			(* <RetailSKU> not match to min restriction*)
+			ELSE
+
+				bError := TRUE;
+				nErrorID	:= 4;
+				stPCMStatus.sFieldName := '<RetailSKU>';
+				stPCMStatus.sFieldData := stPCMStatus.sRetailSKU;
+			END_IF
+
+		(* <ProductionLine> does not match in PCM and Settings *)
+		ELSE
+
+			bError := TRUE;
+			nErrorID	:= 5;
+			stPCMStatus.sFieldName := '<ProductionLine>';
+			stPCMStatus.sFieldData := stPCMData.ProductInformation.LineID;
+		END_IF
+
+	(* <Referenc ID> does not exist in PCM *)
+	ELSE
+
+		bError := TRUE;
+		nErrorID	:= 6;
+		stPCMStatus.sFieldName := '<ReferenceID Empty>';
+		stPCMStatus.sFieldData := '?????';
+	END_IF
+
+
+
+	(* no XML data error found *)
+	IF bError = FALSE THEN
+
+		(* update outputs *)
+		nErrorID	:= 0;
+		stPCMStatus.bValid := TRUE;
+		bProductInstructionValid:=TRUE;
+		stPCMStatus.sFieldName := 'PCM data OK';
+		stPCMStatus.sFieldData := 'PCM data OK';
+
+	(* validation error *)
+	ELSE
+
+		(* update output *)
+		stPCMStatus.bValid := FALSE;
+		bProductInstructionValid:=FALSE;
+	END_IF
+
+	bDone := TRUE;
+
+(* bExecute has been reset *)
+ELSIF bExecute = FALSE THEN
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bError := FALSE;
+END_IF
+
+(***********************************************************************************)
+(* PCM data is valid and PackGTIN  has changed *)
+IF stPCMStatus.bValid = TRUE AND stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataPK.GTIN <> sLastPackGTIN THEN
+
+	(* suppress bPackGTINChanged when PCM is first loaded *)
+	IF sLastPackGTIN <> '' THEN
+
+		(* set flag to indicate PackGTIN has changed *)
+		stPCMStatus.bPackGTINChanged := TRUE;
+		stPCMStatus.stGS1_AI_Definition.stAI_01_Lvl1.bDataChanged	:= TRUE;
+	END_IF
+
+	(* log current value to allow change of PackGTIN to be detected *)
+	sLastPackGTIN := stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataPK.GTIN;
+
+(* PCM data not valid or PackGTIN has not changed *)
+ELSE
+	(* reset flag *)
+	stPCMStatus.bPackGTINChanged := FALSE;
+	stPCMStatus.stGS1_AI_Definition.stAI_01_Lvl1.bDataChanged	:= FALSE;
+END_IF
+
+(***********************************************************************************)
+(* PCM data is valid and OuterGTIN  has changed *)
+IF stPCMStatus.bValid = TRUE AND stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataOUT.GTIN <> sLastOuterGTIN THEN
+
+	(* suppress bOuterGTINChanged when PCM is first loaded *)
+	IF sLastOuterGTIN <> '' THEN
+
+		(* set flag to indicate OuterGTIN has changed *)
+		stPCMStatus.bOuterGTINChanged := TRUE;
+		stPCMStatus.stGS1_AI_Definition.stAI_01_Lvl2.bDataChanged	:= TRUE;
+	END_IF
+
+	(* log current value to allow change of OuterGTIN to be detected *)
+	sLastOuterGTIN := stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataOUT.GTIN;
+
+(* PCM data not valid or OuterGTIN has not changed *)
+ELSE
+	(* reset flag *)
+	stPCMStatus.bOuterGTINChanged := FALSE;
+	stPCMStatus.stGS1_AI_Definition.stAI_01_Lvl2.bDataChanged	:= FALSE;
+END_IF
+
+(***********************************************************************************)
+(* PCM data is valid and CaseGTIN  has changed *)
+IF stPCMStatus.bValid = TRUE AND stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataCS.GTIN <> sLastCaseGTIN THEN
+
+	(* suppress bCaseGTINChanged when PCM is first loaded *)
+	IF sLastCaseGTIN <> '' THEN
+
+		(* set flag to indicate CaseGTIN has changed *)
+		stPCMStatus.bCaseGTINChanged := TRUE;
+		stPCMStatus.stGS1_AI_Definition.stAI_01_Lvl3.bDataChanged	:= TRUE;
+	END_IF
+
+	(* log current value to allow change of CaseGTIN to be detected *)
+	sLastCaseGTIN := stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataCS.GTIN;
+
+(* PCM data not valid or CaseGTIN has not changed *)
+ELSE
+	(* reset flag *)
+	stPCMStatus.bCaseGTINChanged := FALSE;
+	stPCMStatus.stGS1_AI_Definition.stAI_01_Lvl3.bDataChanged	:= FALSE;
+END_IF
+
+(***********************************************************************************)
+(* PCM data is valid and BatchID  has changed *)
+IF stPCMStatus.bValid = TRUE AND stPCMData.ProductInformation.Product.BatchID <> sLastBatchNumber THEN
+
+	(* suppress bBatchChanged when PCM is first loaded *)
+	IF sLastBatchNumber <> '' THEN
+
+		(* set flag to indicate BatchID has changed *)
+		stPCMStatus.bBatchChanged := TRUE;
+		stPCMStatus.stGS1_AI_Definition.stAI_10.bDataChanged	:= TRUE;
+	END_IF
+
+	(* log current value to allow change of BatchID to be detected *)
+	sLastBatchNumber := stPCMData.ProductInformation.Product.BatchID;
+
+(* PCM data not valid or BatchID has not changed *)
+ELSE
+	(* reset flag *)
+	stPCMStatus.bBatchChanged := FALSE;
+	stPCMStatus.stGS1_AI_Definition.stAI_10.bDataChanged	:= FALSE;
+END_IF
+
+(***********************************************************************************)
+(* PCM data is valid and Production Order  has changed *)
+IF stPCMStatus.bValid = TRUE AND stPCMData.ProductInformation.Product.ProductionOrder <> sLastProductionOrder THEN
+
+	(* suppress bProductionChanged when PCM is first loaded *)
+	IF sLastProductionOrder <> '' THEN
+
+		(* set flag to indicate Production Order  has changed *)
+		stPCMStatus.bProductionChanged := TRUE;
+		stPCMStatus.stGS1_AI_Definition.stAI_91.bDataChanged	:= TRUE;
+	END_IF
+
+	(* log current value to allow change of Production Order  to be detected *)
+	sLastProductionOrder := stPCMData.ProductInformation.Product.ProductionOrder;
+
+(* PCM data not valid or Production Order  has not changed *)
+ELSE
+	(* reset flag *)
+	stPCMStatus.bProductionChanged := FALSE;
+	stPCMStatus.stGS1_AI_Definition.stAI_91.bDataChanged	:= FALSE;
+END_IF
+
+(***********************************************************************************)
+(* PCM data is valid and RetailSKU has changed *)
+IF stPCMStatus.bValid = TRUE AND stPCMData.ProductInformation.ProductNo <> sLastRetailSKU THEN
+
+	(* suppress bRSKUChanged when PCM is first loaded *)
+	IF sLastRetailSKU <> '' THEN
+
+		(* set flag to indicate RetailSKU has changed *)
+		stPCMStatus.bRSKUChanged := TRUE;
+		stPCMStatus.stGS1_AI_Definition.stAI_240.bDataChanged	:= TRUE;
+	END_IF
+
+	(* log current value to allow change of RetailSKU to be detected *)
+	sLastRetailSKU := stPCMData.ProductInformation.ProductNo;
+
+(* PCM data not valid or RetailSKU has not changed *)
+ELSE
+	(* reset flag *)
+	stPCMStatus.bRSKUChanged := FALSE;
+	stPCMStatus.stGS1_AI_Definition.stAI_240.bDataChanged	:= FALSE;
+END_IF
+
+(***********************************************************************************)
+(* PCM data is valid and Pack Brand Specyfication  has changed *)
+IF stPCMStatus.bValid = TRUE AND stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataPK.BCODE9 <> sLastPackBrandSpec THEN
+
+	(* suppress bPackBrandSpecChanged when PCM is first loaded *)
+	IF sLastPackBrandSpec <> '' THEN
+
+		(* set flag to indicate Pack Brand Specyfication has changed *)
+		stPCMStatus.bPackBrandSpecChanged := TRUE;
+		stPCMStatus.stGS1_AI_Definition.stNON_GS1_01.bDataChanged	:= TRUE;
+	END_IF
+
+	(* log current value to allow change of Pack Brand Specyfication to be detected *)
+	sLastPackBrandSpec := stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataPK.BCODE9;
+
+(* PCM data not valid or Pack Brand Specyfication has not changed *)
+ELSE
+	(* reset flag *)
+	stPCMStatus.bPackBrandSpecChanged := FALSE;
+	stPCMStatus.stGS1_AI_Definition.stNON_GS1_01.bDataChanged	:= FALSE;
+END_IF
+
+(***********************************************************************************)
+(* PCM data is valid and Outer Brand Specyfication  has changed *)
+IF stPCMStatus.bValid = TRUE AND stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataOUT.BCODE9 <> sLastOuterBrandSpec THEN
+
+	(* suppress bOuterBrandSpecChanged when PCM is first loaded *)
+	IF sLastOuterBrandSpec <> '' THEN
+
+		(* set flag to indicate Outer Brand Specyfication has changed *)
+		stPCMStatus.bOuterBrandSpecChanged := TRUE;
+		stPCMStatus.stGS1_AI_Definition.stNON_GS1_02.bDataChanged	:= TRUE;
+	END_IF
+
+	(* log current value to allow change of Outer Brand Specyfication to be detected *)
+	sLastPackBrandSpec := stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataOUT.BCODE9;
+
+(* PCM data not valid or Outer Brand Specyfication has not changed *)
+ELSE
+	(* reset flag *)
+	stPCMStatus.bOuterBrandSpecChanged := FALSE;
+	stPCMStatus.stGS1_AI_Definition.stNON_GS1_02.bDataChanged	:= FALSE;
+END_IF
+
+(***********************************************************************************)
+(* PCM data is valid and Case Brand Specyfication  has changed *)
+IF stPCMStatus.bValid = TRUE AND stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataCS.BCODE9 <> sLastCaseBrandSpec THEN
+
+	(* suppress bCaseBrandSpecChanged when PCM is first loaded *)
+	IF sLastCaseBrandSpec <> '' THEN
+
+		(* set flag to indicate Case Brand Specyfication has changed *)
+		stPCMStatus.bCaseBrandSpecChanged := TRUE;
+		stPCMStatus.stGS1_AI_Definition.stNON_GS1_03.bDataChanged	:= TRUE;
+	END_IF
+
+	(* log current value to allow change of Case Brand Specyfication to be detected *)
+	sLastCaseBrandSpec := stPCMData.ProductInformation.Product.HierarchyDataList.HierarchyDataCS.BCODE9;
+
+(* PCM data not valid or Case Brand Specyfication has not changed *)
+ELSE
+	(* reset flag *)
+	stPCMStatus.bCaseBrandSpecChanged := FALSE;
+	stPCMStatus.stGS1_AI_Definition.stNON_GS1_03.bDataChanged	:= FALSE;
+END_IF
+
+(***********************************************************************************)
+(* PCM data is valid and PITCode has changed *)
+IF stPCMStatus.bValid = TRUE AND stPCMData.ProductInformation.Product.PITCode <> sLastPitCode THEN
+
+	(* suppress bPitCodeChanged when PCM is first loaded *)
+	IF sLastPitCode <> '' THEN
+
+		(* set flag to indicate PITCode has changed *)
+		stPCMStatus.bPitCodeChanged := TRUE;
+	END_IF
+
+	(* log current value to allow change of PITCode to be detected *)
+	sLastPitCode := stPCMData.ProductInformation.Product.PITCode;
+
+(* PCM data not valid or PITCode has not changed *)
+ELSE
+	(* reset flag *)
+	stPCMStatus.bPitCodeChanged := FALSE;
+END_IF
+
+
+
+(* update outputs *)
+bValid := stPCMStatus.bValid;
+sFieldName := stPCMStatus.sFieldName;
+sFieldData := stPCMStatus.sFieldData;
+
+
+(* save PCM on data change *)
+fbWritePCMFile(
+	bExecute		:= bDataChanged AND stPCMStatus.bValid,
+	strLocalPCMPath	:= sLocalPCMPath,
+	strPCMFile		:= stPCMStatus.sPCMCurrent,
+	sPCMData		:= stPCMData,
+	bDone			=> bFileWritten
+);]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

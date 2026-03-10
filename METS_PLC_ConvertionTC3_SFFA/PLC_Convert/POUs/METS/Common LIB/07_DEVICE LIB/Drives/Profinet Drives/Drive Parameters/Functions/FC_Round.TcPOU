@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FC_Round" Id="{a093d57d-ebc6-4ffe-be11-f77701b52631}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION FC_Round : LREAL
+(*
+// functionality: Round Long Read to Defined DP
+// ---------------------------------------------------------------------------
+// change log table:
+// version              date          Version/Author         changes applied
+//  001.000.000         16.06.2015    N Bailey            Creation of the original
+//      
+// ===========================================================================
+*)
+VAR_INPUT
+    i_lrValue                           			:LREAL;    (*Value*)
+    i_uiNumberOfDecimalPlaces            :UINT;    (*Number of Decimal Places*)
+END_VAR
+
+VAR
+    lrMultipliedValue                  			 :LREAL;
+    lrMultipliedValuex10               		 :LREAL;
+    diValue                             			:DINT;
+    diValuex10                         			 :DINT;
+    diRemainder                        			 :DINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF i_lrValue <> 0 THEN
+    lrMultipliedValue := i_lrValue*(EXPT(10,i_uiNumberOfDecimalPlaces));
+    lrMultipliedValuex10 := i_lrValue * (EXPT(10,(i_uiNumberOfDecimalPlaces + 1)));
+    diValue := TRUNC_INT(lrMultipliedValue);
+    diValuex10 := TRUNC_INT(lrMultipliedValuex10);
+    diRemainder := diValuex10 - diValue * 10;
+    (*Check if Remainder is Greater Than 5*)
+    IF ABS(diRemainder) >= 5 THEN
+        (*Adjust if number is positive or negative*)
+        IF diRemainder > 0 THEN
+            diValue := diValue + 1;
+        ELSE
+            diValue := diValue - 1;
+        END_IF;
+    END_IF;
+    FC_Round := DINT_TO_LREAL(diValue) / (EXPT(10,i_uiNumberOfDecimalPlaces));
+ELSE
+    FC_Round := 0;
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="FC_Round">
+      <LineId Id="22" Count="18" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_LOG_FileWriteError" Id="{b699dabe-d280-404c-b23a-6bc3cc5df35a}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_LOG_FileWriteError
+VAR_INPUT
+	bLogData					: BOOL;
+	nWriteErrorID				: UDINT;
+	stCTDateTime				: ST_SYSTEM_DateTime;
+	strFileName					: T_MaxString;
+END_VAR
+VAR_IN_OUT
+	aLogFileWriteError			: ARRAY[1..10] OF ST_LOG_FileWriteError;
+END_VAR
+VAR_OUTPUT
+	bDone					: BOOL;
+END_VAR
+VAR
+	rtExecute					: R_TRIG;
+	sTimeStamp				: STRING;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[rtExecute(CLK:=bLogData);
+
+IF rtExecute.Q THEN
+	MEMMOVE(ADR(aLogFileWriteError[2]), ADR(aLogFileWriteError[1]), SIZEOF(aLogFileWriteError) - SIZEOF(aLogFileWriteError[1]));
+
+
+	aLogFileWriteError[1].nWriteErrorID := nWriteErrorID;
+	aLogFileWriteError[1].strFileName := strFileName;
+	aLogFileWriteError[1].sTimeStamp := F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset);
+	bDone	:= TRUE;
+
+ELSE
+	bDone	:= FALSE;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

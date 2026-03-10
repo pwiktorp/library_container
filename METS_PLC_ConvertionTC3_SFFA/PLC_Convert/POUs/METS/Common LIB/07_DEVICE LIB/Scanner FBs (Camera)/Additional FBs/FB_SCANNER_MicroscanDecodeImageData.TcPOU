@@ -1,0 +1,128 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SCANNER_MicroscanDecodeImageData" Id="{0349e4fb-bf2c-40fa-8207-08f9a2cf5090}" SpecialFunc="None">
+    <Declaration><![CDATA[(* decodes scan response message *)
+FUNCTION_BLOCK FB_SCANNER_MicroscanDecodeImageData
+VAR_INPUT
+	bExecute			: BOOL;		(* set TRUE to decode image response *)
+	sTriggerID			: ST_SCANNER_TriggerID;		(* response ID *)
+	bDontParseAsGS1					:BOOL;
+END_VAR
+VAR_IN_OUT
+	strImageData		: T_LongString;	(* scan response message *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;		(* TRUE = decode complete *)
+	bBusy				: BOOL;		(* TRUE = decode is progress *)
+	bError				: BOOL;		(* TRUE = error *)
+	strStatus			: STRING(255);	(* status description, returns scanner error message in case of failed read *)
+	sImageData			: ST_SCANNER_ImageData;	(* array of code data *)
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	nIndex				: INT;
+	fbCodeData			: FB_ExtractLongString;
+	fbFieldData			: FB_ExtractString;
+	fbDecodeGS1			: FB_SCANNER_DecodeGS1;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+
+fbExecute(CLK := bExecute);
+IF fbExecute.Q = TRUE THEN
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bBusy := TRUE;
+	bError := FALSE;
+	strStatus := '';
+	MEMSET(ADR(sImageData), 16#00, SIZEOF(sImageData));
+
+	(* initialise for decode scan *)
+	nIndex := 0;
+
+(* decode not active *)
+ELSIF bExecute = FALSE AND bBusy = FALSE THEN
+
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+END_IF
+
+(* decode active *)
+IF bBusy = TRUE THEN
+
+	(* get image data message *)
+	fbCodeData(
+		bExtractData	:= TRUE,
+		strPrefix		:= '$02',
+		strSuffix		:= '$03',
+		strString		:= strImageData
+	);
+
+	(* code data found *)
+	IF fbCodeData.bStringFound = TRUE THEN
+
+		(* next code index *)
+		nIndex := nIndex + 1;
+
+		(* Code Type field (CT=%t;) *)
+		fbFieldData(
+			bExtractData	:= TRUE,
+			strPrefix		:= 'CT=',
+			strSuffix		:= ';',
+			strString		:= fbCodeData.strData
+		);
+		IF fbFieldData.bStringFound = TRUE THEN
+
+			(* extract data value *)
+			sImageData.aCodeData[1].eCodeType := STRING_TO_INT(fbFieldData.strData);
+		END_IF
+
+		(* Data String field NOREAD found *)
+		IF FIND(fbCodeData.strData, 'NOREAD') <> 0 THEN
+
+			nIndex := 0;
+			sImageData.aCodeData[1].strDataString := '';
+
+		ELSE
+			(* Data String field (DS=%s;) *)
+			fbFieldData(
+				bExtractData	:= TRUE,
+				strPrefix		:= 'DS=',
+				strSuffix		:= '$1E',
+				strString		:= fbCodeData.strData
+			);
+			IF fbFieldData.bStringFound = TRUE THEN
+
+				(* extract data value and decode if GS1 markers found *)
+				fbDecodeGS1(
+					strGS1String	:= fbFieldData.strData,
+					bDontParseAsGS1 := bDontParseAsGS1,
+					strBarcode		=> sImageData.aCodeData[1].strDataString );
+			END_IF
+		END_IF
+
+		(*Overwirte code type from code symbology identifier if type is known *)
+		IF fbDecodeGS1.eCodeType <> E_SCANNER_CodeType.UNKNOWN THEN
+			sImageData.aCodeData[1].eCodeType := fbDecodeGS1.eCodeType;
+		END_IF
+
+		sImageData.tScanTime := INT_TO_TIME(STRING_TO_INT(LEFT(fbCodeData.strData, 3)));
+
+		(* update Scanner Index *)
+		sImageData.aCodeData[1].nScannerIndex := sTriggerID.nScannerIndex;
+
+		(* generate output values *)
+		sImageData.nCodesRead := nIndex;
+		strStatus := CONCAT(INT_TO_STRING(sImageData.nCodesRead), ' code(s) read');
+	END_IF
+
+	bBusy := FALSE;
+	bDone := TRUE;
+
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

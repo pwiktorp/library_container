@@ -1,0 +1,242 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CX_CX2100Display" Id="{aee21ba8-e00b-473e-92a4-494b500a8749}" SpecialFunc="None">
+    <Declaration><![CDATA[(* updates 2*16 char lines on CX2100 display *)
+FUNCTION_BLOCK FB_CX_CX2100Display
+VAR_INPUT
+	bExecute			: BOOL;			(* set TRUE to update CX display ctrl with next page *)
+	nMaxPages			: BYTE;			(* no of pages to display, maximum = 6 *)
+	strPage1_Line1		: STRING(16);	(* page 1, upper line *)
+	strPage1_Line2		: STRING(16);	(* page 1, lower line *)
+	strPage2_Line1		: STRING(16);	(* page 2, upper line *)
+	strPage2_Line2		: STRING(16);	(* page 2, lower line *)
+	strPage3_Line1		: STRING(16);	(* page 3, upper line *)
+	strPage3_Line2		: STRING(16);	(* page 3, lower line *)
+	strPage4_Line1		: STRING(16);	(* page 4, upper line *)
+	strPage4_Line2		: STRING(16);	(* page 4, lower line *)
+	strPage5_Line1		: STRING(16);	(* page 5, upper line *)
+	strPage5_Line2		: STRING(16);	(* page 5, lower line *)
+	strPage6_Line1		: STRING(16);	(* page 6, upper line *)
+	strPage6_Line2		: STRING(16);	(* page 6, lower line *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;			(* text update done *)
+	bBusy				: BOOL;			(* text update in progress *)
+	bError				: BOOL;			(* error *)
+	nErrorID			: UDINT;		(* error code *)
+	nDeviceID			: WORD;			(* CX2100 device ID *)
+	strCurrent_Line1	: STRING(16);	(* current upper line on display *)
+	strCurrent_Line2	: STRING(16);	(* current lower line on display *)
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	eState				: E_CX_DeviceState;
+	eErrorState			: E_CX_DeviceState;
+	strLine				: ARRAY[1..2] OF STRING(16);
+	nPage				: INT;
+	fbDeviceID			: FB_CX_GetDeviceID;
+	fbCXWriteDisplay	: FB_CXSetTextDisplayUSB;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* IDLE state *)
+	E_CX_DeviceState.IDLE:
+
+		(* update display *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update status outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+			eErrorState := eState;
+
+			(* DeviceID not known *)
+			IF nDeviceID = 0 THEN
+
+				eState := E_CX_DeviceState.ID;
+
+			(* DeviceID known *)
+			ELSE
+
+				(* last line reached or 1st cycle *)
+				IF nPage >= nMaxPages OR nPage = 0 THEN
+
+					(* return to 1st line *)
+					nPage := 1;
+
+				(* not last line *)
+				ELSE
+
+					(* move to next page *)
+					nPage := nPage + 1;
+				END_IF
+
+				eState := E_CX_DeviceState.BUILDLINES;
+			END_IF
+
+		(* no update required *)
+		ELSE
+
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* search for CX1100 device *)
+	E_CX_DeviceState.ID:
+
+		(* find nDeviceID for IODEVICETYPE_USB *)
+		fbDeviceID(
+			bExecute	:= TRUE,
+			eDeviceType	:= IODEVICETYPE_USB,
+		);
+
+		(* get device ID complete *)
+		IF fbDeviceID.bDone = TRUE THEN
+
+			(* get device ID completed OK and device was found *)
+			IF fbDeviceID.bError = FALSE AND fbDeviceID.bDeviceFound = TRUE THEN
+
+				(* target DeviceID *)
+				nDeviceID := fbDeviceID.nDeviceID;
+
+				(* start with 1st line *)
+				nPage := 1;
+
+				eState := E_CX_DeviceState.BUILDLINES;
+
+			(* device fbDeviceID not found *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbDeviceID.nErrorID;
+				eErrorState := eState;
+
+				nDeviceID := 0;
+				eState := E_CX_DeviceState.ERROR;
+			END_IF
+
+			(* close off fbDeviceID *)
+			fbDeviceID(bExecute := FALSE);
+		END_IF
+
+
+	(* build lines to be displayed *)
+	E_CX_DeviceState.BUILDLINES:
+
+		(* get display data for current page *)
+		CASE nPage OF
+
+			1:
+				strLine[1] := strPage1_Line1;
+				strLine[2] := strPage1_Line2;
+
+			2:
+				strLine[1] := strPage2_Line1;
+				strLine[2] := strPage2_Line2;
+
+			3:
+				strLine[1] := strPage3_Line1;
+				strLine[2] := strPage3_Line2;
+
+			4:
+				strLine[1] := strPage4_Line1;
+				strLine[2] := strPage4_Line2;
+
+			5:
+				strLine[1] := strPage5_Line1;
+				strLine[2] := strPage5_Line2;
+
+			6:
+				strLine[1] := strPage6_Line1;
+				strLine[2] := strPage6_Line2;
+
+		END_CASE
+
+		(* fill string with spaces to ensure all chars on display are updated *)
+		strLine[1] := F_StringAddSuffix(strLine[1], SIZEOF(strLine[1]) - 1, ' ');
+		strLine[2] := F_StringAddSuffix(strLine[2], SIZEOF(strLine[2]) - 1, ' ');
+
+		eState := E_CX_DeviceState.WRITELINE1;
+
+
+	(* write data to upper line of display *)
+	E_CX_DeviceState.WRITELINE1:
+
+		(* write data to display *)
+		fbCXWriteDisplay(
+			bExecute	:= TRUE,
+			sNetID		:= '',
+			nPort		:= 16#7100,
+			eMode		:= eCX2100_WriteLines,
+			sLine1		:= strLine[1],
+			sLine2		:= strLine[2],
+			nCursorPosX	:= 1,
+			nCursorPosY	:= 1
+		);
+
+		(* write data complete *)
+		IF fbCXWriteDisplay.bBusy = FALSE THEN
+
+			(* write data completed OK *)
+			IF fbCXWriteDisplay.bError = FALSE THEN
+
+				(* update output *)
+				strCurrent_Line1 := strLine[1];
+				strCurrent_Line2 := strLine[2];
+
+			(* write data error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbCXWriteDisplay.nErrorID;
+				eErrorState := eState;
+			END_IF
+
+			eState := E_CX_DeviceState.DONE;
+
+			(* close fbCXWriteDisplay *)
+			fbCXWriteDisplay(bExecute := FALSE);
+		END_IF
+
+
+	(* display update complete *)
+	E_CX_DeviceState.DONE:
+
+		bBusy := FALSE;
+		bDone := TRUE;
+
+		eState := E_CX_DeviceState.IDLE;
+
+
+	(* device not found *)
+	E_CX_DeviceState.ERROR:
+
+		bBusy := FALSE;
+		bDone := TRUE;
+		(* stay in this state as device does not exist *)
+
+(* unknown state *)
+ELSE
+
+	eState := E_CX_DeviceState.IDLE;
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_OUTER_InterimCameraOut" Id="{fa909e1b-c845-4edd-850e-912c10bcd4b3}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_OUTER_InterimCameraOut
+VAR_INPUT
+	bFrontConfirmationCameraInUse	: BOOL;
+	bCameraTrigger				: BOOL;
+	bLightTrigger					: BOOL;
+END_VAR
+VAR_OUTPUT
+	bRearScannerOut				: BOOL;
+	bRearLightOut				: BOOL;
+	bFrontScannerOut				: BOOL;
+	bFrontLightOut				: BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF  bFrontConfirmationCameraInUse THEN
+
+	bFrontScannerOut := bCameraTrigger;
+	bFrontLightOut := bLightTrigger;
+ELSE
+
+	bRearScannerOut := bCameraTrigger;
+	bRearLightOut := bLightTrigger;
+END_IF
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_OUTER_InterimCameraOut">
+      <LineId Id="12" Count="9" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

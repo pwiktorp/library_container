@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="GVL" Id="{1b011a7c-cc46-43dc-8824-8329f585822d}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+	bTriggerButton		AT %I* : BOOL;			
+	bTriggerOutput		AT %Q* : BOOL;		
+
+
+	// Hikrobot Control Commands
+
+	aHikrobotCtrlCommands				: ARRAY[1..20] OF STRING(40) :=[
+		(*start user params 0*) 		'<Set,UserStart,0>',
+		(*start user params 1*) 		'<Set,UserStart,1>',
+		(*start user params 2*) 		'<Set,UserStart,2>',
+		(*execute self adjustement*) 	'<Exec,Tune>',
+		(*start reading codes*) 		'<Set,Acq,1><Set,UserStart,3>',
+		(*stop reading codes*) 			'<Set,Acq,0>',
+		(*camera reboot*) 				'<Exec,Reboot>',
+		(*camera reboot*) 				'<Get,RunMode>',
+		(*camera reboot*) 				'<Set,RunMode,2>',
+		(*camera reboot*) 				'<Set,RunMode,0>'
+];
+
+
+	aTCPxStrings						: ARRAY[0..20] OF T_MaxString;
+	aTCPxStringsReply					: ARRAY[0..20] OF T_MaxString;
+
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

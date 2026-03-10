@@ -1,0 +1,63 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="TestBlock_Check4" Id="{f03dc90c-972a-4d5a-8427-28fc19fa1952}" SpecialFunc="None">
+    <Declaration><![CDATA[ PROGRAM TestBlock_Check4
+VAR
+
+	bTest			: BOOL;
+	rtTest			: R_TRIG;
+
+	nValidatinIndex	: INT;
+	nSearchIndex		: INT;
+
+	nRemoveIndex		: INT;
+	nFillUpIndex		: INT;
+
+	stImageData				: ST_SCANNER_ImageData;
+	stPackInFeedQueueTEST					: ST_PACK_InfeedQueue; (* Infeed queue *)
+
+	bOCVStackOutOfSequence					: BOOL;
+
+	aTESTQueue	: ARRAY[1..4] OF INT :=[ 31, 32, 33, 34];
+	aPackQueue	: ARRAY[1..3] OF INT :=[ 21, 22, 23];
+
+	bFillUp : BOOL;
+	i : INT;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[rtTest(CLK:= bTest);
+
+
+IF rtTest.Q THEN
+
+		nRemoveIndex:= 99;
+
+		FOR nValidatinIndex := 1 TO stImageData.nCodesRead DO
+			FOR nSearchIndex :=1 TO cMAX_PACK_INFEED_QUEUE DO
+				IF stImageData.aCodeData[nValidatinIndex].strDataString  = stPackInFeedQueueTEST.aPackQueue[nSearchIndex].sPackCode AND
+					stPackInFeedQueueTEST.aPackQueue[nSearchIndex].sPackCode <> '' THEN
+
+					nRemoveIndex := nSearchIndex-stImageData.aCodeData[nValidatinIndex].nProgramNo;
+					EXIT;
+				END_IF
+			END_FOR
+			IF nRemoveIndex <> 99 THEN
+				EXIT;
+			END_IF
+		END_FOR
+
+END_IF
+
+IF bFillUp THEN
+	FOR i :=1 TO nFillUpIndex DO
+		stPackInFeedQueue.aPackQueue[i].sPackCode  :=INT_TO_STRING(i);
+
+	END_FOR
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="TestBlock_Check4">
+      <LineId Id="24" Count="28" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

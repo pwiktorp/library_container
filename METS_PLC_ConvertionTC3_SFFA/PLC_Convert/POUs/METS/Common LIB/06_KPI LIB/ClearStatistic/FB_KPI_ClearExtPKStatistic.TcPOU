@@ -1,0 +1,47 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_KPI_ClearExtPKStatistic" Id="{3b585b27-b484-4e65-a0b8-0ab9144d1d70}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_KPI_ClearExtPKStatistic
+VAR_INPUT
+	bExecute				: BOOL;
+
+END_VAR
+VAR_IN_OUT
+	stOutersProcessing				: ST_KPI_OutersProcessing;
+	aPacksRead					: ARRAY[0..cMAX_PACKS_PER_OUTER] OF UDINT;
+	aPackPosEfficiency				: ARRAY[1..cMAX_PACKS_PER_OUTER] OF ST_KPI_CodePos;
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;
+END_VAR
+VAR
+	fbExecute 			: R_TRIG;
+	bTimerFlag			: BOOL;
+	tofDoneTimer			: TOF;
+
+	nCounter				: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+bTimerFlag:=FALSE;
+
+IF fbExecute.Q THEN
+
+	nCounter := nCounter +1;
+
+	stOutersProcessing.AtPackAggregCameras	:= 0;
+	MEMSET(ADR(aPacksRead), 16#00, SIZEOF(aPacksRead));
+	MEMSET(ADR(aPackPosEfficiency), 16#00, SIZEOF(aPackPosEfficiency));
+
+	bTimerFlag:=TRUE;
+END_IF
+
+tofDoneTimer(IN:=bTimerFlag,PT:=t#5s, Q=>bDone);]]></ST>
+    </Implementation>
+    <LineIds Name="FB_KPI_ClearExtPKStatistic">
+      <LineId Id="20" Count="16" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,87 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_DOOR_RejectCtrl" Id="{549a38b9-29bb-40ed-a2b5-911fd6f92dbf}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_DOOR_RejectCtrl
+VAR_INPUT
+	bDoorOpenZone1			: BOOL;
+	stDoorSettingsZone1			: ST_SYSTEM_Door;
+	bDoorOpenZone2			: BOOL;
+	stDoorSettingsZone2			: ST_SYSTEM_Door;
+	stCTDateTime				: ST_SYSTEM_DateTime;
+	sMetsDisplayCode			: T_MaxString;
+END_VAR
+VAR_OUTPUT
+	stDoorOpenReject			: ST_SYSTEM_Door;
+	bClearConveyorQueue	: BOOL;
+	bClearPackerQueue		: BOOL;
+	bClearCaseQueue		: BOOL;
+END_VAR
+VAR_IN_OUT
+	stConveyorQueue						: ST_CASE_InfeedQueue;
+	aPackerQueue							: ARRAY [0..1] OF ST_CASE_InfeedQueue;
+	stCaseQueue							: ST_CASE_CaseQueue;
+END_VAR
+VAR
+	stDoorOpenRejectZone1		: ST_SYSTEM_Door;
+	stDoorOpenRejectZone2		: ST_SYSTEM_Door;
+	nIndex: INT;
+	nMaxCaseIndex		: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bClearCaseQueue 		:= FALSE;
+bClearConveyorQueue	:= FALSE;
+bClearPackerQueue		:= FALSE;
+
+nMaxCaseIndex := UDINT_TO_INT(SIZEOF(stCaseQueue.stCACData) / SIZEOF(stCaseQueue.stCACData[1]));
+
+IF bDoorOpenZone1 THEN
+	stDoorOpenRejectZone1:=stDoorSettingsZone1;
+ELSE
+	MEMSET(ADR(stDoorOpenRejectZone1), 16#00, SIZEOF(stDoorOpenRejectZone1));
+END_IF
+
+IF bDoorOpenZone2 THEN
+	stDoorOpenRejectZone2:=stDoorSettingsZone2;
+ELSE
+	MEMSET(ADR(stDoorOpenRejectZone2), 16#00, SIZEOF(stDoorOpenRejectZone2));
+END_IF
+
+stDoorOpenReject.bClearConveyorQueue:=stDoorOpenRejectZone1.bClearConveyorQueue OR stDoorOpenRejectZone2.bClearConveyorQueue;
+stDoorOpenReject.bClearPackerQueue:=stDoorOpenRejectZone1.bClearPackerQueue OR stDoorOpenRejectZone2.bClearPackerQueue;
+
+FOR nIndex:=1 TO nMaxCaseIndex DO
+	stDoorOpenReject.aClearCaseQueue[nIndex]:=stDoorOpenRejectZone1.aClearCaseQueue[nIndex] OR stDoorOpenRejectZone2.aClearCaseQueue[nIndex];
+	IF stDoorOpenReject.aClearCaseQueue[nIndex] THEN
+		bClearCaseQueue := TRUE;
+	END_IF
+END_FOR
+
+
+bClearConveyorQueue	:= stDoorOpenReject.bClearConveyorQueue;
+bClearPackerQueue		:= stDoorOpenReject.bClearPackerQueue;
+
+IF stDoorOpenReject.bClearConveyorQueue THEN
+	MEMSET(ADR(stConveyorQueue), 16#00, SIZEOF(stConveyorQueue));
+	stConveyorQueue.bDoorReject := TRUE;
+END_IF
+IF stDoorOpenReject.bClearPackerQueue THEN
+	MEMSET(ADR(aPackerQueue), 16#00, SIZEOF(aPackerQueue));
+	aPackerQueue[0].bDoorReject := TRUE;
+	aPackerQueue[1].bDoorReject := TRUE;
+END_IF
+FOR nIndex := 1 TO nMaxCaseIndex DO
+	IF stDoorOpenReject.aClearCaseQueue[nIndex]  AND stCaseQueue.stCACData[nIndex].CodingAndTrackingMode > 0 THEN
+		MEMSET(ADR(stCaseQueue.stCACData[nIndex]), 16#00, SIZEOF(stCaseQueue.stCACData[nIndex]));
+		stCaseQueue.stCACData[nIndex].RejectCode := sMetsDisplayCode;
+		stCaseQueue.stCACData[nIndex].ProductionDate := F_StringWildcard('#YYYYMMDD#', stCTDateTime.sSystemTime);
+		stCaseQueue.stCACData[nIndex].ProductionTime := F_StringWildcard('#hhmmss#', stCTDateTime.sSystemTime);
+		stCaseQueue.stCACData[nIndex].ProductionTimeOffset := F_SYSTEM_SystemTimeOffsetToHHMM(stCTDateTime.nSystemTimeOffset);
+	END_IF
+END_FOR
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_DOOR_RejectCtrl">
+      <LineId Id="26" Count="50" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

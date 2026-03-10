@@ -1,0 +1,455 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CX_NVData_Transfer" Id="{add2cbad-ff17-4cc6-b449-24e6a75849b3}" SpecialFunc="None">
+    <Declaration><![CDATA[(* import/export XML file for data in specified area *)
+FUNCTION_BLOCK FB_CX_NVData_Transfer
+VAR_INPUT
+	bExecute			: BOOL;		(* set TRUE to start import/export sequence *)
+	bImport				: BOOL;		(* set FALSE to export data to XML file, set TRUe to import data from XML file *)
+	nMaxBlockSize		: UDINT;	(* max chars per PLC cycle when encoding/decoding data block *)
+	pCtrlData			: POINTER TO BYTE;	(* pointer to 1st data byte for export/import *)
+	nCtrlBytes			: UDINT;		(* no of bytes to import/export *)
+	strPathFile			: T_MaxString;	(* path and filename to XML file for export/import *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;		(* TRUE = import/export complete *)
+	bBusy				: BOOL;		(* TRUE = import/export in progress *)
+	bError				: BOOL;		(* TRUE = error with import/export *)
+	nErrorID			: UDINT;	(* error code *)
+	nTotalDataBytes		: UDINT;	(* number of data bytes exported/imported *)
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	eState				: E_CX_NVDataCtrlState;
+	eErrorState			: E_CX_NVDataCtrlState;
+	nDataBlockOffset	: UDINT;
+
+	arrXMLImage			: ARRAY[0..2303] OF BYTE;
+	strString			: T_MaxString;
+	nStringLen			: UINT;
+	nImageByte			: UINT;
+
+	fbOpenFile			: FB_FileOpen;
+	hFile				: UINT;
+	fbWriteFile			: FB_FileWrite;
+	fbCloseFile			: FB_FileClose;
+
+	sDataBlock			: ST_CX_NVDataBlock;
+	nDataBlocks			: UINT;
+	nDataBlockSize		: UINT;
+	nIndex				: UINT;
+	pDataByte			: POINTER TO BYTE;
+	pDataWord			: POINTER TO WORD;
+	nIndexOffset		: UDINT;
+	nIndexBlockBytes	: UDINT;
+
+	fbReadXMLData		: FB_XmlSrvRead;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* detect rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_CX_NVDataCtrlState.IDLE:
+
+		(* rising edge of bExport *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bBusy := TRUE;
+
+			(* initialise vars *)
+			nDataBlockOffset := 0;
+
+			(* export data *)
+			IF bImport = FALSE THEN
+
+				(* initialise vars *)
+				nImageByte := 0;
+				MEMSET(ADR(arrXMLImage), 16#00, SIZEOF(arrXMLImage));
+
+				(* build XML template for data in memory *)
+				(* XML file version *)
+				strString := cXML_HEADER;
+				nStringLen := TO_UINT(LEN(strString));
+				MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), nStringLen);
+				nImageByte := nImageByte + nStringLen;
+		
+				(* header fields *)
+				strString := '<NovRamInfo>$R$N$T<DeviceName></DeviceName>$R$N$T<NovRamData>$R$N';
+				nStringLen := TO_UINT(LEN(strString));
+				MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), nStringLen);
+				nImageByte := nImageByte + nStringLen;
+		
+				(* XML file is split into blocks of 1024 bytes*)
+				(* no of bytes is not exactly divisible by 1024 *)
+				IF nCtrlBytes MOD 1024 > 0 THEN
+
+					(* data blocks required *)
+					nDataBlocks := UDINT_TO_UINT(nCtrlBytes / 1024) + 1;
+		
+				(* no of bytes is exactly divisible by 1024 *)
+				ELSE
+		
+					(* data blocks required *)
+					nDataBlocks := UDINT_TO_UINT(nCtrlBytes / 1024);
+				END_IF
+
+				(* calculate size of next export data block *)
+				nDataBlockOffset := 0;
+				nDataBlockSize := UDINT_TO_UINT(MIN(1024, nCtrlBytes - nDataBlockOffset));
+				MEMSET(ADR(sDataBlock.Data), 16#00, SIZEOF(sDataBlock.Data));
+
+				(* initialise checksum block vars *)
+				nIndexOffset := 0;
+				nIndexBlockBytes := MIN(nMaxBlockSize, nDataBlockSize - nIndexOffset);
+
+				eState := E_CX_NVDataCtrlState.OPENFILE;
+
+			(* import data *)
+			ELSE
+
+				(* calculate size of next export data block *)
+				nDataBlockOffset := 0;
+				nDataBlockSize := UDINT_TO_UINT(MIN(1024, nCtrlBytes - nDataBlockOffset));
+				MEMSET(ADR(sDataBlock.Data), 16#00, SIZEOF(sDataBlock.Data));
+
+				(* initialise checksum block vars *)
+				nIndexOffset := 0;
+				nIndexBlockBytes := MIN(nMaxBlockSize, nDataBlockSize - nIndexOffset);
+				nTotalDataBytes := 0;
+
+				eState := E_CX_NVDataCtrlState.READXMLDATA;
+			END_IF
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+			nTotalDataBytes := 0;
+		END_IF
+
+
+	(* open file for writing *)
+	E_CX_NVDataCtrlState.OPENFILE:
+
+		(* open file for writing in binary mode *)
+		fbOpenFile(
+			sNetId		:= '',
+			sPathName	:= strPathFile,
+			nMode		:= FOPEN_MODEWRITE OR FOPEN_MODEBINARY,
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* file open complete *)
+		IF fbOpenFile.bBusy = FALSE THEN
+
+			(* file open completed OK *)
+			IF fbOpenFile.bError = FALSE THEN
+
+				(* file handle *)
+				hFile := fbOpenFile.hFile;
+
+				eState := E_CX_NVDataCtrlState.ENCODEDATABLOCK;
+
+			(* file open error *)
+			ELSE
+
+				bError := TRUE;
+				eErrorState := eState;
+
+				eState := E_CX_NVDataCtrlState.DONE;
+			END_IF
+
+			(* close of fbOpenFile *)
+			fbOpenFile(bExecute := FALSE);
+		END_IF
+
+
+	(* build data block *)
+	E_CX_NVDataCtrlState.ENCODEDATABLOCK:
+
+		(* for each byte in current data block *)
+		FOR nIndex := 0 TO UDINT_TO_UINT(nIndexBlockBytes) - 1 DO
+
+			(* pointers to current data byte and export word *)
+			pDataByte := F_PointerToByteADD(pCtrlData, nDataBlockOffset + nIndexOffset + nIndex);
+			pDataWord := F_PointerToWordADD(ADR(sDataBlock.Data), (nIndexOffset + nIndex) * 2);
+
+			(* convert byte value to word representing 2 ASCII chars and move to export data *)
+			pDataWord^ := F_ByteValueToASCIIWord(pDataByte^);
+		END_FOR
+
+		(* initialise checksum block vars *)
+		nIndexOffset := nIndexOffset + nIndexBlockBytes;
+		nIndexBlockBytes := MIN(nMaxBlockSize, nDataBlockSize - nIndexOffset);
+
+		(* data block has been encoded *)
+		IF nIndexOffset >= nDataBlockSize THEN
+
+			(* update data offset for block *)
+			sDataBlock.DataOffs := nDataBlockOffset;
+
+			(* move <DataOffs> field to arrXMLImage along with <Data> marker *)
+			strString := F_CONCAT3('$T$T<NovRamDataBlock>$R$N$T$T$T<DataOffs>', UDINT_TO_STRING(nDataBlockOffset), '</DataOffs>$R$N$T$T$T<Data>');
+			nStringLen := TO_UINT(LEN(strString));
+			MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), nStringLen);
+			nImageByte := nImageByte + nStringLen;
+
+			(* move data to arrXMLImage *)
+			nStringLen := TO_UINT(LEN2(ADR(sDataBlock.Data)));
+			MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(sDataBlock.Data), nStringLen);
+			nImageByte := nImageByte + nStringLen;
+
+			(* add XML field markers to close off the block *)
+			strString := '</Data>$R$N$T$T</NovRamDataBlock>$R$N';
+			nStringLen := TO_UINT(LEN(strString));
+			MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), nStringLen);
+			nImageByte := nImageByte + nStringLen;
+
+			(* last data block *)
+			IF nDataBlockOffset + nDataBlockSize >= nCtrlBytes THEN
+
+				(* add final XML field markers *)
+				strString := '$T</NovRamData>$R$N</NovRamInfo>';
+				nStringLen := TO_UINT(LEN(strString));
+				MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), nStringLen);
+				nImageByte := nImageByte + nStringLen;
+			END_IF
+
+			eState := E_CX_NVDataCtrlState.WRITEFILE;
+		END_IF
+
+
+	(* write data block to file *)
+	E_CX_NVDataCtrlState.WRITEFILE:
+
+		(* write data to file *)
+		fbWriteFile(
+			sNetId		:= '',
+			hFile		:= hFile,
+			pWriteBuff	:= ADR(arrXMLImage),
+			cbWriteLen	:= nImageByte,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* write file complete *)
+		IF fbWriteFile.bBusy = FALSE THEN
+
+			(* write file completed OK *)
+			IF fbWriteFile.bError = FALSE THEN
+
+				(* next data block *)
+				nDataBlockOffset := nDataBlockOffset + nDataBlockSize;
+				nDataBlockSize := UDINT_TO_UINT(MIN(1024, nCtrlBytes - nDataBlockOffset));
+
+				(* all data written to XML file *)
+				IF nDataBlockOffset >= nCtrlBytes THEN
+
+					(* total number of data bytes exported *)
+					nTotalDataBytes := nDataBlockOffset;
+
+					eState := E_CX_NVDataCtrlState.CLOSEFILE;
+
+				(* build next data block *)
+				ELSE
+
+					(* initialise vars *)
+					nImageByte := 0;
+					MEMSET(ADR(arrXMLImage), 16#00, SIZEOF(arrXMLImage));
+					MEMSET(ADR(sDataBlock.Data), 16#00, SIZEOF(sDataBlock.Data));
+
+					(* initialise checksum block vars *)
+					nIndexOffset := 0;
+					nIndexBlockBytes := MIN(nMaxBlockSize, nDataBlockSize - nIndexOffset);
+
+					eState := E_CX_NVDataCtrlState.ENCODEDATABLOCK;
+				END_IF
+
+			(* write file erroe *)
+			ELSE
+
+				bError := TRUE;
+				eErrorState := eState;
+
+				eState := E_CX_NVDataCtrlState.CLOSEFILE;
+			END_IF
+
+			(* close off fbWriteFile *)
+			fbWriteFile(bExecute := FALSE);
+		END_IF
+
+
+	(* close file *)
+	E_CX_NVDataCtrlState.CLOSEFILE:
+
+		(* close file *)
+		fbCloseFile(
+			sNetId	:= '',
+			hFile	:= hFile,
+			bExecute:= TRUE,
+			tTimeout:= T#1s
+		);
+
+		(* close file completed *)
+		IF fbCloseFile.bBusy = FALSE THEN
+
+			(* close file completed OK *)
+			IF fbCloseFile.bError = FALSE THEN
+
+				;
+
+			(* close file error *)
+			ELSE
+
+				(* no previous error *)
+				IF bError = FALSE THEN
+
+					bError := TRUE;
+					eErrorState := eState;
+				END_IF
+			END_IF
+
+			eState := E_CX_NVDataCtrlState.DONE;
+
+			(* close off fbClose file *)
+			fbCloseFile(bExecute := FALSE);
+		END_IF
+
+
+	(* read XML data block *)
+	E_CX_NVDataCtrlState.READXMLDATA:
+
+		(* read XML data *)
+		fbReadXMLData(
+			sNetId		:= '',
+			ePath		:= PATH_GENERIC,
+			nMode		:= XMLSRV_SKIPMISSING,
+			pSymAddr	:= ADR(sDataBlock),
+			cbSymSize	:= SIZEOF(sDataBlock),
+			sFilePath	:= strPathFile,
+			sXPath		:= F_CONCAT3('/NovRamInfo/NovRamData/NovRamDataBlock[DataOffs="', UDINT_TO_STRING(nDataBlockOffset), '"]'),
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* XML data read complete *)
+		IF fbReadXMLData.bBusy = FALSE THEN
+
+			(* XML data read completed OK *)
+			IF fbReadXMLData.bError = FALSE THEN
+
+				(* number of bytes in data block *)
+				nDataBlockSize := TO_UINT(LEN2(ADR(sDataBlock.Data))) / 2;
+				nTotalDataBytes := nTotalDataBytes + nDataBlockSize;
+
+				(* initialise checksum block vars *)
+				nIndexOffset := 0;
+				nIndexBlockBytes := MIN(nMaxBlockSize, nDataBlockSize - nIndexOffset);
+
+				eState := E_CX_NVDataCtrlState.DECODEDATABLOCK;
+
+			(* XML data read error *)
+			ELSE
+
+				(* data block not found *)
+				IF fbReadXMLData.nErrId = XMLSRVERROR_INVALIDXPATH THEN
+
+					(* end of import *)
+					;
+
+				(* other error *)
+				ELSE
+
+					bError := TRUE;
+					eErrorState := eState;
+					nErrorID := fbReadXMLData.nErrId;
+				END_IF
+
+				eState := E_CX_NVDataCtrlState.DONE;
+			END_IF
+
+			(* close off fbReadXMLData *)
+			fbReadXMLData(bExecute := FALSE);
+		END_IF
+
+
+	(* decode imported data and move to memory *)
+	E_CX_NVDataCtrlState.DECODEDATABLOCK:
+
+		(* each data block is decoded in sub-blocks of bytes, sub-block size if specified by nMaxCharsPerCycle *)
+
+		(* for each byte in sub-data block *)
+		FOR nIndex := 0 TO UDINT_TO_UINT(nIndexBlockBytes) - 1 DO
+
+			(* pointers to current data byte and export word *)
+			pDataWord := F_PointerToWordADD(ADR(sDataBlock.Data), (nIndexOffset + nIndex) * 2);
+			pDataByte := F_PointerToByteADD(pCtrlData, nDataBlockOffset + nIndexOffset + nIndex);
+
+			(* convert ASCII word to byte value *)
+			pDataByte^ := F_ASCIIWordToByteValue(pDataWord^);
+		END_FOR
+
+		(* update index vars *)
+		nIndexOffset := nIndexOffset + nIndexBlockBytes;
+		nIndexBlockBytes := MIN(nMaxBlockSize, nDataBlockSize - nIndexOffset);
+
+		(* data block has been decoded *)
+		IF nIndexOffset >= nDataBlockSize THEN
+
+			(* update offset for next data block *)
+			nDataBlockOffset := nDataBlockOffset + nDataBlockSize;
+
+			(* all bytes read *)
+			IF nDataBlockOffset >= nCtrlBytes THEN
+
+				(* total number of data bytes imported *)
+				nTotalDataBytes := nDataBlockOffset;
+
+				eState := E_CX_NVDataCtrlState.DONE;
+
+			(* more bytes required *)
+			ELSE
+
+				eState := E_CX_NVDataCtrlState.READXMLDATA;
+			END_IF
+		END_IF
+
+
+	(* done *)
+	E_CX_NVDataCtrlState.DONE:
+
+		(* update outputs *)
+		bBusy := FALSE;
+		bDone := TRUE;
+
+		eState := E_CX_NVDataCtrlState.IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_CX_NVDataCtrlState.IDLE;
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

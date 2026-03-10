@@ -1,0 +1,175 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_FILE_Rename" Id="{d04e9920-8517-4a9f-a194-dfce0e3a7766}" SpecialFunc="None">
+    <Declaration><![CDATA[(* rename file *)
+FUNCTION_BLOCK FB_FILE_Rename
+VAR_INPUT
+	bExecute			: BOOL;			(* set TRUE to copy multiple files *)
+	strPathSource		: T_MaxString;	(* path of SOURCE folder, can include file name as well if file name is to be changed *)
+	strPathTarget		: T_MaxString;	(* path of TARGET folder, can include file name as well if file name is to be changed *)
+	strFileName			: T_MaxString;	(* file name to be moved, leave blank if file name is included in paths *)
+	tTimeout			: TIME;			(* timeout for each file operation *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;			(* TRUE = file access complete *)
+	bBusy				: BOOL;			(* TRUE = file access in progress *)
+	bError				: BOOL;			(* TRUE = error occurred during process *)
+	nErrorID			: UDINT;		(* error code *)
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	eState				: E_FILE_State;
+	eErrorState			: E_FILE_State;
+	fbDeleteFile		: FB_FileDelete;
+	fbMoveFile			: FB_FileRename;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Moved from Sewtec_CaseTrace.lib
+
+-------------------------------------------------------------------------------------------------
+07/06/2010	1.04.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* compare files on rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle state *)
+	E_FILE_IDLE:
+
+		(* start new cycle *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+			eErrorState := eState;
+
+			eState := E_FILE_DELETE;
+
+		(* reset status outputs when no cycle is required and bExecute is reset *)
+		ELSIF bExecute = FALSE THEN
+
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* delete target file *)
+	E_FILE_DELETE:
+
+		(* delete file *)
+		fbDeleteFile(
+			sNetId		:= '',
+			sPathName	:= CONCAT(strPathTarget, strFileName),
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= tTimeout
+		);
+
+		(* file delete completed *)
+		IF fbDeleteFile.bBusy = FALSE THEN
+
+			(* file delete completed OK *)
+			IF fbDeleteFile.bError = FALSE THEN
+
+				eState := E_FILE_MOVE;
+
+			(* file delete error *)
+			ELSE
+
+				(* file did not exist, OK to move file to TARGET folder *)
+				IF fbDeleteFile.nErrId = 1804 THEN
+
+					eState := E_FILE_MOVE;
+
+				(* other file delete error occurred *)
+				ELSE
+
+				(* no error has previously occurred *)
+					IF bError = FALSE THEN
+
+						(* log error code and failure state *)
+						bError := TRUE;
+						nErrorID := fbDeleteFile.nErrId;
+						eErrorState := eState;
+					END_IF
+
+					(* sequence complete *)
+					eState := E_FILE_ABORT;
+				END_IF
+			END_IF
+
+			(* close off fbFileDelete *)
+			fbDeleteFile(bExecute := FALSE);
+		END_IF
+
+
+	(* move source file to destination file *)
+	E_FILE_MOVE:
+
+		(* move file *)
+		fbMoveFile(
+			sNetId		:= '',
+			sOldName	:= CONCAT(strPathSource, strFileName),
+			sNewName	:= CONCAT(strPathTarget, strFileName),
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= tTimeout,
+		);
+		
+		(* file move completed *)
+		IF fbMoveFile.bBusy = FALSE THEN
+
+			(* file move completed OK *)
+			IF fbMoveFile.bError = FALSE THEN
+
+				eState := E_FILE_DONE;
+
+			(* file move error *)
+			ELSE
+
+				(* no error has previously occurred *)
+				IF bError = FALSE THEN
+
+					(* log error code and failure state *)
+					bError := TRUE;
+					nErrorID := fbMoveFile.nErrId;
+					eErrorState := eState;
+				END_IF
+
+				(* abandon attempt to move file *)
+				eState := E_FILE_DONE;
+			END_IF
+
+			(* close off fbMoveFile *)
+			fbMoveFile(bExecute := FALSE);
+		END_IF
+
+
+	(* file access complete *)
+	E_FILE_DONE:
+
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		(* return to IDLE state *)
+		eState := E_FILE_IDLE;
+
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_FILE_Rename">
+      <LineId Id="33" Count="131" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

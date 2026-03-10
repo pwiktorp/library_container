@@ -1,0 +1,119 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CASE_ValidateContentTests" Id="{822c9689-f495-489e-84c7-63cbf678b11e}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_CASE_ValidateContentTests EXTENDS TcUnit.FB_TestSuite
+
+VAR
+	stCTDateTime_01					: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	
+	stProductInstruction_01			: ST_PCM_Status;
+	nSecquentionalCounter_01		: UDINT;
+	stCodeInfo_Outer_01				: ST_CodeInfo;
+	stCaseRejectReasons_01			: ST_RejectReasonsForCase;
+	stCACData_01 					: ST_CAC_Data;
+	
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[//==============================================================
+//MAIN TESTS
+//==============================================================
+
+main01_();]]></ST>
+    </Implementation>
+    <Folder Name="Main" Id="{3efa2ee4-d7cd-44eb-a85a-a0e477b57b3b}" />
+    <Method Name="main01_" Id="{1bee680b-013e-4a97-85a7-5eb443ff6ba7}" FolderPath="Main\">
+      <Declaration><![CDATA[METHOD INTERNAL main01_
+VAR
+	fbCase					: FB_CASE_ValidateContent;
+		
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[
+//Data initialization
+TestInit(stCACData:= stCACData_01, stProductInstruction:= stProductInstruction_01);
+
+//Change some data for test scenario below
+
+
+	
+TcUnit.TEST('main01_');
+
+fbCase(
+	bExecute:= TRUE, 
+	stCTDateTime:= stCTDateTime_01, 
+	stProductInstruction:= stProductInstruction_01, 
+	nSecquentionalCounter:= nSecquentionalCounter_01, 
+	stCodeInfo_Outer:= stCodeInfo_Outer_01, 
+	stCaseRejectReasons:= stCaseRejectReasons_01, 
+	stCACData:= stCACData_01, 
+	bDone=> , 
+	bBusy=> , 
+	bError=> , 
+	nErrorID=> , 
+	sRejectCode=> , 
+	nValidationIndex=> );
+
+	
+// AssertEquals_BOOL( Expected	:= ,
+// 			 	   Actual	:= , 
+// 			 	   Message	:= '');
+						
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TestInit" Id="{e5298ae0-bc3f-4459-8b9d-7da53c4ceb10}">
+      <Declaration><![CDATA[METHOD PRIVATE TestInit
+VAR_IN_OUT
+	stProductInstruction	: ST_PCM_Status;
+	stCACData 				: ST_CAC_Data;
+END_VAR
+
+VAR	
+	rTrigDataInit		: R_TRIG;
+	bDataInit			: BOOL;
+	iOuter				: INT;
+	iPack				: INT;
+	sPackNum			: STRING;
+	sOuterNum			: STRING;
+	sPackCode			: STRING;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[
+stProductInstruction.nOutersPerCase		:= 50;
+stProductInstruction.nPacksPerOuter 	:= 10;
+
+	FOR iOuter := 1 TO stProductInstruction.nOutersPerCase DO
+		(* Ustaw outer *)
+		stCACData.Outer[iOuter].Barcode    := CONCAT('OUTER', INT_TO_STRING(iOuter));
+		stCACData.Outer[iOuter].OuterCodeStatus := 5;
+		
+		FOR iPack := 1 TO stProductInstruction.nPacksPerOuter DO
+			(* Pack number z zerami *)
+			sPackNum := CONCAT('0', INT_TO_STRING(iPack));  (* dla 1-9: '01'-'09' *)
+			IF iPack = 10 THEN
+				sPackNum := '10';
+			END_IF;
+			
+			(* Outer number z zerami dla 1-9 *)
+			sOuterNum := CONCAT('0', INT_TO_STRING(iOuter));
+			IF iOuter >= 10 THEN
+				sOuterNum := INT_TO_STRING(iOuter);
+			END_IF;
+			
+			(* Sklej pack code *)
+			sPackCode := CONCAT(CONCAT('PACK', sPackNum), CONCAT('OUTER', sOuterNum));
+			
+			(* Przypisz *)
+			stCACData.Outer[iOuter].PackCode[iPack]			:= sPackCode;
+			stCACData.Outer[iOuter].PackCodeStatus[iPack]	:= 5;
+			stCACData.Outer[iOuter].PackRejectID[iPack]		:= 0;
+			
+		END_FOR;
+	END_FOR;	
+]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_InvalidNumericChar" Id="{3af0bfec-7bf9-4ac5-8e80-6f32ecbec6bf}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_InvalidNumericChar : INT
+VAR_INPUT
+	sCode		: STRING(255);
+END_VAR
+VAR
+	nCodeLen	: INT;
+	nCharIndex		: INT;
+	sChar			: STRING(1);
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* reset output *)
+F_InvalidNumericChar := 0;
+
+(* strPackCode contains data *)
+IF LEN(sCode) > 0 THEN
+
+	(* check each char in the code *)
+	FOR nCharIndex := 1 TO LEN(sCode) DO
+
+		(* get char from string *)
+		sChar := MID(sCode, 1, nCharIndex);
+
+		(* check if every char valid for proccessig*)
+		IF (F_ToASC(sChar) < 16#30 OR  F_ToASC(sChar) >  16#39) THEN
+
+			(* update valid char counter *)
+			F_InvalidNumericChar := F_InvalidNumericChar + 1;
+		END_IF
+	END_FOR
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="F_InvalidNumericChar">
+      <LineId Id="9" Count="19" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

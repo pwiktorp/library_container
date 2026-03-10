@@ -1,0 +1,56 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_ApplyTimeOffset" Id="{e76ec898-1bd0-4056-a419-52c43bbe9bd5}" SpecialFunc="None">
+    <Declaration><![CDATA[(* apply specified TIME offset to TIMESTRUCT value *)
+FUNCTION F_ApplyTimeOffset : TIMESTRUCT
+VAR_INPUT
+	sTime			: TIMESTRUCT;	(* system time *)
+	nTimeOffset		: DINT;			(* offset time, specified in ms *)
+END_VAR
+VAR
+	nFileTime		: T_ULARGE_INTEGER;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Moved from Sewtec_CaseTrace.lib
+
+-------------------------------------------------------------------------------------------------
+03/08/2012	1.39.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* offset time is specified *)
+IF nTimeOffset <> 0 THEN
+
+	(* convert TIMESTRUCT to T_ULARGE_INTEGER via T_FILETIME *)
+	nFileTime := F_FileTimeToULarge(SYSTEMTIME_TO_FILETIME(sTime));
+
+	(* positive time offset *)
+	IF nTimeOffset >= 0 THEN
+
+		(* convert DINT (1 = 1ms) to T_ULARGE_INTEGER (1 = 100ns) and add to system time *)
+		nFileTime := UInt64Add64(nFileTime, UInt32x32To64(ABS(DINT_TO_DWORD(nTimeOffset)), 10000));
+
+	(* negative time offset *)
+	ELSE
+
+		(* convert DINT (1 = 1ms) to T_ULARGE_INTEGER (1 = 100ns) and subtract from system time *)
+		nFileTime := UInt64Sub64(nFileTime, UInt32x32To64(ABS(DINT_TO_DWORD(nTimeOffset)), 10000));
+	END_IF
+
+	(* convert T_ULARGE_INTEGER to TIMESTRUCT (via T_FILETIME *)
+	F_ApplyTimeOffset := FILETIME_TO_SYSTEMTIME(F_ULargeToFileTime(nFileTime));
+
+(* offset time = 0 *)
+ELSE
+
+	(* set Offset Time = System Time *)
+	F_ApplyTimeOffset := sTime;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

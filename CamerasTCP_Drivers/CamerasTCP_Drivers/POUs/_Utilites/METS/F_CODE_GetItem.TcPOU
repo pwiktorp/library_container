@@ -1,0 +1,78 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_CODE_GetItem" Id="{0958a1d1-e4d0-4452-8c80-07aeee978fe5}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_CODE_GetItem : T_MaxString
+VAR_INPUT
+	sFullCode			: T_MaxString;
+	nCodeType		: INT;
+	stCodeInfo		: ST_CodeInfo;
+END_VAR
+VAR
+	stItem			: ST_CodeValidation;
+	eCodeAIPattern	: E_CodeAIType;
+	sItem			: T_MaxString;
+	nStart			: INT;
+	nEnd				: INT;
+	sTemp			: T_MaxString;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF stCodeInfo.nEntireLength > 0 THEN
+
+	IF nCodeType = eCodeAIPattern.GTIN THEN 				stItem := stCodeInfo.stGTIN;
+	ELSIF nCodeType = eCodeAIPattern.BatchID THEN 		stItem := stCodeInfo.stBatchID;
+	ELSIF nCodeType = eCodeAIPattern.SerialCode THEN		stItem := stCodeInfo.stSerialCode;
+	ELSIF nCodeType = eCodeAIPattern.ProductionOrder THEN	stItem := stCodeInfo.stProductionOrder;
+	ELSIF nCodeType = eCodeAIPattern.CryptoCode THEN		stItem := stCodeInfo.stCryptoCode;
+	ELSIF nCodeType = eCodeAIPattern.RSKU THEN			stItem := stCodeInfo.stRSKU;
+	ELSIF nCodeType = eCodeAIPattern.MRP THEN			stItem := stCodeInfo.stMRP;
+	ELSIF nCodeType = eCodeAIPattern.BrandSpecification THEN		stItem := stCodeInfo.stBrandSpecification;
+	ELSIF nCodeType = eCodeAIPattern.ProduceDate THEN		stItem := stCodeInfo.stProduceDate;
+	ELSIF nCodeType = eCodeAIPattern.UserField3 THEN		stItem := stCodeInfo.stUserField3;
+	END_IF
+
+
+	IF stItem.sStartAI <> '' AND stItem.sEndAI <> '' THEN
+		nStart := FIND(sFullCode, stItem.sStartAI) + LEN(stItem.sStartAI);
+		IF nStart > 0 THEN
+			sTemp := RIGHT(sFullCode, LEN(sFullCode) - (nStart - 1));
+		ELSE
+			sTemp := sFullCode;
+		END_IF
+		nEnd := FIND(sTemp, stItem.sEndAI);
+		IF nEnd = 0 THEN
+			nEnd := LEN(sFullCode)+1;
+		ELSE
+			nEnd := nEnd +(nStart - 1);
+		END_IF
+	ELSIF stItem.sStartAI <> '' AND stItem.nCodeLength > 0 THEN
+		nStart := FIND(sFullCode, stItem.sStartAI) + LEN(stItem.sStartAI);
+		nEnd := nStart + stItem.nCodeLength;
+	ELSIF stItem.nCodeStartPos > 0 AND stItem.sEndAI <> '' THEN
+		nStart := stItem.nCodeStartPos;
+		sTemp := RIGHT(sFullCode, LEN(sFullCode) - (nStart - 1));
+		nEnd := FIND(sTemp, stItem.sEndAI);
+		IF nEnd = 0 THEN
+			nEnd := LEN(sFullCode)+1;
+		ELSE
+			nEnd := nEnd +(nStart - 1);
+		END_IF
+	ELSIF stItem.nCodeStartPos >= 0 AND stItem.nCodeLength > 0 THEN
+		nStart := stItem.nCodeStartPos;
+		nEnd := nStart + stItem.nCodeLength;
+	ELSE
+		nStart := 0;
+		nEnd := 0;
+	END_IF
+	IF nStart > 0 AND nEnd > 0 THEN
+		sItem := MID(sFullCode, nEnd - nStart, nStart);
+	ELSE
+		sItem := '';
+	END_IF
+ELSE
+	sItem := '';
+END_IF
+
+F_CODE_GetItem := sItem;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

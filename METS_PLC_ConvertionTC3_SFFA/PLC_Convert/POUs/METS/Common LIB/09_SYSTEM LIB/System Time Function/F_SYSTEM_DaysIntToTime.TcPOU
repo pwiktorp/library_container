@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_SYSTEM_DaysIntToTime" Id="{19904f79-9e10-4e2e-b6c4-b341bce89be5}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_SYSTEM_DaysIntToTime	: TIME
+VAR_INPUT
+	nDaysInInteger					: DINT;
+END_VAR
+VAR
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[F_SYSTEM_DaysIntToTime:=DINT_TO_TIME(nDaysInInteger * 24 * 60 * 60 * 1000);]]></ST>
+    </Implementation>
+    <LineIds Name="F_SYSTEM_DaysIntToTime">
+      <LineId Id="8" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

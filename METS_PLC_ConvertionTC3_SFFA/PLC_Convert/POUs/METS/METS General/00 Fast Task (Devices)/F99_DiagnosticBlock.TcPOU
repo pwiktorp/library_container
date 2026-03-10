@@ -1,0 +1,533 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F99_DiagnosticBlock" Id="{ca7dba41-4ae5-42ab-ba1b-11d5cb406e85}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM F99_DiagnosticBlock
+	VAR_INPUT
+		bExecuteDiagnosticBlock :BOOL;
+	END_VAR
+VAR
+
+	bInitOK 		: BOOL;
+	fbTaskIndex		: GETCURTASKINDEX;
+
+	sMsgInfo: STRING(255);
+	nCategoryNo	: INT;
+	nMessageTypeNo	: INT;
+	sTextMessage	: STRING;
+	bAutoReset		: BOOL;
+	
+	nCategoryNo2	: INT;
+	nMessageTypeNo2	: INT;
+	sTextMessage2	: STRING;
+	bAutoReset2		: BOOL;
+	
+	nEndPosT			: INT;
+	nExtractCharsT		: UINT;
+	nResultT				: INT;
+	
+	nEndPosT1			: INT;
+	nExtractCharsT1		: INT;
+	nResultT1				: UINT;
+	
+	nEndPosT2			: UINT;
+	nExtractCharsT2		: UINT;
+	nResultT2				: UINT;
+	
+	strString			: T_LongSTRING :='ABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTU567';
+	strString1			: T_LongSTRING :='ABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTUABCDEFGHIJKLMNOPRSTU123';
+	strString2			: T_LongSTRING;	(* search string *)
+	strResultString		: T_LongSTRING;	(* search string *)
+	nResulPosition		: UDINT;
+	nResulPosition1		: INT;
+	nResulPosition2		: UINT;
+	nResulPosition3		: UDINT;
+	
+	nString1Len1			: UDINT;
+	nString1Len2			: UDINT;
+	
+	bCheckDuplicate:	BOOL;
+	bExtendCheckDup	:BOOL;
+
+ 	fbDuplicatesPackCodesDB		: FB_PACK_DuplicatesPackCodesDB;
+
+	bPackCodeDuplicate : BOOL;
+	nSize1 : UINT;
+	nSize2 : UINT;
+
+	nVALIndex1 : INT;
+	nVALIndex2 : INT;
+
+	structSize1	: UDINT;
+	structSize2	: UDINT;
+
+	eTest	: E_SYSTEM_PackAggregationMode;
+
+	//b1 : BOOL;
+	//b2 : BOOL;
+	//b3 : BOOL;
+	//b4 : BOOL;
+
+	sSKU_FromCase	: STRING(7) := 'OBC614E';
+	sSKU_HEX			: STRING(8);
+	sSKU_Dec			: UDINT;
+	sSKU_OK			: STRING(8);
+	sSKU_OK2			: STRING(8);
+	sSKU_OK3			: STRING(8);
+	sSKU_OK4			: STRING(8);
+	nBuffer			 	: ARRAY[0..3] OF BYTE;
+	nSKULen			: INT;
+	nCharIndex		: INT;
+	strChar				: STRING(1);
+	nCharInDec		: REAL;
+	nData				: lREAL;
+	sSKU_Number		: STRING;
+
+	CaseString 	: STRING(100) := '123456ABCD999_123456789';
+	result		: INT;
+	sStartTimeStamp			: STRING(30);
+	sPackCode	: STRING(12);
+	bSupiExecute1		: BOOL;
+	bSupiExecute2		: BOOL;
+	//fbCogCheck 	: FB_COG_Chek;
+	//strSUPI		: STRING[255];
+	//strM			: STRING[255];
+
+	//SUPIResult	: INT;
+	//dINT_SUPIResult	: DINT;
+
+	sSystemTime			: TIMESTRUCT;
+	sOffsetTime			: TIMESTRUCT;
+
+	fbSystemTime 		: GETSYSTEMTIME;
+	timeAsFileTime 	: T_FILETIME;
+	StartDateTime		: DT;
+
+	DotCode	: BOOL;
+	eCodeType :E_SCANNER_CodeType;
+	var1 : INT;
+	nNumberOfEmpty	: INT;
+
+
+	sDUPOuterStatus		: ST_OUTER_Status;
+
+	bDupaAlarm : BOOL;
+	nLastGoodPack	: INT;
+	nDupPairs		:INT;
+	nCounter			: INT;
+	buul	: BOOL;
+
+	sPackGTIN				: STRING;
+	sPackSerialNr				: STRING;
+	sPackMRP					: STRING;
+	sPackCrypto				: STRING;
+
+	strPackCode : STRING;
+	nValidationIndex			: INT;
+	qtyOver: INT;
+	nOutersPerRow: INT;
+
+	rtrigLableTest		: R_TRIG;
+	LableCouner		: INT;
+
+	nCounterDone1:INT;
+	nCounterDone2:INT;
+	nCounterError2:INT;
+	nCounterDone3:INT;
+
+	nCounterRead1:INT;
+	nCounterRead2:INT;
+	nCounterRead3:INT;
+
+	nCounterPhtc1:INT;
+	nCounterPhtc2:INT;
+	nCounterPhtc3:INT;
+
+	rtrigDone1:R_TRIG;
+	rtrigDone2:R_TRIG;
+	rtriError2:R_TRIG;
+	rtrigDone3:R_TRIG;
+
+	rtrigRead1:R_TRIG;
+	rtrigRead2:R_TRIG;
+	rtrigRead3:R_TRIG;
+
+	rtrigPhtc1:R_TRIG;
+	rtrigPhtc2:R_TRIG;
+	rtrigPhtc3:R_TRIG;
+
+	stCaseCode	: STRING (255);
+	stOuterCode	: STRING (255);
+
+	nCaseType	: INT;
+	nOuterType	:INT;
+
+	stResultCaseCode	: STRING(255);
+	stResultOuterCode	: STRING(255);
+
+	w1	: INT;
+	i2	: INT := 10;
+	index	: INT ;
+
+	n	: ARRAY [1..10] OF INT;
+	n2	: ARRAY [1..10] OF INT;
+	n3	: ARRAY [1..10] OF STRING :=[ 10 ('OK')];
+	n4	: ARRAY [1..10] OF STRING;
+	bDuplicateFound : BOOL;
+	nCheckIndex : INT;
+	nPackIndex : INT;
+	nDuplicatePairs	: INT;
+	nDupAmount		: INT;
+	nGoodPackReads	: INT;
+	sPrevOuterStatus0		: ST_OUTER_Status;
+	sPrevOuterStatus1		: ST_OUTER_Status;
+
+	PackCode					: ARRAY[1..cMAX_PACKS_PER_OUTER] OF T_PACK_Barcode;
+	temp : INT;
+	temp1 : DINT;
+
+	w	: ARRAY [1..10] OF INT;
+	w2	: ARRAY [1..10] OF INT;
+
+	pw	: POINTER TO BYTE;
+	pw1	: POINTER TO BYTE;
+
+	resultCMP : DINT;
+
+	//reset	: BOOL;
+	//start		: BOOL;
+
+	nTimeValue		: TIME;
+	bTimeLimit			: TIME;
+	bTimerOut			: BOOL;
+
+
+
+	nIndexQ: INT := 10;
+	nMaxInfeedIndexQ: INT := 300;
+	nOutersPerRowQ: INT :=15;
+	
+	nIndexQ2: UINT:= 10;
+	nMaxInfeedIndexQ2: UINT := 300;
+	nOutersPerRowQ2: UINT:=15;
+	
+	nIndexQ3 : UINT;
+	nOuterQ3	: T_PositiveINT;
+	nMaxResultQ3	: T_PositiveINT;
+	
+		nIndexQ4 : UINT;
+	nOuterQ4	: UINT;
+	nMaxResultQ4	: UINT;
+	
+	nUdintVar		: UDINT;
+	nIntVar1			: INT;
+	nIntVar2			: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF NOT bExecuteDiagnosticBlock THEN
+RETURN;
+END_IF
+
+
+
+sMsgInfo := F_CONCAT9('Cat=',INT_TO_STRING(nCategoryNo),';MsgType=', INT_TO_STRING(nMessageTypeNo),';MsgInfo="',sTextMessage,'"', ';AutoRst=', BOOL_TO_STRING(bAutoReset));
+
+fbTaskIndex();
+
+bInitOK := fbTaskIndex.Index <> 0;
+
+//nResultT := MAX(nEndPosT -nExtractCharsT - 1, 1);
+//nResultT1 := MAX(nEndPosT1 - nExtractCharsT1 - 1, 1);
+
+
+nString1Len1 := TO_UDINT(LEN(strString));
+nString1Len2 := LEN2(ADR(strString));
+
+nSize1 := SIZEOF(bPackCodeDuplicate);
+nSize2 := SIZEOF(nVALIndex1);
+
+nResulPosition	:= LEN2(ADR('$01$02CT=10;DS=8,0,0,1>;$03$04'));
+nResulPosition1 := FIND(strString1, strString2);
+//nResulPosition2 := F_LongFIND(strString1, strString2);
+nResulPosition3	:= FIND2(ADR(strString1), ADR(strString2));
+
+CONCAT2(ADR(strString1), ADR('$01$02CT=10;DS=8,0,0,1>;$03$04'), ADR(strString1), SIZEOF(strString1));
+IF LEN2(ADR(strString1)) > 550 THEN
+	DELETE2(ADR(strString1), ADR(strString1), SIZEOF(strString1), LEN2(ADR('$01$02CT=10;DS=8,0,0,1>;$03$04')), FIND2(ADR(strString1), ADR('$01$02CT=10;DS=8,0,0,1>;$03$04')));
+END_IF
+
+IF  nResulPosition3 > 256 THEN
+	DELETE2(ADR(strString1), ADR(strString1), SIZEOF(strString1), 3, nResulPosition3);
+END_IF
+//DELETE2(ADR(strTCPRxString), ADR(strTCPRxString), SIZEOF(strTCPRxString), LEN2(ADR('$01$02CT=10;DS=8,0,0,1>;$03$04')), FIND2(ADR(strTCPRxString), ADR('$01$02CT=10;DS=8,0,0,1>;$03$04')));
+nUdintVar := F_SafeTo_UDINT(nIntVar1-nIntVar2);
+
+IF bCheckDuplicate THEN
+
+	fbDuplicatesPackCodesDB(
+		stDuplicatedItem := gProcess.stPackRejectReasons.stPackCodesDuplicated,
+		bExtendedDupCheck	:=	bExtendCheckDup,
+		stOuterStatus := gProcess.aOCVPackStatus[1],
+		stLastOuterStatus := gProcess.aOCVPackStatus[2],
+		bDuplicateFound =>  bPackCodeDuplicate
+		);
+END_IF
+
+//nIndexQ := LIMIT(0,nIndexQ - nOutersPerRowQ,nMaxInfeedIndexQ);
+//nIndexQ2 := LIMIT(0,nIndexQ2 - nOutersPerRowQ2,nMaxInfeedIndexQ2);
+
+//nIndexQ3 := nOuterQ3 - nMaxResultQ3;
+//nIndexQ4 := nOuterQ4 - nMaxResultQ4;
+
+(*	E_SYSTEM_NOPACKAGGREGATION				:= 0,
+	E_SYSTEM_STRUCTURALAGGREGATION_PAOL	:= 1,
+	E_SYSTEM_STRUCTURALAGGREGATION_2CAM	:= 2,
+	E_SYSTEM_LINEARAGGREGATION				:= 3,
+	E_SYSTEM_NCWAGGREGATION					:= 4
+*)
+(*CASE eTest OF
+
+	E_SYSTEM_NOPACKAGGREGATION:
+
+		b1 := TRUE;
+		b2 := FALSE;
+		b3 := FALSE;
+		b4 := FALSE;
+
+
+	E_SYSTEM_PAOL_2CAM, 	E_SYSTEM_PAOL_3CAM:
+
+		b1 := FALSE;
+		b2 := TRUE;
+		b3 := FALSE;
+		b4 := FALSE;
+
+
+	E_SYSTEM_PLAS_T01:
+
+		b1 := FALSE;
+		b2 := FALSE;
+		b3 := TRUE;
+		b4 := FALSE;
+
+	E_SYSTEM_PLAS_T02	:
+
+		b1 := FALSE;
+		b2 := FALSE;
+		b3 := FALSE;
+		b4 := TRUE;
+END_CASE
+*)
+nVALIndex1 := STRING_TO_INT(MID(gProcess.aFailedCACData[1].CaseRejectCode ,2,7));
+nVALIndex2 := STRING_TO_INT(MID(gProcess.aFailedCACData[2].CaseRejectCode ,2,7));
+
+sSKU_HEX:= F_CONCAT3(LEFT(sSKU_FromCase,4), '', RIGHT(sSKU_FromCase,3));
+sSKU_Dec := HEXSTR_TO_DATA( sSKU_HEX, ADR( nBuffer ), SIZEOF( nBuffer ) );
+sSKU_OK:=F_CONCAT4(BYTE_TO_STRING(nBuffer[0]),BYTE_TO_STRING(nBuffer[1]),BYTE_TO_STRING(nBuffer[2]),BYTE_TO_STRING(nBuffer[3]));
+
+sSKU_OK2	:= F_OUTER_HexToBarcode(sSKU_HEX);
+sSKU_OK3	:= F_OUTER_HexToBarcode(sSKU_FromCase);
+
+sSKU_OK4	:= F_CASE_GetSKUFromHex(sSKU_FromCase);
+
+(* length of strPackCode *)
+nSKULen := LEN(sSKU_FromCase);
+nData:=0;
+(* strPackCode contains data *)
+IF nSKULen > 0 THEN
+
+	(* check each char in the code *)
+	FOR nCharIndex := 1 TO nSKULen DO
+		(* get char from string *)
+		strChar := MID(sSKU_FromCase, 1, nCharIndex);
+		nCharInDec := BYTE_TO_INT(HEXCHRNIBBLE_TO_BYTE(strChar));
+		nData:= nCharInDec*EXPT(16,nSKULen-nCharIndex) + nData;
+	END_FOR
+END_IF
+
+sSKU_Number := LEFT(LREAL_TO_STRING(nData),8);
+
+
+result := FIND(CaseString, CONCAT(gDevice.stMetsStatus.stPCMStatus.sProductionSite,gDevice.stMetsStatus.stPCMStatus.sProductionLine));
+//IF bSupiExecute1 THEN
+//	SUPIResult := F_CogCheck(sPackCode);
+//END_IF
+//IF bSupiExecute2 THEN
+//	fbCogCheck(	sSUPI 	:= sPackCode,
+//				nCogID	=> dINT_SUPIResult,
+//				strSUPI	=> strSUPI,
+//				strM		=> strM);
+//END_IF
+
+structSize1 := SIZEOF(gProcess.stCaseQueue.stPrintCHMData);
+
+qtyOver := nValidationIndex MOD nOutersPerRow;
+
+IF eCodeType = SEL(DotCode, E_SCANNER_CodeType.DATAMARTIX, E_SCANNER_CodeType.DOTCODE) THEN
+var1 := eCodeType;
+ELSE
+var1 :=999;
+END_IF
+
+
+sStartTimeStamp	:= F_SYSTEM_SystemTimeAsISO8601(gDevice.stMetsStatus.stCTDateTime.sSystemTime, gDevice.stMetsStatus.stCTDateTime.sUTCTimeZoneOffset );
+fbSystemTime( timeLoDW =>timeAsFileTime.dwLowDateTime , timeHiDW =>timeAsFileTime.dwHighDateTime );
+StartDateTime 			:= FILETIME_TO_DT( timeAsFileTime );
+
+
+
+index := 0;
+(*FOR i1 := i2 TO 1 BY -1 DO
+index := index +1;
+		n[index] := i1;
+
+
+
+
+	END_FOR*)
+
+rtrigLableTest(CLK:=gIOFiltered.stCaseLabelValidation.bStateInput);
+
+IF rtrigLableTest.Q THEN
+	LableCouner := LableCouner + 1;
+END_IF
+
+strPackCode :=gProcess.aOuterStatus[2].stOACData.PackCode[2];
+		sPackGTIN := F_CODE_GetItem(gProcess.aOuterStatus[2].stOACData.PackCode[2]   , eCodeAIType.GTIN, gDevice.stMachineConfig.stCodeInfo_Pack);
+						sPackSerialNr := F_CODE_GetItem(gProcess.aOuterStatus[2].stOACData.PackCode[2], eCodeAIType.SerialCode, gDevice.stMachineConfig.stCodeInfo_Pack);
+						sPackMRP := F_CODE_GetItem(gProcess.aOuterStatus[2].stOACData.PackCode[2], eCodeAIType.MRP, gDevice.stMachineConfig.stCodeInfo_Pack);
+						sPackCrypto := F_CODE_GetItem(gProcess.aOuterStatus[2].stOACData.PackCode[2], eCodeAIType.CryptoCode, gDevice.stMachineConfig.stCodeInfo_Pack);
+pw := ADR(w);
+pw1 := ADR(w2);
+
+resultCMP := MEMCMP(pw, pw1, SIZEOF(w)) ;
+
+(*
+temp1 := MEMCMP(ADR(sPrevOuterStatus0.stOACData.PackCode), ADR(PackCode), SIZEOF(sPrevOuterStatus0.stOACData.PackCode)) ;
+	IF reset THEN
+
+	nPackIndex :=1;
+	nDuplicatePairs	:=0;
+	nGoodPackReads	:=10;
+	MEMSET(ADR(n2), 16#00, SIZEOF(n2));
+	n4 := n3;
+	END_IF
+
+IF  start THEN
+	(* for all other Packs in Outer *)
+	WHILE nPackIndex <= 10 DO
+			bDuplicateFound := FALSE;
+			temp := -1;
+			nDupAmount :=1;
+			FOR nCheckIndex := nPackIndex  TO 10 DO
+
+				(* check Pack is not current Pack *)
+				IF nCheckIndex <> nPackIndex  AND n2[nCheckIndex] <> 3 THEN
+					(* currentpack code contains data and matches another pack code *)
+					IF n[nCheckIndex] = n[nPackIndex] THEN
+
+						(* duplicate packs found *)
+						n2[nPackIndex] := 3;
+						n2[nCheckIndex] := 3;
+						bDuplicateFound := TRUE;
+						nDupAmount	:= nDupAmount + 1;
+
+						(*Counting how many different pairs found*)
+						IF  n[nCheckIndex] <> temp THEN
+							temp :=  n[nPackIndex];
+							nDuplicatePairs := nDuplicatePairs + 1;
+						END_IF
+						n4[nPackIndex]  := stPackRejectReasons.stPackCodesDuplicated.sMetsDisplayCode;
+						n4[nCheckIndex]  := stPackRejectReasons.stPackCodesDuplicated.sMetsDisplayCode;
+					END_IF
+				END_IF
+			END_FOR
+
+			IF bDuplicateFound THEN
+				nGoodPackReads := nGoodPackReads - nDupAmount;
+			END_IF
+
+		nPackIndex := nPackIndex +1;
+	END_WHILE
+END_IF
+
+
+IF nPackIndex > 10 THEN
+	start := FALSE;
+END_IF
+
+
+
+
+*)
+
+(*
+trigSnapshot(CLK:= bSnapshot);
+
+IF trigSnapshot.Q THEN
+	arrOCVPackStatusSnapshot := arrOCVPackStatus;
+END_IF
+*)
+ stResultCaseCode:= F_CODE_GetItem(stCaseCode, nCaseType, gDevice.stMachineConfig.stCodeInfo_Case);
+ stResultOuterCode:= F_CODE_GetItem(stOuterCode, nOuterType, gDevice.stMachineConfig.stCodeInfo_Outer);
+
+
+(*
+nTimeValue := TIME_TO_UINT(tFastCycleTime);
+*)
+(*TON with reset*)
+(*
+IF reset THEN
+
+	bTimerOut	:= FALSE;
+	nTimeValue := 0;
+
+ELSIF not start THEN
+
+	bTimerOut	:= FALSE;
+	nTimeValue := 0;
+
+ELSIF start  AND NOT bTimerOut THEN
+
+	nTimeValue := nTimeValue + TIME_TO_UINT(tFastCycleTime);
+
+	IF bTimeLimit < nTimeValue THEN
+		bTimerOut	:= TRUE;
+	ELSE
+		bTimerOut := FALSE;
+	END_IF
+END_IF
+*)
+(*TOF with reset*)
+(*
+IF tFastCycleTime > T#0ms THEN
+
+	IF reset THEN
+	
+		bTimerOut	:= FALSE;
+		nTimeValue := t#0ms;
+
+	ELSIF start  THEN
+	
+		bTimerOut := TRUE;
+		nTimeValue := t#0ms;
+	
+	ELSIF NOT start  AND  bTimerOut THEN
+	
+		nTimeValue := nTimeValue + tFastCycleTime;
+
+		IF bTimeLimit < nTimeValue THEN
+			bTimerOut	:= FALSE;
+			nTimeValue := t#0ms;
+		ELSE
+			bTimerOut := TRUE;
+		END_IF
+	END_IF
+ELSE
+		bTimerOut	:= FALSE;
+		nTimeValue := t#0ms;
+END_IF
+*)
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

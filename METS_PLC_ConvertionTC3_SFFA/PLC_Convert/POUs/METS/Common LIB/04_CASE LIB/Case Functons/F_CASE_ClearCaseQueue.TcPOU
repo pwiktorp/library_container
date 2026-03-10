@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_CASE_ClearCaseQueue" Id="{d695212a-346a-4f84-9dc1-cffb2b941369}" SpecialFunc="None">
+    <Declaration><![CDATA[(* clear all data from Case Data *)
+FUNCTION F_CASE_ClearCaseQueue : BOOL
+VAR_INPUT
+	bEnable				: BOOL;			(* set TRUE to reset all values in Case Data *)
+END_VAR
+
+
+VAR_IN_OUT
+	stCaseQueue							: ST_CASE_CaseQueue;(* Case Data structure *)
+	stCaseQueueHMI						:ST_HMI_CASE_CaseQueue;(* Case Data structure *)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* clear stCaseQueue enabled *)
+IF bEnable = TRUE THEN
+
+	(* reset stCaseQueue *)
+	MEMSET(ADR(stCaseQueue), 16#00, SIZEOF(stCaseQueue));
+
+	(* reset aCaseQueueHMI *)
+	MEMSET(ADR(stCaseQueueHMI), 16#00, SIZEOF(stCaseQueueHMI));
+
+	(* set output to TRUE when reset is active *)
+	F_CASE_ClearCaseQueue := TRUE;
+
+(* clear stCaseQueue disabled *)
+ELSE
+
+	(* reset output *)
+	F_CASE_ClearCaseQueue := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="F_CASE_ClearCaseQueue">
+      <LineId Id="11" Count="17" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_FILE_SetFileExtension" Id="{e1f2e9f1-03cf-4763-9251-b398fb849b64}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_FILE_SetFileExtension : T_MaxString
+VAR_INPUT
+	Filename 						: T_MaxString;
+	Extension 						: T_FileExtension;
+END_VAR
+VAR
+	Result 							: T_MaxString;
+	DotPosition						: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF LEFT(Extension,1) <> cDOT_CHAR THEN (*No leading dot character found, so add it *)
+	Extension := CONCAT(cDOT_CHAR, Extension);
+END_IF
+
+DotPosition := FIND(Filename, cDOT_CHAR);
+IF DotPosition = 0 THEN (*No file extension - append new file extension*)
+	Result := CONCAT(Filename,Extension);
+ELSE
+	Result := CONCAT(LEFT(Filename, DotPosition-1),Extension);
+END_IF
+
+F_FILE_SetFileExtension := Result;]]></ST>
+    </Implementation>
+    <LineIds Name="F_FILE_SetFileExtension">
+      <LineId Id="9" Count="11" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

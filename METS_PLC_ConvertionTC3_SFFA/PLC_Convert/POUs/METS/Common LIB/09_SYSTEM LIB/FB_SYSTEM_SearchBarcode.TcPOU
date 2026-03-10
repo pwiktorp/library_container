@@ -1,0 +1,120 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_SYSTEM_SearchBarcode" Id="{40ed0d35-064e-4918-ad6e-89b4188b8d6f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SYSTEM_SearchBarcode
+VAR_INPUT
+	bExecute					: BOOL;
+	bEnableInvalidSearch		: BOOL;
+	bEnableCaseContentSearch	: BOOL;
+	bEnablePackCodeRefeed		: BOOL ;
+	bPackBarcode				: BOOL;
+	bOuterIntermediate			: BOOL;
+	bOuterBarcode				: BOOL;
+	bCaseBarcode				: BOOL;
+	sPackBarcode				: T_PACK_Barcode;
+	sOuterIntermediateBarcode	: STRING(255);
+	sOuterBarcode				: T_OUTER_Barcode;
+	sCaseBarcode				: T_CASE_Barcode;
+END_VAR
+VAR_IN_OUT
+	stCodeInfo_Pack			: ST_CodeInfo;
+	stCodeInfo_Intermediate		: ST_CodeInfo;
+	stCodeInfo_Outer			: ST_CodeInfo;
+
+END_VAR
+VAR_OUTPUT
+	bDone					: BOOL;
+	bBusy					: BOOL;
+	bScanDone				: BOOL;
+	sOutBarcode				: T_CASE_Barcode;
+	sNewPackCodeRefeed		: T_PACK_Barcode;
+END_VAR
+VAR
+	fbExRTrig 					: R_TRIG;
+	fbExFTrig 					: F_TRIG;
+	(*fbDecodeGS1				: FB_SCANNER_DecodeGS1;*)
+	eCodeAIType				: E_CodeAIType;
+
+	testString	 : STRING(255);
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExRTrig(cLK:=bExecute);
+fbExFTrig(cLK:=bExecute);
+
+IF fbExRTrig.Q THEN
+	bBusy := TRUE;
+	bDone := FALSE;
+	bScanDone := FALSE;
+END_IF
+
+IF fbExFTrig.Q THEN
+	bBusy := FALSE;
+	bDone := FALSE;
+	bScanDone := FALSE;
+END_IF
+
+IF bBusy THEN
+
+	IF NOT bEnableInvalidSearch AND bEnableCaseContentSearch AND NOT bEnablePackCodeRefeed THEN
+
+		sNewPackCodeRefeed := '';
+
+		IF bPackBarcode THEN
+			sOutBarcode	:= sPackBarcode;
+		ELSIF bOuterBarcode THEN
+			sOutBarcode := F_CODE_GetItem(sOuterBarcode, eCodeAIType.SerialCode, stCodeInfo_Outer);
+		ELSIF bCaseBarcode THEN
+			(*fbDecodeGS1(strGS1String := CONCAT(']d2',sCaseBarcode), bDontParseAsGS1 := TRUE, strBarcode => sOutBarcode);*)
+			sOutBarcode	:= sCaseBarcode;
+		ELSE
+			sOutBarcode := '';
+		END_IF
+
+		bScanDone := TRUE;
+
+	ELSIF bEnableInvalidSearch AND NOT bEnableCaseContentSearch AND NOT bEnablePackCodeRefeed THEN
+
+		sNewPackCodeRefeed := '';
+
+		IF bPackBarcode THEN
+			sOutBarcode :=  F_CODE_GetItem(sPackBarcode, eCodeAIType.SerialCode, stCodeInfo_Pack);
+		ELSIF bOuterIntermediate THEN
+			sOutBarcode := F_CODE_GetItem(sOuterIntermediateBarcode, eCodeAIType.SerialCode, stCodeInfo_Intermediate);
+		ELSIF bOuterBarcode THEN
+			sOutBarcode := F_CODE_GetItem(sOuterBarcode, eCodeAIType.SerialCode, stCodeInfo_Outer);
+		ELSE
+			sOutBarcode := '';
+		END_IF
+
+		bScanDone := TRUE;
+
+	ELSIF bEnableInvalidSearch AND NOT bEnableCaseContentSearch AND bEnablePackCodeRefeed THEN
+
+		IF bPackBarcode THEN
+			sOutBarcode := F_CODE_GetItem(sPackBarcode, eCodeAIType.SerialCode, stCodeInfo_Pack);
+			sNewPackCodeRefeed := sPackBarcode;
+		ELSE
+			sOutBarcode := '';
+			sNewPackCodeRefeed := '';
+		END_IF
+
+		bScanDone := TRUE;
+
+	ELSE
+
+		sOutBarcode := '';
+		sNewPackCodeRefeed := '';
+
+	END_IF
+
+	(* set output *)
+	bBusy := FALSE;
+	bDone := TRUE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_SYSTEM_SearchBarcode">
+      <LineId Id="37" Count="72" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

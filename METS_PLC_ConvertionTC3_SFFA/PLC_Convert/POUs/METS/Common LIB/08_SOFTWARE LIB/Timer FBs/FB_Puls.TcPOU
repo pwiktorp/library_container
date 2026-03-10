@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_Puls" Id="{feaef9b9-433f-434b-907a-e26615e0589e}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Puls
+VAR_INPUT
+	bReset				: 	BOOL;
+	tFlashOn				: 	TIME;
+	tFlashOff				: 	TIME;
+END_VAR
+VAR_OUTPUT
+	bFlashEnable			: 	BOOL;
+END_VAR
+VAR
+	tonFlashOn			: 	TON;
+	tonFlashOff			: 	TON;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[tonFlashOn(IN:= bFlashEnable, PT:= tFlashOn);
+
+tonFlashOff(IN:= NOT bFlashEnable, PT:= tFlashOff);
+
+IF bReset  OR tFlashOn = t#0ms OR tFlashOff = t#0m THEN
+	bFlashEnable := FALSE;
+ELSE
+
+	IF	tonFlashOn.Q	THEN
+		bFlashEnable	:= FALSE;
+	END_IF
+	
+	IF	tonFlashOff.Q	THEN
+		bFlashEnable	:= TRUE;
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Puls">
+      <LineId Id="13" Count="15" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

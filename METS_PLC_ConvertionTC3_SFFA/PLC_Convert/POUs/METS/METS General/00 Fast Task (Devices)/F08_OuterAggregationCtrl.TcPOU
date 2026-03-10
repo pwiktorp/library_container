@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F08_OuterAggregationCtrl" Id="{5425b027-cc14-4a85-918d-020867d37cb5}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM F08_OuterAggregationCtrl
+VAR
+	nTestValue : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CASE gProcess.eOuterAggregationMode OF
+
+E_SYSTEM_CML_VALIDASCONFIRM:
+	PRG_CML_ValidationAsConfirmation();
+
+E_SYSTEM_CML_SHIFTSYNCHRO:
+	;(*PRG_CML_ShiftSynchroAggregation();*)
+
+E_SYSTEM_CML_SYNCHRO:
+	PRG_CML_SynchroAggregation();
+
+E_SYSTEM_LARS_VALIDASCONFIRM:
+	PRG_LARS_ValidationAsConfirmation();
+
+E_SYSTEM_LARS_SHIFTSYNCHRO:
+	;
+
+E_SYSTEM_LARS_SYNCHRO:
+	PRG_LARS_SynchroAggregation();
+
+E_SYSTEM_SFLX_VALIDASCONFIRM:
+	PRG_SFLX_ValidationAsConfirmation();
+
+E_SYSTEM_SFLX_NOVALID:
+	PRG_SFLX_NoValidationCamera();
+
+E_SYSTEM_SFLX_SYNCHRO:
+	;(*PRG_SFLX_SynchroAggregation();*)
+
+ELSE
+	PRG_LARS_SynchroAggregation();
+END_CASE
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

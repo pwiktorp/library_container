@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_LongToLowCase" Id="{a8092f50-e0ed-42cb-85c6-a7c0f71092b8}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_LongToLowCase : T_LongSTRING
+VAR_INPUT
+	sDataString				: T_LongSTRING;	
+END_VAR
+VAR
+	_nDataStringLen			: UDINT;
+	_nMaxIndex				: UDINT;	
+	_nIndex					: UDINT;
+	
+	_sTempDataString		: T_MaxString;	
+	_sResultDataString		: T_LongSTRING;	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[_nDataStringLen 	:= LEN2(ADR(sDataString));
+
+IF _nDataStringLen > 0 THEN
+	_nMaxIndex := _nDataStringLen MOD 256;
+	
+	FOR _nIndex := 0 TO _nMaxIndex DO
+	
+		MEMMOVE(ADR(_sTempDataString), ADR(sDataString)+ _nIndex*SIZEOF(_sTempDataString), SIZEOF(_sTempDataString));
+		
+		_sTempDataString 	:= F_ToLCase(_sTempDataString);
+		CONCAT2(ADR(_sResultDataString), ADR(_sTempDataString), ADR(_sResultDataString), SIZEOF(_sResultDataString));
+	END_FOR
+END_IF
+
+F_LongToLowCase := _sResultDataString;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

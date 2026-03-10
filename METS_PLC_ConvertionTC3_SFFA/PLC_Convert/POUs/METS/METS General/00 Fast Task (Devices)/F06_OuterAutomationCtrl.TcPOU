@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F06_OuterAutomationCtrl" Id="{8e1209bb-c096-48ee-93e8-a1f6ef4c4533}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM F06_OuterAutomationCtrl
+VAR
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CASE gDevice.eAutomationMode OF
+
+E_SYSTEM_EXTERNAL:
+	gDevice.stMetsStatus.bUseOverlayPanel  := FALSE;
+
+E_SYSTEM_CML:
+	PRG_CML_01_InfeedCtrl();
+	PRG_CML_02_LoweratorCtrl();
+
+	gDevice.stMetsStatus.bUseOverlayPanel  := FALSE;
+
+E_SYSTEM_LARS:
+	PRG_LARS_01_TransportConvCtrl();
+	PRG_LARS_02_GateSeparationCtrl();
+	PRG_LARS_03_AddtitionalConvCtrl();
+
+	gDevice.stMetsStatus.bUseOverlayPanel  := FALSE;
+
+E_SYSTEM_SIDEFLEX:
+	PRG_SFLX_01_TransportConvCtrl();
+	PRG_SFLX_02_OutfeedConvCtrl();
+	PRG_SFLX_03_AddtitionalConvCtrl();
+
+	gDevice.stMetsStatus.bUseOverlayPanel  := FALSE;
+
+ELSE
+	gDevice.stMetsStatus.bUseOverlayPanel  := FALSE;
+
+END_CASE
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

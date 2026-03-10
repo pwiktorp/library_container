@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SCANNER_Evaluation" Id="{006b7542-0b44-477c-8b0d-4ab81faf35ba}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SCANNER_Evaluation
+VAR_INPUT
+	bUpdateEval			: BOOL;
+	stCameraOptions		: ST_SCANNER_Options;
+	stImageData			: ST_SCANNER_ImageData;		(* image data structure *)
+	bResetEval		  	: BOOL;
+END_VAR
+VAR_IN_OUT
+	stCameraEvaluation		: ST_SCANNER_Evaluation;
+END_VAR
+VAR
+	rtrigUpdateEval  		: R_TRIG;
+	nImageIndex			: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[rtrigUpdateEval(CLK:= bUpdateEval);
+IF bResetEval THEN
+
+	MEMSET(ADR(stCameraEvaluation), 16#00, SIZEOF(stCameraEvaluation));
+END_IF
+
+IF rtrigUpdateEval.Q THEN
+
+				(* Camera Evaluation- update total codes scanned and no-reads *)
+				stCameraEvaluation.nTotalReads := stCameraEvaluation.nTotalReads + F_SafeTo_UDINT(stCameraOptions.nExpectedResp);
+
+				stCameraEvaluation.nNOKCodes:= stCameraEvaluation.nNOKCodes  + F_SafeTo_UDINT(stCameraOptions.nExpectedResp - stImageData.nCodesRead);
+				stCameraEvaluation.nReadCodes := stCameraEvaluation.nTotalReads - stCameraEvaluation.nNOKCodes;
+				(* scan number and determine if data will be written to primary or secondary camera data *)
+
+				(* for each pack code read *)
+				FOR nImageIndex := 1 TO LIMIT(1, stImageData.nCodesRead, cMAX_CAMERA_PROG_NUMBER)  DO
+
+					CASE stImageData.aCodeData[nImageIndex].nEvaluation OF
+						1:	stCameraEvaluation.nPoorCodes :=  stCameraEvaluation.nPoorCodes + 1;
+						2:	stCameraEvaluation.nFairCodes :=  stCameraEvaluation.nFairCodes + 1;
+						3:	stCameraEvaluation.nGoodCodes :=  stCameraEvaluation.nGoodCodes + 1;
+					END_CASE
+				END_FOR
+
+				(*Pack Confirmation Camera Evaluation statistics*)
+				stCameraEvaluation.fReadEfficiency			:= F_SafeDIV(stCameraEvaluation.nReadCodes*100, stCameraEvaluation.nTotalReads);
+				stCameraEvaluation.fNOKEfficiency			:= F_SafeDIV(stCameraEvaluation.nNOKCodes*100, stCameraEvaluation.nTotalReads);
+
+				stCameraEvaluation.fGoodEfficiency		:= F_SafeDIV(stCameraEvaluation.nGoodCodes*100, ( stCameraEvaluation.nTotalReads - stCameraEvaluation.nNOKCodes));
+				stCameraEvaluation.fFairEfficiency		:= F_SafeDIV(stCameraEvaluation.nFairCodes*100, ( stCameraEvaluation.nTotalReads - stCameraEvaluation.nNOKCodes));
+				stCameraEvaluation.fPoorEfficiency		:= F_SafeDIV(stCameraEvaluation.nPoorCodes*100, ( stCameraEvaluation.nTotalReads - stCameraEvaluation.nNOKCodes));
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

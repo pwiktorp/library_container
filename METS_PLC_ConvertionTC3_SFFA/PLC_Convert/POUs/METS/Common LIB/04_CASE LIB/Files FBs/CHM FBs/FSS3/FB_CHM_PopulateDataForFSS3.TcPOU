@@ -1,0 +1,198 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CHM_PopulateDataForFSS3" Id="{f95eb21d-7666-49d8-916c-15dcb45904c4}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_CHM_PopulateDataForFSS3
+VAR_INPUT
+	bExecute 					: BOOL;
+	bATTPModeEnable			: BOOL;
+	stCTDateTime				: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+END_VAR
+VAR_OUTPUT
+	bDone 					: BOOL;
+END_VAR
+VAR_IN_OUT
+	stProductData					: ST_PCM_Data;
+	stProductInstruction			: ST_PCM_Status;					(* Product Instruction *)
+	stPackRejectReasons				: ST_RejectReasonsForPack;
+	stOuterRejectReasons			: ST_RejectReasonsForOuter;
+	stCaseRejectReasons				: ST_RejectReasonsForCase;
+	stCodeInfo_Pack				: ST_CodeInfo;
+	stCodeInfo_Outer				: ST_CodeInfo;
+	stCodeInfo_Case				: ST_CodeInfo;
+	stCACPrintData				: ST_CAC_Data;
+	stCHMData						: ST_CHM_Data;
+END_VAR
+VAR
+	fbExecute					: R_TRIG;
+	eCodeAIType							: E_CodeAIType;
+	
+	nOuterIndex				: INT;
+	nPackIndex				: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK:= bExecute);
+
+IF fbExecute.Q = TRUE THEN
+
+	stCHMData.MessageHeader.ReferenceID			:= stProductData.MessageHeader.ReferenceID;
+	stCHMData.MessageHeader.MessageType			:= 'GenericAggregationMessage';
+	stCHMData.MessageHeader.SenderSystem		:= stProductData.MessageHeader.ReceiverSystem;
+	stCHMData.MessageHeader.ReceiverSystem		:= stProductData.MessageHeader.SenderSystem;
+
+	stCHMData.Factory	:= stProductInstruction.sProductionSite;
+
+	stCHMData.GenericHierarchy.HierarchyType		:= 'FULL';
+	stCHMData.GenericHierarchy.PerformedAction	:= 'PACKING';
+
+	IF stCACPrintData.CodingAndTrackingMode = 11  THEN
+		stCHMData.GenericHierarchy.TrackingLevels := 'PK OUT CS';
+
+	ELSIF stCACPrintData.CodingAndTrackingMode = 7 THEN
+		stCHMData.GenericHierarchy.TrackingLevels := 'OUT CS';
+	ELSIF stCACPrintData.CodingAndTrackingMode = 4 THEN
+		stCHMData.GenericHierarchy.TrackingLevels := 'CS';
+	ELSE
+		stCHMData.GenericHierarchy.TrackingLevels := '';
+	END_IF
+
+	stCHMData.GenericHierarchy.TrackingIndicator		:= stProductData.ProductInformation.TrackingIndicator;
+
+(*<Item Type="CS">*)
+	stCHMData.GenericHierarchy.CaseItem.Identity.SKU		:= stProductInstruction.sRetailSKU;
+	stCHMData.GenericHierarchy.CaseItem.Identity.GTIN		:= stProductInstruction.sCaseGTIN;
+
+	IF stCACPrintData.Barcode <>  cCASE_PACKER_REJECT THEN
+		stCHMData.GenericHierarchy.CaseItem.Identity.ID	:= F_CODE_GetItem(stCACPrintData.Barcode, eCodeAIType.SerialCode, stCodeInfo_Case);
+	END_IF
+
+	IF stCHMData.GenericHierarchy.CaseItem.Identity.ID <> '' THEN
+		stCHMData.GenericHierarchy.CaseItem.Identity.ReadQuality := '100';
+		stCHMData.GenericHierarchy.CaseItem.NoRead	:='false';
+	ELSE
+		stCHMData.GenericHierarchy.CaseItem.Identity.ReadQuality := '0';
+		stCHMData.GenericHierarchy.CaseItem.NoRead	:='true';
+	END_IF
+
+	IF stCACPrintData.CaseRejectCode <> 'OK' THEN
+
+		stCHMData.GenericHierarchy.CaseItem.ItemState := 'Rejected';
+		stCHMData.GenericHierarchy.CaseItem.RejectReason := F_CASE_GetRejectReasonFSS(stCACPrintData.CaseRejectCode , stCaseRejectReasons);
+
+	ELSE
+		stCHMData.GenericHierarchy.CaseItem.ItemState := 'Verified';
+		stCHMData.GenericHierarchy.CaseItem.RejectReason :='';
+	END_IF
+
+	stCHMData.GenericHierarchy.CaseItem.TimeStamp := F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset );
+
+(*<Item Type="OUT">*)
+	IF stProductInstruction.nOpMode >= 7 THEN
+
+		stCHMData.GenericHierarchy.CaseItem.Content.ExpectedItemCount	:= INT_TO_STRING(stProductInstruction.nOutersPerCase);
+		stCHMData.GenericHierarchy.CaseItem.Content.ItemReadRate		:=	stProductData.ProductInformation.Settings.ToleranceThresholdOUT.GoodReadPercentageCS;
+
+		stCHMData.GenericHierarchy.CaseItem.Content.DefaultIdentity.SKU						:= stProductInstruction.sRetailSKU;
+		stCHMData.GenericHierarchy.CaseItem.Content.DefaultIdentity.GTIN						:= stProductInstruction.sOuterGTIN;
+		stCHMData.GenericHierarchy.CaseItem.Content.DefaultIdentity.ProductionOrder			:= stProductInstruction.sProductionOrder;
+		stCHMData.GenericHierarchy.CaseItem.Content.DefaultIdentity.LocalProductionOrder	:= stProductInstruction.sProductionOrder;
+		stCHMData.GenericHierarchy.CaseItem.Content.DefaultIdentity.PITCode					:= stProductInstruction.sPitCode;
+		stCHMData.GenericHierarchy.CaseItem.Content.DefaultIdentity.BatchID					:= stProductInstruction.sBatchNumber;
+		stCHMData.GenericHierarchy.CaseItem.Content.DefaultIdentity.ProductionLine			:= stProductInstruction.sProductionLine;
+
+		FOR	nOuterIndex := 1  TO stProductInstruction.nOutersPerCase DO
+
+			stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Identity.ID := F_CODE_GetItem(stCACPrintData.Outer[nOuterIndex].Barcode, eCodeAIType.SerialCode, stCodeInfo_Outer);
+
+			IF stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Identity.ID <> '' THEN
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Identity.ReadQuality := '100';
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].NoRead :='false';
+			ELSE
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Identity.ReadQuality := '0';
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].NoRead :='true';
+			END_IF
+
+			IF stCACPrintData.Outer[nOuterIndex].OuterRejectCode <> 'OK' THEN
+		
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].ItemState		:= 'Rejected';
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].RejectReason  	:= F_OUTER_GetRejectReasonFSS(stCACPrintData.Outer[nOuterIndex].OuterRejectCode, stOuterRejectReasons);
+
+			ELSE
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].ItemState 		:= 'Verified';
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].RejectReason 	:= '';
+			END_IF
+
+			stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].TimeStamp :=stCACPrintData.Outer[nOuterIndex].OuterTimeStamp;
+
+(*<Item Type="PK">*)
+			IF (stProductInstruction.nOpMode = 11) THEN
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.SKU 				:= stProductInstruction.sRetailSKU;
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.GTIN				:= stProductInstruction.sPackGTIN;
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.ProductionOrder		:= stProductInstruction.sProductionOrder;
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.LocalProductionOrder	:= stProductInstruction.sProductionOrder;
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.PITCode			:= stProductInstruction.sPitCode;
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.BatchID			:= stProductInstruction.sBatchNumber;
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.ProductionLine		:= stProductInstruction.sProductionLine;
+
+				(*Expected number of packs in one outer*)
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.ExpectedItemCount	:=  INT_TO_STRING(stProductInstruction.nPacksPerOuter);
+				stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.ItemReadRate		:=	stProductData.ProductInformation.Settings.ToleranceThresholdPK.GoodReadPercentageOUT;
+
+				FOR	nPackIndex := 1  TO stProductInstruction.nPacksPerOuter DO
+
+						stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].Identity.ID :=
+											F_CODE_GetItem(stCACPrintData.Outer[nOuterIndex].PackCode[nPackIndex], eCodeAIType.SerialCode, stCodeInfo_Pack);
+
+						IF stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].Identity.ID <> '' THEN
+
+							IF NOT stCACPrintData.Outer[nOuterIndex].PackCodeStatus[nPackIndex].4 THEN
+
+								stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].Identity.ReadQuality := '100';
+								stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].NoRead := 'false';
+							ELSE
+								stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].Identity.ReadQuality := '50';
+								stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].NoRead := 'true';
+							END_IF
+						ELSE
+							stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].Identity.ReadQuality := '0';
+							stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].NoRead := 'true';
+						END_IF
+
+						IF stCACPrintData.Outer[nOuterIndex].PackRejectCode[nPackIndex] <> 'OK' THEN
+
+							stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].ItemState 		:= 'Rejected';
+							stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].RejectReason 	:= F_PACK_GetRejectReasonFSS(stCACPrintData.Outer[nOuterIndex].PackRejectCode[nPackIndex], stPackRejectReasons);
+						ELSE
+							stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].ItemState  		:= 'Verified';
+							stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].RejectReason 	:= '';
+						END_IF
+
+						stCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].TimeStamp :=
+											SEL(bATTPModeEnable, stCACPrintData.Outer[nOuterIndex].PackTimeStamp, stCACPrintData.Outer[nOuterIndex].OuterTimeStamp);
+
+				END_FOR
+			END_IF
+		END_FOR
+	END_IF
+
+	stCHMData.GenericHierarchy.CaseItem.ProductionOrder			:= stProductInstruction.sProductionOrder;
+	stCHMData.GenericHierarchy.CaseItem.LocalProductionOrder	:= stProductInstruction.sProductionOrder;
+	stCHMData.GenericHierarchy.CaseItem.PITCode					:= stProductInstruction.sPitCode;
+	stCHMData.GenericHierarchy.CaseItem.BatchID 					:= stProductInstruction.sBatchNumber;
+	stCHMData.GenericHierarchy.CaseItem.ProductionLine 			:= stProductInstruction.sProductionLine;
+
+
+	IF stCodeInfo_Case.stProduceDate.bValidate THEN
+		stCHMData.Attributes.ProduceDateMC	:= F_CODE_GetItem(stCACPrintData.Barcode, eCodeAIType.ProduceDate, stCodeInfo_Case);
+	ELSE
+		stCHMData.Attributes.ProduceDateMC	:= '';
+	END_IF
+
+	bDone := TRUE;
+
+ELSIF bExecute = FALSE THEN
+	bDone := FALSE;
+END_IF
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

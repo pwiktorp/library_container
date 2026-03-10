@@ -1,0 +1,229 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_CHM_MoveToArchive" Id="{c1f68677-0ba0-4e99-be44-68b875ee952b}" SpecialFunc="None">
+    <Declaration><![CDATA[(* reads CHM files from CHM\OK folder,  copies CHM file into CHM\Archive *)
+FUNCTION_BLOCK FB_CHM_MoveToArchive
+VAR_INPUT
+	bExecute				: BOOL;			(* set TRUE to move CHM file from Archive to Restore folder *)
+	strLocalCHMPath		: STRING(255);		(* local CHM folder *)
+	stCTDateTime						: ST_SYSTEM_DateTime;
+	bArchiveWithSKU			: BOOL;
+	strRetailSKU				: T_CodeRSKU;
+	strProductionOrder			: T_CodePO;
+END_VAR
+VAR_OUTPUT
+	bDone 				: BOOL;			(* TRUE = CHM restore complete *)
+	bBusy 				: BOOL;			(* TRUE = CHM restore active *)
+	bError 				: BOOL;			(* TRUE = CHM restore error *)
+	nErrorID				: UDINT;			(* error code *)
+	bCHMFileFound		: BOOL;
+	strCHMFile			: T_CHM_Filename;
+	strFolderName			: STRING(11);
+END_VAR
+VAR
+	fbExecute				: R_TRIG;
+	eState				: E_CHM_State;
+	eErrorState			: E_CHM_State;
+	fbFindFile				: FB_EnumFindFileEntry;
+	fbCreateFolder			: FB_CreateDir;
+	fbMoveFile			: FB_FILE_Move;
+	eCmd 				: E_EnumCmdType;
+	strRestoredBarcode		: T_CASE_Barcode;
+	strCaseSerialCode		: T_CASE_Barcode;
+	strNewFolderName		: STRING(11);
+	licznik : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_CHM_IDLE:
+
+		(* restore file *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+			strNewFolderName := '';
+			licznik := licznik + 1;
+			(* initiliase vars *)
+			eCmd := eEnumCmd_First;
+			eErrorState := eState;
+			MEMSET(ADR(strCHMFile), 16#00, SIZEOF(strCHMFile));
+
+			eState := E_CHM_FINDFILE;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* clear outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+
+		END_IF
+
+	(* find CHM file *)
+	E_CHM_FINDFILE:
+
+		(* build list *)
+		fbFindFile(
+			sNetId		:= '',
+			sPathName	:= F_CONCAT3(strLocalCHMPath, 'OK\', 'CHM_*.xml'),
+			eCmd		:= eCmd,
+			bExecute		:= TRUE,
+			tTimeout		:= T#5s
+		);
+
+		(* find CHM file complete *)
+		IF fbFindFile.bBusy = FALSE THEN
+
+			(* find CHM file completed OK *)
+			IF fbFindFile.bError = FALSE THEN
+
+				(* end of CHM file list *)
+				IF fbFindFile.bEOE = TRUE OR eCmd = eEnumCmd_Abort THEN
+
+					eState := E_CHM_DONE;
+
+				(* next CHM file *)
+				ELSE
+
+					(* next CHM file *)
+					strCHMFile := fbFindFile.stFindFile.sFileName;
+					eCmd := eEnumCmd_Next;
+					IF FIND(strCHMFile, 'NOCASELABEL') > 0 THEN
+
+						strNewFolderName := 'NoCaseLabel';
+
+					(*ELSIF	stMachineConfig.bFSS2_Enable THEN
+
+						strRestoredBarcode := MID(strCHMFile, (stMAchineConfig.stCodeInfo_Case.nEntireLength - 2* stMAchineConfig.stCodeInfo_Case.nNumberOfAIs),5);
+						strCaseSerialCode := F_CODE_GetItem(F_CASE_AddAIBrackets(strRestoredBarcode), eCodeAIType.SerialCode, stMAchineConfig.stCodeInfo_Case);
+						strNewFolderName := LEFT( strCaseSerialCode, 7);
+						strFolderName := strNewFolderName;
+					ELSE*)
+					ELSIF bArchiveWithSKU THEN
+
+						strNewFolderName := strRetailSKU;
+						 strFolderName := strNewFolderName;
+					ELSE
+
+						strNewFolderName := strProductionOrder;
+						 strFolderName := strNewFolderName;
+					END_IF
+
+					eState := E_CHM_CREATEFOLDER;
+				END_IF
+
+			(* find CHM file error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbFindFile.nErrID;
+				eErrorState := eState;
+
+				eState := E_CHM_DONE;
+			END_IF
+
+			(* close off fbFindCHMFile *)
+			fbFindFile(bExecute := FALSE);
+		END_IF
+
+
+	(* create folders *)
+	E_CHM_CREATEFOLDER:
+
+		(* create date archive folder *)
+		fbCreateFolder(
+			sNetId		:= '',
+			sPathName	:= F_CONCAT3(strLocalCHMPath, 'Archive\', strNewFolderName),
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* create folder complete *)
+		IF fbCreateFolder.bBusy = FALSE THEN
+
+			IF fbCreateFolder.bError = FALSE OR (fbCreateFolder.bError = TRUE AND fbCreateFolder.nErrId = 16#70C) THEN
+
+				eState := E_CHM_MOVEFILE;
+
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbCreateFolder.nErrId;
+				eErrorState := eState;
+
+				eState := E_CHM_FINDFILE;
+
+			END_IF
+
+			(* close off fbCreateFolder *)
+			fbCreateFolder(bExecute := FALSE);
+		END_IF
+
+	(* move CAC file from archive to CAC watch folder *)
+	E_CHM_MOVEFILE:
+
+		(* move file *)
+		fbMoveFile(
+			strPathSource	:= CONCAT(strLocalCHMPath, 'OK\'),
+			strPathTarget	:= F_CONCAT4(strLocalCHMPath, 'Archive\', strNewFolderName, '\'),
+			strFileName	:=strCHMFile,
+			bExecute		:= TRUE,
+			tTimeout		:= T#1s
+		);
+
+
+		(* move file complete *)
+		IF fbMoveFile.bBusy = FALSE THEN
+
+			(* move file completed OK *)
+			IF fbMoveFile.bError = FALSE THEN
+
+			eState := E_CHM_DONE;
+
+			(* move file error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbMoveFile.nErrorId;
+				eErrorState := eState;
+			END_IF
+
+			eState := E_CHM_FINDFILE;
+
+			(* close off fbMoveFile *)
+			fbMoveFile(bExecute := FALSE);
+		END_IF
+
+
+	(* complete *)
+	E_CHM_DONE:
+
+		(* update outputs *)
+		bBusy := FALSE;
+		bDone := TRUE;
+
+		eState := E_CHM_IDLE;
+
+(* unknoen state *)
+ELSE
+
+	eState := E_CHM_IDLE;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_CHM_MoveToArchive">
+      <LineId Id="32" Count="186" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

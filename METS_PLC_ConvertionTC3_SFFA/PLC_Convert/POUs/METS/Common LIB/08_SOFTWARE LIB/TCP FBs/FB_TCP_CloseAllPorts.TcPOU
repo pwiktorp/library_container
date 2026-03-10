@@ -1,0 +1,139 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_TCP_CloseAllPorts" Id="{768d6604-1c00-411a-b21c-f3c2338cbe62}" SpecialFunc="None">
+    <Declaration><![CDATA[(* close all TCP ports, re-tries at start-up until TCP Server is running *)
+FUNCTION_BLOCK FB_TCP_CloseAllPorts
+VAR_INPUT
+	bExecute		: BOOL;		(* set TRUE to close any TCP connections previously opened by PLC runtime *)
+	tTimeout		: TIME;		(* timeout before bError is set in case TCP Server is not installed *)
+END_VAR
+VAR_OUTPUT
+	bDone			: BOOL;		(* TRUE = close all ports complete *)
+	bBusy			: BOOL;		(* TRUE = close all ports in progress *)
+	bError			: BOOL;		(* TRUE = TCP server error after tTimeout *)
+	nErrorID		: UDINT;	(* TCP Server error code *)
+END_VAR
+VAR
+	fbExecute		: R_TRIG;
+	eState			: E_TCPIP_State;
+	nCycles			: INT;
+	fbCloseAllPorts	: FB_SocketCloseAll;
+	fbTimer			: TON;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+DATE		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+06/03/2015	3.05.00	PB		Initial release.
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_TCPIP_IDLE:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			(* reset timer *)
+			fbTimer(IN := FALSE);
+			nCycles := 0;
+
+			eState := E_TCPIP_CLOSEALL;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* close all TCP sockets *)
+	E_TCPIP_CLOSEALL:
+
+		(* TCP server timer *)
+		fbTimer(
+			IN	:= TRUE,
+			PT	:= tTimeout
+		);
+
+		(* close all TCP ports for PLC runtime *)
+		fbCloseAllPorts(
+			sSrvNetId	:= '',
+			bExecute	:= TRUE,
+			tTimeout	:= T#500ms
+		);
+
+		(* command complete *)
+		IF fbCloseAllPorts.bBusy = FALSE THEN
+
+			(* update cycle counter *)
+			nCycles := nCycles + 1;
+
+			(* command completed OK *)
+			IF fbCloseAllPorts.bError = FALSE THEN
+
+				eState := E_TCPIP_DONE;
+
+			(* command error *)
+			ELSE
+
+				(* timer has elapsed *)
+				IF fbTimer.Q = TRUE THEN
+
+					(* TCP server error *)
+					bError := TRUE;
+					nErrorID := fbCloseAllPorts.nErrId;
+
+					eState := E_TCPIP_DONE;
+				END_IF
+			END_IF
+
+			(* close off fbCloseAllPorts *)
+			fbCloseAllPorts(bExecute := FALSE);
+		END_IF
+
+
+	(* complete *)
+	E_TCPIP_DONE:
+
+		(* update outputs *)
+		bBusy := FALSE;
+		bDone := TRUE;
+
+		eState := E_TCPIP_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_TCPIP_IDLE;
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+	nErrorID := 0;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_TCP_CloseAllPorts">
+      <LineId Id="28" Count="100" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,91 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_StopWatch_LREAL" Id="{ab721cdd-a203-4628-aa51-d939f48dd047}" SpecialFunc="None">
+    <Declaration><![CDATA[(* Stopwatch with start/stop, reset and lap time, Output is TIME *)
+FUNCTION_BLOCK FB_StopWatch_LREAL
+VAR_INPUT
+	bStart			: BOOL;		(* set TRUE to start recording elapsed time *)
+	bReset			: BOOL;		(* set TRUE to reset elapsed time *)
+	bLapTime		: BOOL;		(* set TRUE to latch elapsed time, does not affect elapsed time *)
+END_VAR
+VAR_IN_OUT
+	fElapsedTime	: LREAL;	(* elapsed time *)
+END_VAR
+VAR_OUTPUT
+	bRunning		: BOOL;		(* TRUE = stopwatch active *)
+	fLapTime		: LREAL;	(* lap time *)
+END_VAR
+VAR
+	bInitOK			: BOOL;
+	fbTaskIndex		: GETCURTASKINDEX;
+	fTaskTime		: LREAL;
+
+	fStartTime		: LREAL;
+	fbLapTime		: R_TRIG;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		No change
+
+-------------------------------------------------------------------------------------------------
+05/02/2010	1.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* task time not inititalised *)
+IF bInitOK = FALSE THEN
+
+	(* get task indexc and task cycle time in seconds *)
+	fbTaskIndex();
+	fTaskTime := UDINT_TO_LREAL(_TaskInfo[fbTaskIndex.Index].CycleTime) / 10000000.0;
+
+	bInitOK := TRUE;
+END_IF
+
+
+(* reset stopwatch *)
+IF bReset = TRUE THEN
+
+	(* reset outputs *)
+	bRunning := FALSE;
+	fElapsedTime := 0.0;
+	fLapTime := 0.0;
+
+	(* update fStartTime so that they always contain values of last stopped cycle *)
+	fStartTime := fElapsedTime;
+
+(* stopwatch is started *)
+ELSIF bStart = TRUE THEN
+
+	(* set bRunning output *)
+	bRunning := TRUE;
+
+	(* update fElapsedTime *)
+	fElapsedTime := fElapsedTime + fTaskTime;
+
+(* stopwatch is stopped *)
+ELSE
+
+	(* reset output *)
+	bRunning := FALSE;
+
+	(* update fStartTime so that they always contain values of last stopped cycle *)
+	fStartTime := fElapsedTime;
+END_IF
+
+(* copy fElapsedTime to fLapTime on rising edge of bLapTime *)
+fbLapTime(CLK := bLapTime);
+IF fbLapTime.Q = TRUE THEN
+
+	fLapTime := fElapsedTime;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_StopWatch_LREAL">
+      <LineId Id="34" Count="46" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

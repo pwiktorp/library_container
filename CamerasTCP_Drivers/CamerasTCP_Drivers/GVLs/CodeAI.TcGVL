@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="CodeAI" Id="{0be59666-1934-4ac9-a7db-3bbdec11e330}">
+    <Declaration><![CDATA[{attribute 'Tc2GvlVarNames'}
+VAR_GLOBAL
+	eCodeAIType							: E_CodeAIType;
+	
+
+
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

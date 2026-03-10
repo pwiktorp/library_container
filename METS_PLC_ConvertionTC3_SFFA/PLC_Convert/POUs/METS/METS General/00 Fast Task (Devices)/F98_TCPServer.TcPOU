@@ -1,0 +1,147 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F98_TCPServer" Id="{188f04f5-e5c8-478e-9c1e-8fb3e5e2b636}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM F98_TCPServer
+VAR
+	bEnable : BOOL;
+	fbTCPPortCtrl1		: FB_TCP_ServerPortCtrl;
+	fbTCPPortCtrl2		: FB_TCP_ServerPortCtrl;
+	fbTCPPortCtrl3		: FB_TCP_ServerPortCtrl;
+	fbTCPTimeout		: TON;
+	eSocketState1		: E_SocketConnectionState;	(* TCP socket connection state *)
+	eSocketState2		: E_SocketConnectionState;	(* TCP socket connection state *)
+	eSocketState3		: E_SocketConnectionState;	(* TCP socket connection state *)
+
+	bConnect			: BOOL;
+	fbTCPPortCtrlCamera		: FB_TCP_ClientPortCtrl;
+	eSocketStateCamera		: E_SocketConnectionState;	(* TCP socket connection state *)
+	nScannerPortNo			: UINT;
+	fbTCPPortCtrlCamera2		: FB_TCP_ClientPortCtrl;
+	eSocketStateCamera2		: E_SocketConnectionState;	(* TCP socket connection state *)
+	nScannerPortNo2			: UINT;
+
+	nIndexPack			: INT;
+	nUperRange			: INT;
+
+	AggregationCodes			: ARRAY[1..2] OF T_PACK_Barcode;
+
+	aOCVFileCodeName1			: ARRAY[1..2] OF T_MaxString;
+	aOCVFileCodeName2			: ARRAY[1..2] OF T_MaxString;
+	aOCVFileCodeName3			: ARRAY[1..2] OF T_MaxString;
+	aOCVFileCodeName4			: ARRAY[1..2] OF T_MaxString;
+
+	strString1			: T_LongSTRING;
+	nString1Len			: UINT;
+
+	fbExtractLongString :FB_ExtractLongString;
+	bExtractData		: BOOL;			(* set TRUE to remove prefix and suffix from strData *)
+	nExtractChars		: INT;			(* if suffix is blank, number of data chars to extract *)
+	strPrefix			: T_MaxString;	(* prefix string *)
+	strSuffix			: T_MaxString;	(* suffix string *)
+	strString			: T_LongSTRING;	(* string to be searched *)
+	bStringFound		: BOOL;			(* TRUE = sub-string with matching prefix/suffix found *)
+	nStartPos			: INT;			(* start pos of extracted string in strString *)
+	strData				: T_LongSTRING;	(* extracted data *)
+
+
+	eState					: E_CASE_State;
+	nErrorId 				: UDINT;
+	sOutersMoved 			: T_LongSTRING;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[nString1Len := to_uint(LEN2(ADR(strString1)));
+
+
+sOutersMoved	:= F_CONCAT3(' [0]:', 'nErrorID: ',UDINT_TO_STRING(nErrorID));
+
+fbExtractLongString(
+	bExtractData		:=bExtractData,		(* set TRUE to remove prefix and suffix from strData *)
+	nExtractChars		:=nExtractChars,			(* if suffix is blank, number of data chars to extract *)
+	strPrefix			:=strPrefix,(* prefix string *)
+	strSuffix			:=strSuffix,	(* suffix string *)
+	strString			:=strString1,	(* string to be searched *)
+	bStringFound		=>bStringFound,		(* TRUE = sub-string with matching prefix/suffix found *)
+	nStartPos			=>nStartPos
+		(* start pos of extracted string in strString *)
+);
+
+IF bStringFound THEN
+	strData	:= fbExtractLongString.strData;
+END_IF
+
+
+		FOR nIndexPack:=1 TO nUperRange DO
+			gHMI.aVerifiedCACDataHMI[1].aOuter[1].aPackCode[nIndexPack]:= CONCAT('Test_',INT_TO_STRING(nIndexPack));
+		END_FOR
+
+
+aOCVFileCodeName1[1]	:= AggregationCodes[1];
+aOCVFileCodeName2[1]	:= F_CODE_GetItem(AggregationCodes[1] , eCodeAIType.SerialCode,   stMachineConfig.stCodeInfo_Pack);
+aOCVFileCodeName3[1]	:= F_CodeToHex(aOCVFileCodeName2[1]);
+aOCVFileCodeName4[1]	:= F_CodeToHex(F_CODE_GetItem(AggregationCodes[1] , eCodeAIType.SerialCode,   stMachineConfig.stCodeInfo_Pack));
+
+(*
+aOCVFileCodeName[1]	:=	F_CodeToHex(F_CODE_GetItem(stOCVStatus.stOACData.AggregationCodes[1] , eCodeAIType.SerialCode, SEL(bUseIntermediateCode, stCodeInfo_Pack, stCodeInfo_Intermediate)));
+aOCVFileCodeName[2]	:=	F_CodeToHex(F_CODE_GetItem(stOCVStatus.stOACData.AggregationCodes[2] , eCodeAIType.SerialCode,   stCodeInfo_Pack)); (*no reason to have 2 diffrent intermediate codes*)
+*)
+
+(* TCP Port ctrl *)
+fbTCPPortCtrlCamera(
+	bEnable			:= bConnect,
+	strRemoteIPAddr	:= '',
+	nRemotePortNo	:= nScannerPortNo,
+	tReconnectTime	:= T#20s,
+	eSocketState	=> eSocketStateCamera
+);
+
+
+(* TCP Port ctrl *)
+fbTCPPortCtrl1(
+	bEnable			:= bEnable,
+	eMode			:= eACCEPT_ALL,
+	strRemoteIPAddr	:= '',
+	strLocalIPAddr	:= '',
+	nLocalPortNo	:= 50001,
+	tReconnectTime	:= T#4s,
+	eSocketState	=> eSocketState1
+);
+
+
+(* TCP Port ctrl *)
+fbTCPPortCtrl2(
+	bEnable			:= bEnable,
+	eMode			:= eACCEPT_ALL,
+	strRemoteIPAddr	:= '',
+	strLocalIPAddr	:= '',
+	nLocalPortNo	:= 50002,
+	tReconnectTime	:= T#4s,
+	eSocketState	=> eSocketState2
+);
+
+
+(* TCP Port ctrl *)
+fbTCPPortCtrl3(
+	bEnable			:= bEnable,
+	eMode			:= eACCEPT_ALL,
+	strRemoteIPAddr	:= '',
+	strLocalIPAddr	:= '',
+	nLocalPortNo	:= 50003,
+	tReconnectTime	:= T#4s,
+	eSocketState	=> eSocketState3
+);
+
+
+(* TCP Port ctrl *)
+fbTCPPortCtrlCamera2(
+	bEnable			:= bConnect,
+	strRemoteIPAddr	:= '',
+	nRemotePortNo	:= nScannerPortNo2,
+	tReconnectTime	:= T#20s,
+	eSocketState	=> eSocketStateCamera2
+);
+
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

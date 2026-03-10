@@ -1,0 +1,231 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_OCV_WriteFile" Id="{1401b05f-3a94-4d27-9496-4d21a43aec95}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_OCV_WriteFile
+VAR_INPUT
+	bExecute					: BOOL;			(* scan for valid Outer in arrOuterStatus *)
+	sTargetPath				: STRING(255);	(* target folder for OCV file *)
+	ePackAggregationMode	: E_SYSTEM_PackAggregationMode ;
+	nPacksPerOuter			: INT;
+	aOCVFileCodeName		: ARRAY[1..2] OF T_MaxString;
+	bSkipWriteFile1			: BOOL;
+	bSkipWriteFile2			: BOOL;
+	stOCVPackStatus			: ST_OUTER_Status;	(*  OCV queue status *)
+END_VAR
+VAR_OUTPUT
+	bDone						: BOOL;			(* TRUE = write OCV file complete *)
+	bBusy						: BOOL;			(* TRUE = write OCV file in progress *)
+	bError						: BOOL;			(* TRUE = write OCV file error *)
+	nErrorID					: UDINT;		(* error ID *)
+	sOCVFile1					: T_OCV_Filename;	(* OCV file name *)
+	sOCVFile2					: T_OCV_Filename;	(* OCV file name *)
+	nStoredFiles				: INT;
+END_VAR
+VAR
+	fbExecute					: R_TRIG;
+	eState						: E_OUTER_State;
+	eErrorState					: E_OUTER_State;
+	fbBuildOCVData			: FB_OCV_BuildXMLData;
+	fbCreateFolder				: FB_CreateDir;
+	fbWriteFile					: FB_FILE_WriteByByte;
+	sOCVTempName			: T_OCV_Filename;
+
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* monitor bExecute for rising edge *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_OUTER_IDLE:
+
+		(* rising edge on bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+			nStoredFiles := 0;
+			sOCVFile1 := '';
+			sOCVFile2 :='';
+
+			eState := E_OUTER_BUILDXMLIMAGE;
+
+		(* disabled *)
+		ELSIF bExecute = FALSE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			(*bError := FALSE;
+			nErrorID := 0;*)
+			nStoredFiles := 0;
+
+		END_IF
+
+	(* build OCV image in XML format *)
+	E_OUTER_BUILDXMLIMAGE:
+
+		(* build OAC data *)
+		fbBuildOCVData(
+			bExecute		:= TRUE,
+			bAddXMLHeader	:= TRUE,
+			nTabIndent		:= 0,
+			nPacksPerOuter 	:= nPacksPerOuter,
+			stOCVDataToImage 	:= stOCVPackStatus,
+			ePackAggregationMode	:= ePackAggregationMode
+		);
+
+		(* build OCV data complete *)
+		IF fbBuildOCVData.bDone = TRUE THEN
+
+			eState := E_OUTER_CREATEERRORFOLDER;
+
+			(* close off fbBuild  OCVData *)
+			fbBuildOCVData(bExecute := FALSE);
+		END_IF
+
+(***************************************************************************)
+
+	(* create folders *)
+	E_OUTER_CREATEERRORFOLDER:
+
+		(* create date archive folder *)
+		fbCreateFolder(
+			sNetId		:= '',
+			sPathName	:= sTargetPath,
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= T#300ms
+		);
+
+		(* create folder complete *)
+		IF fbCreateFolder.bBusy = FALSE THEN
+
+			(* create folder completed OK or folder already exists *)
+			IF fbCreateFolder.bError = FALSE OR (fbCreateFolder.bError = TRUE AND fbCreateFolder.nErrId = 16#70C) THEN
+
+				eState := E_OUTER_WRITEXMLIMAGE;
+			(* create folder error *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbCreateFolder.nErrId;
+				eErrorState := eState;
+
+				eState := E_OUTER_DONE;
+			END_IF
+
+			(* close off fbCreateFolder *)
+			fbCreateFolder(bExecute := FALSE);
+		END_IF
+
+(***************************************************************************)
+
+	(* write OCV image to file *)
+	E_OUTER_WRITEXMLIMAGE:
+
+		IF NOT bSkipWriteFile1 THEN
+			(* write XML template to file *)
+
+			sOCVFile1 := F_CONCAT3('OCV_', aOCVFileCodeName[1], '.xml');
+
+			fbWriteFile(
+				bExecute	:= TRUE,
+				pSourceAddr	:= ADR(fbBuildOCVData.arrOCVImage),
+				nSourceSize	:= fbBuildOCVData.nOCVByte,
+				strPathFile	:= CONCAT(sTargetPath,sOCVFile1),
+				tTimeout	:= cHALF_SECOND
+			);
+
+			(* file write complete *)
+			IF fbWriteFile.bDone = TRUE THEN
+				sOCVTempName	:= sOCVFile1;
+				(* file write completed OK *)
+				IF fbWriteFile.bError = FALSE THEN
+
+					nStoredFiles := nStoredFiles +1;
+	
+				(* file write error *)
+				ELSE
+	
+					bError := TRUE;
+					nErrorID := fbWriteFile.nErrorID;
+					eErrorState := eState;
+				END_IF
+	
+				eState := E_OUTER_WRITESECONDXMLIMAGE;
+	
+				(* close of fbWriteFile *)
+				fbWriteFile(bExecute := FALSE);
+			END_IF
+		ELSE
+			eState := E_OUTER_WRITESECONDXMLIMAGE;
+		END_IF
+
+	E_OUTER_WRITESECONDXMLIMAGE:
+
+	IF NOT bSkipWriteFile2 THEN
+	(* write XML template to file *)
+
+		sOCVFile2 := F_CONCAT3('OCV_', aOCVFileCodeName[2], '.xml');
+
+		fbWriteFile(
+			bExecute	:= TRUE,
+			pSourceAddr	:= ADR(fbBuildOCVData.arrOCVImage),
+			nSourceSize	:= fbBuildOCVData.nOCVByte,
+			strPathFile	:=  CONCAT(sTargetPath, sOCVFile2),
+			tTimeout	:= cHALF_SECOND
+		);
+
+		(* file write complete *)
+		IF fbWriteFile.bDone = TRUE THEN
+			sOCVTempName	:= sOCVFile2;
+			(* file write completed OK *)
+			IF fbWriteFile.bError = FALSE THEN
+
+				nStoredFiles := nStoredFiles +1;
+
+			(* file write error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbWriteFile.nErrorID;
+				eErrorState := eState;
+			END_IF
+
+			eState := E_OUTER_DONE;
+
+			(* close of fbWriteFile *)
+			fbWriteFile(bExecute := FALSE);
+		END_IF
+	ELSE
+		eState := E_OUTER_DONE;
+	END_IF
+
+	(* OCV file complete *)
+	E_OUTER_DONE:
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_OUTER_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_OUTER_IDLE;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_OCV_WriteFile">
+      <LineId Id="31" Count="189" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,58 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_LongCONCAT" Id="{a2cde056-6845-449d-b6fa-f0f0fbb5d738}" SpecialFunc="None">
+    <Declaration><![CDATA[(* FIND function for long string *)
+FUNCTION F_LongCONCAT : T_LongSTRING
+VAR_INPUT
+	strString1			: T_LongSTRING;
+	strString2			: T_LongSTRING;
+END_VAR
+VAR
+	nString1Len			: UINT;
+	nString2Len			: UINT;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+DATE		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* length of 1st input string *)
+nString1Len := TO_UINT(LEN2(ADR(strString1)));
+
+(* max length of 2nd input string that can be handled without exceeding length of output string *)
+nString2Len := MIN(TO_UINT(LEN2(ADR(strString2))), SIZEOF(F_LongCONCAT) - nString1Len - 1);
+
+
+(* output string length <= 255 chars *)
+IF nString1Len + nString2Len <= 255 THEN
+
+	(* use standard CONCAT function *)
+	F_LongCONCAT := CONCAT(strString1, strString2);
+
+(* output string length > 255 chars *)
+ELSE
+
+	(* string length > 0, must not call MEMMOVE with 0 bytes *)
+	IF nString1Len > 0 THEN
+
+		(* move strString1 to output string *)
+		MEMMOVE(ADR(F_LongCONCAT), ADR(strString1), nString1Len);
+	END_IF
+
+	(* string length > 0, must not call MEMMOVE with 0 bytes *)
+	IF nString2Len > 0 THEN
+
+		(* move strString2 to output string, clamp output if final length of string exceeds T_LongSTRING *)
+		MEMMOVE(ADR(F_LongCONCAT) + nString1Len, ADR(strString2), nString2Len);
+	END_IF
+
+	(* reset last char to 16#00 to terminate the string with NULL *)
+	MEMSET(ADR(F_LongCONCAT) + nString1Len + nString2Len, 16#00, 1);
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

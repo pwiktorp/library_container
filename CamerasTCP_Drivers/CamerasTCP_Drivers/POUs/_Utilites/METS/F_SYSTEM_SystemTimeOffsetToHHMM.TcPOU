@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_SYSTEM_SystemTimeOffsetToHHMM" Id="{66ca95d4-7dd7-4539-b65c-e0714f43da8b}" SpecialFunc="None">
+    <Declaration><![CDATA[(* generate time difference between local time and UTC as "+HH:MM" *)
+FUNCTION F_SYSTEM_SystemTimeOffsetToHHMM : STRING(6)
+VAR_INPUT
+	nSystemTimeOffset	: DINT;		(* UTC offset in ms *)
+END_VAR
+VAR
+	nHours				: DINT;
+	nMins				: DINT;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+01/08/2014	2.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* convert ms to hours *)
+nHours := ABS(nSystemTimeOffset) / 3600000;
+
+(* remove hours and convert remaining ms to mins *)
+nMins := (ABS(nSystemTimeOffset) MOD 3600000) / 60000;
+
+(* construct output string as "+HH:MM" or "-HH:MM" *)
+F_SYSTEM_SystemTimeOffsetToHHMM := F_CONCAT4(SEL(nSystemTimeOffset < 0, '+', '-'), F_StringAddPrefix(DINT_TO_STRING(nHours), 2, '0'), ':', F_StringAddPrefix(DINT_TO_STRING(nMins), 2, '0'));
+
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

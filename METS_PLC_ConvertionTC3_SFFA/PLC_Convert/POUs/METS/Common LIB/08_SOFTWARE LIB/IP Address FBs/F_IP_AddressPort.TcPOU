@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_IP_AddressPort" Id="{a01432ef-2838-4013-89fe-3c4c9ee16cf0}" SpecialFunc="None">
+    <Declaration><![CDATA[(* determine if IP address and Port have been configured *)
+FUNCTION F_IP_AddressPort : BOOL
+VAR_INPUT
+	strIPAddress	: T_IPv4Addr;
+	nPort			: UINT;
+END_VAR
+VAR
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* '0.0.0.0' indicates blank or invalid IP address in strIPAddress, nPort must not be 0 *)
+IF F_CreateIPv4Addr(F_ScanIPv4AddrIds(strIPAddress)) <> '0.0.0.0' AND nPort > 0 THEN
+
+	(* valid *)
+	F_IP_AddressPort := TRUE;
+
+(* IP address or Port not set *)
+ELSE
+
+	F_IP_AddressPort := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="F_IP_AddressPort">
+      <LineId Id="16" Count="10" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

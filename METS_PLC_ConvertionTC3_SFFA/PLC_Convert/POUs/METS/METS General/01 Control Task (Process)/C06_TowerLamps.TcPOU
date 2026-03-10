@@ -1,0 +1,47 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="C06_TowerLamps" Id="{12e5144a-d1ba-4b02-b835-6a57f802f65a}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM C06_TowerLamps
+VAR
+	fbAlarmPulse				: TP;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[gIOFiltered.stLightPoleGreen.bOutputEnable:= (gDevice.eMachineState = E_SYSTEM_MachineState.RUNNING) 									OR
+										(gDevice.eMachineState = E_SYSTEM_MachineState.PASSTHROUGHACTIVE) 						OR
+										(gDevice.eMachineState = E_SYSTEM_MachineState.CONDITIONALRUNNING AND gDevice.bPulse1s) 	OR
+										(gDevice.eMachineState = E_SYSTEM_MachineState.WAITINGFORPRODUCT AND gDevice.bPulse2s);
+
+
+gIOFiltered.stLightPoleAmber.bOutputEnable:= (gDevice.eMachineState = E_SYSTEM_MachineState.READYTOSTART) 				OR
+										(gDevice.eMachineState = E_SYSTEM_MachineState.INITIALISING AND gDevice.bPulse1s)	OR
+										(NOT gMessage.stAlarmStatus.bNoActiveWarrnings AND gDevice.bPulse2s);
+
+gIOFiltered.stLightPoleRed.bOutputEnable:=(gDevice.eMachineState = E_SYSTEM_MachineState.IMMEDIATESTOPPED) 					OR
+									(gDevice.eMachineState = E_SYSTEM_MachineState.MACHINEINERROR)					OR
+									(gDevice.eMachineState = E_SYSTEM_MachineState.INITIALISING AND gDevice.bPulse1s) 	OR
+									(fbAlarmPulse.Q AND gIOFiltered.stCaseLeavingPrintArea.bStateInput AND NOT gDevice.stMachineConfig.bPassthrough AND gDevice.bPulse05s);
+
+
+fbAlarmPulse(IN:= gDevice.stMachineConfig.bUseCaseContentReject AND NOT gProcess.bInhibitPulseAlarmOK AND gIOFiltered.stCaseLeavingPrintArea.bStateInput, PT:=gDevice.stMachineConfig.tCaseRejectTimeOut);
+gIOFiltered.stLightPoleAlarm.bOutputEnable	 := fbAlarmPulse.Q;
+
+IF gIOFiltered.stCaseLeavingPrintArea.bStateFTrigger OR gProcess.bWaitingToScanLabel THEN
+	gProcess.bInhibitPulseAlarmOK := FALSE;
+END_IF
+
+gIOFiltered.stHandScannerGreen.bOutputEnable:=  gHMI.bRestoredOCVDataValidHMI OR gHMI.bRestoredOACDataValidHMI OR gHMI.bRestoredCACDataValidHMI OR
+											(gMessage.bWarning_CaseReanimating AND gDevice.bPulse05s) ;
+
+gIOFiltered.stHandScannerRed.bOutputEnable:=  gHMI.bRestoredOCVDataInvalidHMI OR gHMI.bRestoredOCVDataNotExistHMI OR
+										gHMI.bRestoredOACDataInvalidHMI OR gHMI.bRestoredOACDataNotExistHMI OR
+										gHMI.bRestoredCACDataInvalidHMI OR gHMI.bRestoredCACDataNotExistHMI;
+
+(*gIOFiltered.stGreenButtonLamp.bOutputEnable	:=( bWaitingCaseContentRead OR bWaitingToScanLabel)  AND	gDevice.bPulse1s;*)
+
+(*gIOFiltered.stGreenButtonLamp.bOutputEnable	:= gIOFiltered.gIOFiltered.stLabeller2Ready.bStateInput AND gIOFiltered.stLabeller2DataReady.bStateInput;*)
+
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

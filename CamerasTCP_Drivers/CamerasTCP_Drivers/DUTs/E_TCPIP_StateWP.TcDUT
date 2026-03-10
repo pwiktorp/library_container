@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="E_TCPIP_StateWP" Id="{027bf1c1-74be-4b05-8a8c-b4a285939e72}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+{attribute 'to_string'}
+TYPE E_TCPIP_StateWP :
+(
+	E_TCPIP_IDLE,
+	E_TCPIP_CONNECT,
+	E_TCPIP_SEND,
+	E_TCPIP_RECEIVE,
+	E_TCPIP_DISCONNECT,
+	E_TCPIP_CLOSEALL,
+	E_TCPIP_DONE
+);
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

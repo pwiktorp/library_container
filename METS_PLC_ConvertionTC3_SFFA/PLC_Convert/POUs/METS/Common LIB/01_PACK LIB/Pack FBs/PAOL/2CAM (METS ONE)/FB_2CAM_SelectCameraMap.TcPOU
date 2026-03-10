@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_2CAM_SelectCameraMap" Id="{3fe82204-90f8-46d5-8e73-20a78e044f6f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_2CAM_SelectCameraMap
+VAR_INPUT
+
+	bMap2x5:					BOOL;
+
+	stPackCamera1Map2x5		: ST_SCANNER_CameraMap;
+	stPackCamera2Map2x5		: ST_SCANNER_CameraMap;
+END_VAR
+VAR_OUTPUT
+	stPackCamera1Map		: ST_SCANNER_CameraMap;
+	stPackCamera2Map		: ST_SCANNER_CameraMap;
+END_VAR
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF bMap2x5 THEN
+	stPackCamera1Map := stPackCamera1Map2x5;
+	stPackCamera2Map := stPackCamera2Map2x5;
+END_IF
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_2CAM_SelectCameraMap">
+      <LineId Id="14" Count="4" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

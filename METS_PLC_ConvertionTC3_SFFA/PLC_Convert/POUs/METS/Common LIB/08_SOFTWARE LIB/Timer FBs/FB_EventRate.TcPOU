@@ -1,0 +1,131 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_EventRate" Id="{8c699d41-605b-448e-bdd4-018e6f485232}" SpecialFunc="None">
+    <Declaration><![CDATA[(* calculate event rate based on specified time period *)
+FUNCTION_BLOCK FB_EventRate
+VAR_INPUT
+	bEnable			: BOOL;		(* set TRUE to enable FB, output set to 0 when disabled *)
+	bLogEvent		: BOOL;		(* log event time on FALSE-TRUE transition *)
+	tMonitorPeriod	: TIME;		(* time period over which events should be counted *)
+	tUpdateRate		: TIME;		(* update rate for fEventsPerSec *)
+END_VAR
+VAR_OUTPUT
+	fEventsPerSec	: LREAL;	(* number of events per sec *)
+	fEventsPerMin	: LREAL;	(* number of events per minute *)
+END_VAR
+VAR
+	fbEnable		: R_TRIG;
+	fbLogEvent		: R_TRIG;
+	fbUpdateTimer	: TON;
+	nMaxSamples		: INT;
+	arrEvent		: ARRAY[1..60] OF T_ULARGE_INTEGER;
+	fbReadCPUCounter: GETCPUCOUNTER;
+	nCurrentTime	: T_ULARGE_INTEGER;
+	nMinTime		: T_ULARGE_INTEGER;
+	nIndex			: INT;
+	fTimeSpan		: LREAL;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		LREAL now used in place of REAL
+
+-------------------------------------------------------------------------------------------------
+05/02/2010	1.09.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* detect rising edge of bEnable *)
+fbEnable(CLK := bEnable);
+
+(* new event *)
+fbLogEvent(CLK:= bLogEvent);
+
+(* update timer for re-calculation of events/sec *)
+fbUpdateTimer(
+	IN	:= bEnable = TRUE,
+	PT	:= tUpdateRate
+);
+
+(* enabled *)
+IF bEnable = TRUE THEN
+
+	(* rising edge of bEnable *)
+	IF fbEnable.Q = TRUE THEN
+
+		(* calculate max no of samples that can be handled *)
+		nMaxSamples := TO_INT(SIZEOF(arrEvent) / SIZEOF(arrEvent[1]));
+
+		(* clear event array *)
+		MEMSET(ADR(arrEvent), 16#00, SIZEOF(arrEvent));
+	END_IF
+
+	(* event *)
+	IF fbLogEvent.Q = TRUE THEN
+
+		(* remove oldest event time and add latest event time to array *)
+		MEMMOVE(ADR(arrEvent[2]), ADR(arrEvent[1]), SIZEOF(arrEvent) - SIZEOF(arrEvent[1]));
+
+		(* read CPU counter at 64-bit unsigned integer (1 = 100ns) and add to array *)
+		fbReadCPUCounter(
+			cpuCntLoDW	=> arrEvent[1].dwLowPart,
+			cpuCntHiDW	=> arrEvent[1].dwHighPart
+		);
+
+	(* update output *)
+	ELSIF fbUpdateTimer.Q = TRUE THEN
+
+		(* reset update timer *)
+		fbUpdateTimer(IN := FALSE);
+
+		(* read CPU counter at 64-bit unsigned integer, 1 = 100ns *)
+		fbReadCPUCounter(
+			cpuCntLoDW	=> nCurrentTime.dwLowPart,
+			cpuCntHiDW	=> nCurrentTime.dwHighPart
+		);
+
+		(* Min Time = Current Time - Monitor Period (TIME as ms converted to CPU counter format as 100ns) *)
+		nMinTime := UInt64Sub64(nCurrentTime, UInt32x32To64(TIME_TO_UDINT(tMonitorPeriod), 10000));
+
+		(* scan array of values *)
+		FOR nIndex := 1 TO nMaxSamples DO
+
+			(* array value is less than Min Time value or array is full *)
+			IF UInt64Cmp64(arrEvent[nIndex], nMinTime) < 0 OR nIndex = nMaxSamples THEN
+
+				(* first value outside time window *)
+				IF nIndex = 1 THEN
+
+					(* no events during last monitor period *)
+					fEventsPerSec := 0.0;
+
+				(* at least 1 value inside time window *)
+				ELSE
+
+					(* calcaulte time difference between first and last event time and convert from 100ns to s *)
+					fTimeSpan := UINT64_TO_LREAL(UInt64Sub64(nCurrentTime, arrEvent[nIndex - 1])) / 10000000.0;
+
+					(* calculate events/sec *)
+					fEventsPerSec := INT_TO_LREAL(nIndex - 1) / fTimeSpan;
+				END_IF
+
+				(* calculate events/min *)
+				fEventsPerMin := fEventsPerSec * 60.0;
+
+				EXIT;
+			END_IF
+		END_FOR
+	END_IF
+
+(* log event disabled *)
+ELSE
+
+	fEventsPerSec := 0.0;
+	fEventsPerMin := 0.0;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

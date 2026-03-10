@@ -1,0 +1,247 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MC2_AbsCtrl" Id="{0d399726-d418-4c02-91bb-060d8fcd9814}" SpecialFunc="None">
+    <Declaration><![CDATA[ (* NC axis ctrl for run/jog ctrl with normal/oriented/fast stop options *)
+FUNCTION_BLOCK FB_MC2_AbsCtrl
+VAR_INPUT
+	bEnable				: BOOL;		(* set TRUE to enable velocity control of axis *)
+	bFastStop			: BOOL;		(* set TRUE to override RUN signals and stop axis immediately using fast ramps *)
+	bRunAbsolute			: BOOL;		(* set TRUE to run axis at specified distance *)
+	fPosition			: LREAL;		(* set relative distance *)
+	fSetVelo			: LREAL;	(* target velocity, new value takes effect immediately *)
+	bJogFwd				: BOOL;		(* set TRUE to jog forwards *)
+	bJogRev				: BOOL;		(* set TRUE to jog reverse *)
+	fJogVelo			: LREAL;	(* jog velocity, new value will not take effect while jog is active *)
+	stRamps				: ST_AxisCtrlRamps;		(* ramps for FastStop, Normal and Jog *)
+	stParamSet			: ST_AxisParameterSet;	(* NC axis parameter set *)
+END_VAR
+VAR_IN_OUT
+	stAxis				: AXIS_REF;	(* NC axis structure *)
+END_VAR
+VAR_OUTPUT
+	(*bDone					: BOOL;
+	bBusy					: BOOL;*)
+	bError					: BOOL;			(* TRUE =  error *)
+	nErrorID					: UDINT;			(* error ID *)
+
+
+	bAbsActive			: BOOL;		(* TRUE = local relative command active *)
+	bJogActive			: BOOL;		(* TRUE = jog active *)
+END_VAR
+VAR
+	eState				: E_AXIS_CtrlState;
+	eErrorState			: E_AXIS_CtrlState;
+	fTargetVelo			: LREAL;
+	fbJog				: MC_Jog;
+	fbMoveAbsolute		: MC_MoveAbsolute;
+	fbCommandTimeout		: TON;
+	fbFastStop			: MC_Stop;
+
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* axis is not enabled for motion is requested direction *)
+IF ABS(fSetVelo) < 0.001 THEN
+
+	(* set target velocity to 0.0 *)
+	fTargetVelo := 0.0;
+
+(* axis is enabled for motion is requested direction *)
+ELSE
+
+	(* MC_MoveRelative requires travel velocity (>0). *)
+	fTargetVelo := MIN(fSetVelo,  stParamSet.fVeloMaximum);
+END_IF
+
+
+CASE eState OF
+
+	(* IDLE state *)
+	E_AXIS_CtrlState.IDLE:
+
+		(* velo ctrl enabled *)
+		IF bEnable = TRUE AND stAxis.Status.PTPmode = TRUE THEN
+
+			(* fast stop requested *)
+			IF bFastStop = TRUE THEN
+
+				(* axis is active *)
+				IF stAxis.Status.HasJob = TRUE THEN
+
+					(* call fast stop command *)
+					eState := E_AXIS_CtrlState.FASTSTOP;
+				END_IF
+				(* all other commands are blocked while bFastStop = TRUE *)
+
+			(* run at realitve requested*)
+			ELSIF bRunAbsolute = TRUE AND fTargetVelo > 0.0  THEN
+
+				(* start axis *)
+				eState := E_AXIS_CtrlState.MOVEABSOLUTE;
+
+			(* jog requested *)
+			ELSIF (bJogFwd = TRUE OR bJogRev = TRUE) AND stAxis.Status.HasJob = FALSE AND fJogVelo > 0.0 THEN
+
+				eState := E_AXIS_CtrlState.JOG;
+			END_IF
+
+		(* velo ctrl disabled *)
+		ELSE
+
+			(* reset outputs *)
+			bAbsActive := FALSE;
+			bJogActive := FALSE;
+			bError 	:= FALSE;
+			nErrorID	:= 0;
+		END_IF
+
+
+	(* JOG ctrl state *)
+	E_AXIS_CtrlState.JOG:
+
+		(* fast stop requested *)
+		IF bFastStop = TRUE THEN
+
+			(* fast stop overrides all other motion states *)
+			eState := E_AXIS_CtrlState.FASTSTOP;
+
+		(* axis disabled or not available for PTP commands *)
+		ELSIF bEnable = FALSE OR stAxis.Status.PTPmode = FALSE THEN
+
+			eState := E_AXIS_CtrlState.IDLE;
+
+		(* jog move complete *)
+		ELSIF bJogFwd = FALSE AND bJogRev = FALSE AND fbJog.Done = TRUE THEN
+
+			(* return to IDLE state *)
+			eState := E_AXIS_CtrlState.IDLE;
+		(* jog  command error/aborted or did not go active *)
+		ELSIF fbJog.Error = TRUE OR fbJog.CommandAborted = TRUE THEN
+
+			bError := fbJog.Error ;
+			nErrorID := fbJog.ErrorID;
+			eErrorState := eState;
+
+			eState := E_AXIS_CtrlState.IDLE;
+		END_IF
+
+
+	(* update axis relative distance) *)
+	E_AXIS_CtrlState.MOVEABSOLUTE:
+
+		(* fast stop requested *)
+		IF bFastStop = TRUE THEN
+
+			(* fast stop overrides all other motion states *)
+			eState := E_AXIS_CtrlState.FASTSTOP;
+
+		(* axis disabled or not available for PTP commands *)
+		ELSIF bEnable = FALSE OR stAxis.Status.PTPmode = FALSE THEN
+
+			eState := E_AXIS_CtrlState.IDLE;
+
+		(* controlled stop requested*)
+		ELSIF bRunAbsolute = FALSE OR
+			(bRunAbsolute = TRUE AND fTargetVelo = 0.0) OR
+			fbMoveAbsolute.Done = TRUE	THEN
+
+			(* stop axis *)
+			eState := E_AXIS_CtrlState.IDLE;
+
+		(* relative  command error/aborted or did not go active *)
+		ELSIF fbMoveAbsolute.Error = TRUE OR fbMoveAbsolute.CommandAborted = TRUE THEN
+
+			bError := fbMoveAbsolute.Error ;
+			nErrorID := fbMoveAbsolute.ErrorID;
+			eErrorState := eState;
+
+			eState := E_AXIS_CtrlState.IDLE;
+		END_IF
+
+	(* stop axis, cannot be over-ridden *)
+	E_AXIS_CtrlState.FASTSTOP:
+
+		(* timeout if command does not go active after 100ms *)
+		fbCommandTimeout(
+			IN	:= fbFastStop.Busy = TRUE AND fbFastStop.Active = FALSE,
+			PT	:= T#100ms
+		);
+
+		(* fast stop complete *)
+		IF fbFastStop.Done = TRUE THEN
+
+			eState := E_AXIS_CtrlState.IDLE;
+
+		(* axis disabled or not available for PTP commands *)
+		ELSIF bEnable = FALSE OR stAxis.Status.PTPmode = FALSE THEN
+
+			eState := E_AXIS_CtrlState.IDLE;
+
+		(* halt command error/aborted or did not go active *)
+		ELSIF fbFastStop.Error = TRUE OR fbFastStop.CommandAborted = TRUE OR fbCommandTimeout.Q = TRUE THEN
+
+			bError := fbFastStop.Error ;
+			nErrorID := fbFastStop.ErrorID;
+			eErrorState := eState;
+
+			eState := E_AXIS_CtrlState.IDLE;
+		END_IF
+
+		(* leaving current state or command error or command aborted *)
+		IF eState <> E_AXIS_CtrlState.FASTSTOP THEN
+
+			(* cancel timer *)
+			fbCommandTimeout(IN := FALSE);
+		END_IF
+
+(* unknown state *)
+ELSE
+
+	eState := E_AXIS_CtrlState.IDLE;
+END_CASE;
+
+(* set flag to indicate that axis is active due to command within FB *)
+bAbsActive := stAxis.Status.HasJob AND (fbMoveAbsolute.Active  OR fbFastStop.Active);
+
+
+(* MC_Jog command for axis jog ctrl *)
+fbJog(
+	JogForward		:= eState = E_AXIS_CtrlState.JOG AND bJogFwd,
+	JogBackwards	:= eState = E_AXIS_CtrlState.JOG AND bJogRev,
+	Mode			:= MC_JOGMODE_STANDARD_SLOW,
+	Position		:= ,
+	Velocity		:= ,
+	Acceleration	:=,
+	Deceleration	:=,
+	Jerk			:=,
+	Axis			:= stAxis,
+	Active			=> bJogActive,
+);
+
+fbMoveAbsolute(
+	Execute:= eState = E_AXIS_CtrlState.MOVEABSOLUTE AND fTargetVelo <> 0.0,
+	Position:= fPosition,
+	Velocity:= fTargetVelo,
+	Acceleration:= stRamps.fNormalAccel,
+	Deceleration:= stRamps.fNormalDecel,
+	Jerk:=stRamps.fNormalJerk,
+	BufferMode:= MC_Aborting,
+	Options:= ,
+	Axis:= stAxis,
+	Done=> ,
+	Busy=> ,
+	Active=> ,
+	CommandAborted=> ,
+	Error=> ,
+	ErrorID=> );
+
+(* MC_Stop command to stop axis *)
+fbFastStop(
+	Execute			:= eState = E_AXIS_CtrlState.FASTSTOP,
+	Deceleration	:= stRamps.fFastStopDecel,
+	Jerk			:= stRamps.fFastStopJerk,
+	Axis			:= stAxis,
+);]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

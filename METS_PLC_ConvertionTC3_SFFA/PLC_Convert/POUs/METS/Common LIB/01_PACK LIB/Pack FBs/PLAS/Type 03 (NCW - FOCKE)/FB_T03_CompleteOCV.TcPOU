@@ -1,0 +1,194 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_T03_CompleteOCV" Id="{ea8a6de5-7797-4554-8a06-167a28d4d4cc}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_T03_CompleteOCV
+VAR_INPUT
+	bExecute					: BOOL;		(* set TRUE to add pack codes to OAC buffer *)
+	nPacksPerOuter			: INT;
+	nInterimQueueIndex		: INT;
+END_VAR
+VAR_IN_OUT
+	aInterimCodeQueue	: ARRAY[1..cMAX_INTERMEDIATE_CODE_QUEUE] OF T_MaxString;
+	stCodeInfo_Pack		: ST_CodeInfo;
+	stOCVPackStatus		:  ST_OUTER_Status;	(* Outer status array *)
+
+	stPackLinearStatusHMI:	ST_HMI_PLAS_Queue;
+END_VAR
+VAR_OUTPUT
+	bDone						: BOOL;		(* TRUE = complete *)
+
+	stLastOCVStatus			: ST_OUTER_Status;
+	sPackCodesMovedToOCV	: T_LongSTRING;
+
+	nGoodPackReads		: INT;
+
+END_VAR
+VAR
+	fbExecute						: R_TRIG;
+	eCodeAIType					: E_CodeAIType;
+	nPackIndex					: INT;
+	nInterimCodeDupIndex		: INT;
+	sAppendedString				: STRING;
+	sLastGoodInterimCodeAssociated	: T_MaxString;
+END_VAR
+VAR CONSTANT
+	aPackCodeMapping08		: ARRAY[1..8] OF INT :=[ 	4, 3, 6, 5, 8, 7, 10, 9];
+	aPackCodeMapping10		: ARRAY[1..10] OF INT :=[ 	4, 3, 6, 5, 8, 7, 10, 9, 12, 11];
+
+(**********************************************************************
+aPackCodeMapping08
+-01-03-05-07 Pack Position row 1
+4, 6, 8, 10
+-02-04-06-08-	Pack Position row 2
+3, 5, 7, 9  
+**********************************************************************)
+
+(**********************************************************************
+aPackCodeMapping10
+-01-03-05-07 -09 Pack Position row 1
+4, 6, 8, 10, 12
+-02-04-06-08-10	Pack Position row 2
+3, 5, 7, 9 , 11
+**********************************************************************)
+
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* monitor bExecute *)
+fbExecute(CLK := bExecute);
+
+(* rising edge detected *)
+IF fbExecute.Q = TRUE THEN
+
+	(* reset outputs*)
+	(*bDone := FALSE;*)
+
+	nGoodPackReads 			:= 0;
+	sAppendedString			:= '';	
+	sPackCodesMovedToOCV	:= '';
+
+	MEMSET(ADR(stLastOCVStatus), 16#00, SIZEOF(stLastOCVStatus));
+
+	IF NOT stOCVPackStatus.nStatus.0 THEN
+
+		FOR nPackIndex := 1 TO nPacksPerOuter DO
+	
+			IF  stOCVPackStatus.aOACPackStatus[nPackIndex] > 1 THEN
+				stOCVPackStatus.stOACData.NumberOfLinkedPacks:= stOCVPackStatus.stOACData.NumberOfLinkedPacks + 1;
+			END_IF
+	
+			IF stOCVPackStatus.aOACPackStatus[nPackIndex]	= 1 THEN
+				stOCVPackStatus.nStatus.25 := TRUE;
+			END_IF
+	
+			IF stOCVPackStatus.aOACPackStatus[nPackIndex]	= 2 THEN
+				stOCVPackStatus.nStatus.26 := TRUE;
+			END_IF
+
+	
+			IF stOCVPackStatus.aOACPackStatus[nPackIndex] = 5 THEN
+				nGoodPackReads := nGoodPackReads + 1;
+			END_IF
+	
+			stOCVPackStatus.stOACData.PackCodeStatus[nPackIndex] :=
+										F_FiltredSetBitState16(TRUE, 'LOW', stOCVPackStatus.aOACPackStatus[nPackIndex], TRUE, stOCVPackStatus.stOACData.PackCodeStatus[nPackIndex]);
+
+			IF stOCVPackStatus.aPackCodeFilledIn[nPackIndex] = E_PACK_SECONDARYMASTERLISTRESTORED THEN
+				stOCVPackStatus.stOACData.PackCodeStatus[nPackIndex].10 := TRUE;
+				stOCVPackStatus.aOACPackStatus[nPackIndex] := 6;
+			ELSIF stOCVPackStatus.aPackCodeFilledIn[nPackIndex] = E_PACK_PRIMARYMASTERLISTRESTORED THEN
+				stOCVPackStatus.stOACData.PackCodeStatus[nPackIndex].9 := TRUE;
+				stOCVPackStatus.aOACPackStatus[nPackIndex] := 6;
+			END_IF
+	
+			//sPackCodesMovedToOCV :=F_LongCONCAT(sPackCodesMovedToOCV, '     ');
+			//sPackCodesMovedToOCV := F_LongCONCAT(sPackCodesMovedToOCV, RIGHT(F_CODE_GetItem(stOCVPackStatus.stOACData.PackCode[nPackIndex], eCodeAIType.SerialCode, stCodeInfo_Pack),7));
+
+			CONCAT2(ADR(sPackCodesMovedToOCV), ADR('   '), ADR(sPackCodesMovedToOCV), SIZEOF(sPackCodesMovedToOCV));
+		
+			sAppendedString := RIGHT(F_CODE_GetItem(stOCVPackStatus.stOACData.PackCode[nPackIndex], eCodeAIType.SerialCode, stCodeInfo_Pack),7);
+			CONCAT2(ADR(sPackCodesMovedToOCV), ADR(sAppendedString), ADR(sPackCodesMovedToOCV), SIZEOF(sPackCodesMovedToOCV));
+		END_FOR
+
+		(*stOCVPackStatus.stOACData.Barcode := sInterimCodeAssociated;*)
+
+		IF aInterimCodeQueue[nInterimQueueIndex] = sLastGoodInterimCodeAssociated 	AND
+			aInterimCodeQueue[nInterimQueueIndex]  <> cCODE_OVERWIRTTEN 			AND
+			aInterimCodeQueue[nInterimQueueIndex]  <> '' 									THEN
+
+			stOCVPackStatus.stOACData.AggregationCodes[1] :=aInterimCodeQueue[nInterimQueueIndex];
+			stOCVPackStatus.sDataSourceTracker  := 'INT_DUPLIC';
+			stOCVPackStatus.nStatus.22 := TRUE;
+
+			(*sLastInterimCodeAssociated	:= stOCVPackStatus.stOACData.AggregationCodes[1];*)
+
+			FOR nInterimCodeDupIndex := nInterimQueueIndex TO 1 BY -1 DO
+				aInterimCodeQueue[nInterimCodeDupIndex] 	:=	cCODE_OVERWIRTTEN;
+			END_FOR
+	
+		ELSE
+			stOCVPackStatus.stOACData.AggregationCodes[1] :=aInterimCodeQueue[nInterimQueueIndex];
+			stOCVPackStatus.sDataSourceTracker := 'CONFIR';
+
+			IF stOCVPackStatus.stOACData.AggregationCodes[1]  <> cCODE_OVERWIRTTEN 	AND
+				stOCVPackStatus.stOACData.AggregationCodes[1] <> '' 							THEN
+
+				sLastGoodInterimCodeAssociated	:= stOCVPackStatus.stOACData.AggregationCodes[1];
+			END_IF
+		END_IF
+
+	(******************************************************************************************************************************************)
+	
+		stOCVPackStatus.nStatus.0 := TRUE; (* b0 linear aggregaton scan(s) complete *)
+	
+		stOCVPackStatus.nStatus.6 := FALSE; (* b6	Pack codes store in OCV file *)
+		stOCVPackStatus.nStatus.7 := FALSE; (* b7	Pack codes OCV file write error *)
+	
+	
+	(******************************************************************************************************************************************)
+		FOR nPackIndex := 1 TO MIN(nPacksPerOuter ,cMAX_PACKS_PER_OUTER) BY 1 DO
+	
+			IF stOCVPackStatus.stOACData.PackRejectCode[nPackIndex] = 'OK' THEN
+	
+				stPackLinearStatusHMI.aOCVData[nPackIndex]  := F_CONCAT3(stOCVPackStatus.stOACData.PackCode[nPackIndex],'(999)','1');
+	
+				IF stOCVPackStatus.aPackCodeFilledIn[nPackIndex]  = E_PACK_PRIMARYMASTERLISTRESTORED  THEN
+	
+					stPackLinearStatusHMI.aOCVData[nPackIndex] := CONCAT(stPackLinearStatusHMI.aOCVData[nPackIndex],'1');
+				ELSE
+					stPackLinearStatusHMI.aOCVData[nPackIndex] := CONCAT(stPackLinearStatusHMI.aOCVData[nPackIndex],'0');
+				END_IF
+			ELSE
+				IF stOCVPackStatus.stOACData.PackCode[nPackIndex] = '' THEN
+					stPackLinearStatusHMI.aOCVData[nPackIndex]  := 'NOK(999)00';
+				ELSE
+					stPackLinearStatusHMI.aOCVData[nPackIndex] := F_CONCAT3(stOCVPackStatus.stOACData.PackCode[nPackIndex],'(999)','00');
+				END_IF
+			END_IF
+		END_FOR
+	
+		stPackLinearStatusHMI.sProductionDate				:= stOCVPackStatus.stOACData.ProductionDate;
+		stPackLinearStatusHMI.sProductionTime				:= stOCVPackStatus.stOACData.ProductionTime;
+	
+		stPackLinearStatusHMI.nNumberOfPacks				:= stOCVPackStatus.stOACData.NumberOfPacks;
+		stPackLinearStatusHMI.nAcceptanceLevel				:= stOCVPackStatus.stOACData.AcceptanceLevel;
+		stPackLinearStatusHMI.nNumberOfLinkedPacks		:= nGoodPackReads;
+		stPackLinearStatusHMI.nMaxPackPerOuter			:= nPacksPerOuter;
+	
+	(******************************************************************************************************************************************)
+	
+		stLastOCVStatus := stOCVPackStatus;
+	END_IF
+
+	(* update output *)
+	bDone := TRUE;
+
+(* bDone has been reset *)
+ELSE
+	(* update outputs *)
+	bDone := FALSE;
+
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

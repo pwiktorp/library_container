@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_PACK_ValidateHexName" Id="{f481f7c2-4399-4965-bc17-107bb97049de}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_PACK_ValidateHexName : INT
+VAR_INPUT
+	strHexName		: STRING(255);
+END_VAR
+VAR
+	nHexNameLen	: INT;
+	nCharIndex		: INT;
+	strChar			: STRING(1);
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* reset output *)
+F_PACK_ValidateHexName := 0;
+
+(* length of strPackCode *)
+nHexNameLen := LEN(strHexName);
+
+(* strPackCode contains data *)
+IF nHexNameLen > 0 THEN
+
+	(* check each char in the code *)
+	FOR nCharIndex := 1 TO nHexNameLen DO
+
+		(* get char from string *)
+		strChar := MID(strHexName, 1, nCharIndex);
+
+		(* char is every alphanumeric char *)
+		IF (F_ToASC(strChar) >= 16#30 AND F_ToASC(strChar) <= 16#39) OR (F_ToASC(strChar) >= 16#41 AND F_ToASC(strChar) <= 16#46) THEN
+
+			(* update valid char counter *)
+			F_PACK_ValidateHexName := F_PACK_ValidateHexName + 1;
+		END_IF
+	END_FOR
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="F_PACK_ValidateHexName">
+      <LineId Id="9" Count="22" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

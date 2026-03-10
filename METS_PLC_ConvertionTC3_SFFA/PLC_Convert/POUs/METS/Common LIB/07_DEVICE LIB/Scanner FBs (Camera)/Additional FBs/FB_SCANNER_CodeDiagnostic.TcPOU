@@ -1,0 +1,55 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SCANNER_CodeDiagnostic" Id="{aeee3821-362c-4cbe-a9da-1848e7d85322}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SCANNER_CodeDiagnostic
+VAR_INPUT
+	bLogData					: BOOL;
+	sImageData			: ST_SCANNER_ImageData;		(* image data structure *)
+	nExpectedResp		: INT;
+END_VAR
+VAR_OUTPUT
+	sCodeDiagnostig		: T_LongSTRING;
+END_VAR
+VAR
+	rtExecute					: R_TRIG;
+	nIndex		: INT;
+	sAppendedString				: STRING;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[rtExecute(CLK:=bLogData);
+
+IF rtExecute.Q THEN
+	
+	sAppendedString	:= '';
+	sCodeDiagnostig	:= '';
+	
+	//sCodeDiagnostig	:= F_CONCAT4(sImageData.aCodeData[1].strDataString,' [PN:', BYTE_TO_STRING(sImageData.aCodeData[1].nProgramNo),']' );
+	
+	CONCAT2(ADR(sCodeDiagnostig), ADR(sImageData.aCodeData[1].strDataString), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+	CONCAT2(ADR(sCodeDiagnostig), ADR(' [PN:'), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+	sAppendedString := BYTE_TO_STRING(sImageData.aCodeData[1].nProgramNo);
+	CONCAT2(ADR(sCodeDiagnostig), ADR(sAppendedString), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+	CONCAT2(ADR(sCodeDiagnostig), ADR(']'), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+	
+	IF nExpectedResp > 1 THEN
+		FOR nIndex := 2 TO nExpectedResp BY 1 DO
+			//sCodeDiagnostig:= F_LongCONCAT(sCodeDiagnostig, ' - ');
+			//sCodeDiagnostig:= F_LongCONCAT(sCodeDiagnostig,sImageData.aCodeData[nIndex].strDataString);
+			//sCodeDiagnostig:= F_LongCONCAT(sCodeDiagnostig, ' [PN:');
+			//sCodeDiagnostig:= F_LongCONCAT(sCodeDiagnostig, BYTE_TO_STRING(sImageData.aCodeData[nIndex].nProgramNo));
+			//sCodeDiagnostig:= F_LongCONCAT(sCodeDiagnostig, ']');
+			
+			CONCAT2(ADR(sCodeDiagnostig), ADR(' - '), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+			CONCAT2(ADR(sCodeDiagnostig), ADR(sImageData.aCodeData[nIndex].strDataString), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+			CONCAT2(ADR(sCodeDiagnostig), ADR(' [PN:'), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+			sAppendedString := BYTE_TO_STRING(sImageData.aCodeData[nIndex].nProgramNo);
+			CONCAT2(ADR(sCodeDiagnostig), ADR(sAppendedString), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+			CONCAT2(ADR(sCodeDiagnostig), ADR(']'), ADR(sCodeDiagnostig), SIZEOF(sCodeDiagnostig));
+	
+			(*sCodeDiagnostig:= F_LongCONCAT(sCodeDiagnostig, ' - ',sImageData.aCodeData[nIndex].strDataString,' [PN:', BYTE_TO_STRING(sImageData.aCodeData[nIndex].nProgramNo), ']');*)
+		END_FOR
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

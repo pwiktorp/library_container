@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_FILE_SplitPath" Id="{e2ac18ed-1eb1-4c22-84db-335e4c974a23}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_FILE_SplitPath : T_MaxString
+VAR_INPUT
+	strPathFile		: T_MaxString;
+END_VAR
+VAR
+	nMaxIndex		: INT;
+	nIndex			: INT;
+	strChar			: STRING(1);
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Moved from Sewtec_CaseTrace.lib
+
+-------------------------------------------------------------------------------------------------
+26/03/2012	1.38.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* total no of chars in string *)
+nMaxIndex := LEN(strPathFile);
+
+(* initialise output *)
+F_FILE_SplitPath := '';
+
+(* scan each char in string *)
+FOR nIndex := 0 TO nMaxIndex - 1 DO
+
+	(* start from end of string *)
+	strChar := MID(strPathFile, 1, nMaxIndex - nIndex);
+
+	(* last '\' char is string separates path and file name *)
+	IF strChar = '\' THEN
+
+		F_FILE_SplitPath := LEFT(strPathFile, nMaxIndex - nIndex);
+		EXIT;
+	END_IF
+END_FOR]]></ST>
+    </Implementation>
+    <LineIds Name="F_FILE_SplitPath">
+      <LineId Id="20" Count="18" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

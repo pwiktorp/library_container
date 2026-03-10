@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_GS1_ClearCodeInfo" Id="{b991501c-dd6b-4bf5-80a5-21d5f5fb09a4}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_GS1_ClearCodeInfo
+VAR_INPUT
+END_VAR
+VAR_IN_OUT
+	stCodeInfo						: ST_GS1_CodeInfo;
+END_VAR
+VAR
+	nItemIndex		: INT ;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType = GS1_00   THEN
+		MEMSET(ADR(stCodeInfo.stGS1_Field[nItemIndex]), 16#00, SIZEOF(stCodeInfo.stGS1_Field[nItemIndex]));
+		stCodeInfo.stGS1_Field[nItemIndex].sFieldName :='Field Undefined';
+	END_IF
+END_FOR]]></ST>
+    </Implementation>
+    <LineIds Name="FB_GS1_ClearCodeInfo">
+      <LineId Id="9" Count="5" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

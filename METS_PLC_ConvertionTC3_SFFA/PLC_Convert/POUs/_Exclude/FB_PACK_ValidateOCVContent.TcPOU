@@ -1,0 +1,209 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_PACK_ValidateOCVContent" Id="{33169b1f-d957-40cc-b273-c4b4408ff838}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_PACK_ValidateOCVContent
+VAR_INPUT
+	nOCVControlCheckStatus		: BYTE;
+	nPacksPerOuter			: UINT;
+	stCTDateTime				: ST_SYSTEM_DateTime;
+	bUseIntermediateCode		: BOOL;
+END_VAR
+VAR_IN_OUT
+	stCodeInfo_Pack			: ST_CodeInfo;
+	stCodeInfo_Intermediate	: ST_CodeInfo;
+	(*aInterimCodeQueue		: ARRAY[1..cMAX_INTERMEDIATE_CODE_QUEUE] OF T_MaxString;*)
+	stOCVStatus				: ST_OUTER_Status;	(* Outer status *)
+	stNextOCVStatus			: ST_OUTER_Status;	(* Next Outer status used for check duplicat in OCV queue *)
+END_VAR
+VAR_OUTPUT
+	aOCVFileCodeName			: ARRAY[1..2] OF T_MaxString;
+	aOCVFileCodeToDelete		: ARRAY[1..2] OF T_MaxString;
+	bInvalidPackFound				: BOOL;
+	bDuplicatePackFound			: BOOL;
+	bDuplicateInterimFound			: BOOL;
+	bMasterListFound				: BOOL;
+	bEmptyAggregationCode		: BOOL;
+END_VAR
+VAR
+	eCodeAIType				: E_CodeAIType;
+	nPackCodeCheckIndex		: UINT;
+	nPackCodeDupIndex		: UINT;
+	nInterimCodeDupIndex	: UINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[MEMSET(ADR(aOCVFileCodeName), 16#00, SIZEOF(aOCVFileCodeName));
+
+bInvalidPackFound			:= FALSE;
+bDuplicatePackFound 		:= FALSE;
+bDuplicateInterimFound 	:= FALSE;
+bMasterListFound			:= FALSE;
+bEmptyAggregationCode 	:= FALSE;
+
+IF nOCVControlCheckStatus = 0 THEN
+
+	aOCVFileCodeName[1]	:=	F_CodeToHex(F_CODE_GetItem(stOCVStatus.stOACData.AggregationCodes[1] , eCodeAIType.SerialCode, SEL(bUseIntermediateCode, stCodeInfo_Pack, stCodeInfo_Intermediate)));
+	aOCVFileCodeName[2]	:=	F_CodeToHex(F_CODE_GetItem(stOCVStatus.stOACData.AggregationCodes[2] , eCodeAIType.SerialCode,   stCodeInfo_Pack)); (*no reason to have 2 diffrent intermediate codes*)
+
+ELSE
+	MEMSET(ADR(aOCVFileCodeToDelete), 16#00, SIZEOF(aOCVFileCodeToDelete));
+
+	IF stOCVStatus.stOACData.AggregationCodes[1] <>  cCODE_OVERWIRTTEN 	THEN
+		aOCVFileCodeName[1]	:=	F_CODE_GetItem(stOCVStatus.stOACData.AggregationCodes[1] , eCodeAIType.SerialCode, SEL(bUseIntermediateCode, stCodeInfo_Pack, stCodeInfo_Intermediate));
+	ELSE
+		aOCVFileCodeName[1]	:= '';
+	END_IF
+
+	IF stOCVStatus.stOACData.AggregationCodes[2] <>  cCODE_OVERWIRTTEN 	THEN
+		aOCVFileCodeName[2]	:=	F_CODE_GetItem(stOCVStatus.stOACData.AggregationCodes[2] , eCodeAIType.SerialCode,   stCodeInfo_Pack); (*no reason to have 2 diffrent intermediate codes*)
+	ELSE
+		aOCVFileCodeName[2]	:= '';
+	END_IF
+
+	IF nOCVControlCheckStatus.0 THEN
+
+		(*DuplicatPackFound();*)
+		DuplicateInterimFound();
+	END_IF
+
+	IF nOCVControlCheckStatus.1
+		AND NOT bDuplicatePackFound
+		AND NOT bDuplicateInterimFound	THEN
+
+		InvalidPackFound();
+	END_IF
+
+	IF nOCVControlCheckStatus.2
+		AND NOT bDuplicatePackFound
+		AND NOT bDuplicateInterimFound
+		AND NOT bInvalidPackFound	THEN
+
+		MasterListFound();
+	END_IF
+
+	IF nOCVControlCheckStatus.3 THEN
+		;
+	END_IF
+
+	IF nOCVControlCheckStatus.4 THEN
+		;
+	END_IF
+
+	IF NOT bDuplicatePackFound AND NOT bDuplicateInterimFound AND NOT bMasterListFound  THEN
+
+		aOCVFileCodeName[1] :=  F_CodeToHex(aOCVFileCodeName[1]);
+		aOCVFileCodeName[2] :=  F_CodeToHex(aOCVFileCodeName[2]);
+	END_IF
+
+	IF aOCVFileCodeName[1] = '' AND aOCVFileCodeName[2] = '' THEN
+		aOCVFileCodeName[1] := F_CONCAT3('EMPTY' ,'_' , F_SYSTEM_SystemTimeToCHM_Header(stCTDateTime.sSystemTime));
+
+		bEmptyAggregationCode := TRUE;
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+    <Action Name="DuplicateInterimFound" Id="{2d45fcdc-b6a0-4f4d-8924-31a38653f084}">
+      <Implementation>
+        <ST><![CDATA[(*IF  stNextOCVStatus.nStatus.6
+		AND bUseIntermediateCode
+		AND stOCVStatus.stOACData.AggregationCodes[1] = stNextOCVStatus.stOACData.AggregationCodes[1]
+		AND stOCVStatus.stOACData.AggregationCodes[1] <> cCODE_OVERWIRTTEN
+		AND stOCVStatus.stOACData.AggregationCodes[1] <> ''					THEN
+
+			aOCVFileCodeName[1] := CONCAT('DUP_INT_', F_CodeToHex(aOCVFileCodeName[1]));
+			stOCVStatus.nStatus.22 := TRUE;
+			stOCVStatus.sDataSourceTracker  := 'DUPLICAT';
+
+			FOR nInterimCodeDupIndex := 1 TO cMAX_INTERMEDIATE_CODE_QUEUE DO
+				aInterimCodeQueue[nInterimCodeDupIndex] 	:=	cCODE_OVERWIRTTEN;
+			END_FOR
+
+			bDuplicateInterimFound := TRUE;
+
+END_IF
+*)
+IF stOCVStatus.sDataSourceTracker  = 'DUPLICAT' THEN
+
+		aOCVFileCodeName[1] := CONCAT('DUP_INT_', F_CodeToHex(aOCVFileCodeName[1]));
+		stOCVStatus.nStatus.22 := TRUE;
+
+		bDuplicateInterimFound := TRUE;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="DuplicatePackFound" Id="{ca5a36f3-9154-4993-b1ef-0781120c33e0}">
+      <Implementation>
+        <ST><![CDATA[FOR nPackCodeCheckIndex:= 1 TO nPacksPerOuter DO
+	FOR nPackCodeDupIndex := 1 TO nPacksPerOuter DO
+
+		IF  stNextOCVStatus.nStatus.6
+			AND stOCVStatus.stOACData.PackCode[nPackCodeCheckIndex] = stNextOCVStatus.stOACData.PackCode[nPackCodeDupIndex]
+			AND (stOCVStatus.aOACPackStatus[nPackCodeCheckIndex] = 5 OR  stOCVStatus.aOACPackStatus[nPackCodeCheckIndex] = 6) THEN
+
+				aOCVFileCodeToDelete[1]	:=	F_CodeToHex(F_CODE_GetItem(stNextOCVStatus.stOACData.AggregationCodes[1] ,
+																eCodeAIType.SerialCode, SEL(bUseIntermediateCode, stCodeInfo_Pack, stCodeInfo_Intermediate)));
+				aOCVFileCodeToDelete[2]	:=	F_CodeToHex(F_CODE_GetItem(stNextOCVStatus.stOACData.AggregationCodes[2] ,
+																eCodeAIType.SerialCode, stCodeInfo_Pack));
+
+				stNextOCVStatus.nStatus.22 := TRUE;
+				stNextOCVStatus.sDataSourceTracker  := 'REMOVED';
+
+				aOCVFileCodeName[1] := F_CONCAT5('DUP_PK1_', F_CodeToHex(aOCVFileCodeName[1]),'_' , F_SYSTEM_SystemTimeToCHM_Header(stCTDateTime.sSystemTime), '.xml');
+				aOCVFileCodeName[2] := F_CONCAT5('DUP_PK2_', F_CodeToHex(aOCVFileCodeName[2]),'_' , F_SYSTEM_SystemTimeToCHM_Header(stCTDateTime.sSystemTime), '.xml');
+				stOCVStatus.nStatus.22 := TRUE;
+				stOCVStatus.sDataSourceTracker  := 'DUPLICAT';
+
+			bDuplicatePackFound := TRUE;
+			EXIT;
+		END_IF
+	END_FOR
+	IF bDuplicatePackFound THEN
+		EXIT;
+	END_IF
+END_FOR]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="InvalidPackFound" Id="{3df311b9-9b18-478e-879d-3a3fd5c884b2}">
+      <Implementation>
+        <ST><![CDATA[FOR nPackCodeCheckIndex := 1 TO nPacksPerOuter DO
+	IF stOCVStatus.aOACPackStatus[nPackCodeCheckIndex] = 0
+		OR stOCVStatus.aOACPackStatus[nPackCodeCheckIndex] = 1
+		OR stOCVStatus.aOACPackStatus[nPackCodeCheckIndex] = 2
+		OR stOCVStatus.aOACPackStatus[nPackCodeCheckIndex] = 3	THEN
+
+		bInvalidPackFound := TRUE;
+		EXIT;
+	END_IF
+END_FOR]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="MasterListFound" Id="{ef878e10-eb10-47f1-b5c6-90dbcb1f0a96}">
+      <Implementation>
+        <ST><![CDATA[FOR nPackCodeCheckIndex := 1 TO nPacksPerOuter DO
+	IF stOCVStatus.aOACPackStatus[nPackCodeCheckIndex] = 6 THEN
+
+		aOCVFileCodeName[1] := CONCAT('ML_', F_CodeToHex(aOCVFileCodeName[1]));
+		aOCVFileCodeName[2] := CONCAT('ML_', F_CodeToHex(aOCVFileCodeName[2]));
+
+		bMasterListFound	:= TRUE;
+		EXIT;
+	END_IF
+END_FOR]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="FB_PACK_ValidateOCVContent">
+      <LineId Id="29" Count="68" />
+    </LineIds>
+    <LineIds Name="FB_PACK_ValidateOCVContent.DuplicateInterimFound">
+      <LineId Id="0" Count="24" />
+    </LineIds>
+    <LineIds Name="FB_PACK_ValidateOCVContent.DuplicatePackFound">
+      <LineId Id="0" Count="27" />
+    </LineIds>
+    <LineIds Name="FB_PACK_ValidateOCVContent.InvalidPackFound">
+      <LineId Id="0" Count="9" />
+    </LineIds>
+    <LineIds Name="FB_PACK_ValidateOCVContent.MasterListFound">
+      <LineId Id="0" Count="9" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

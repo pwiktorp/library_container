@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_CodeToHex" Id="{8223b503-3176-45d7-bbd1-73a41874717f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_CodeToHex : T_MaxString
+VAR_INPUT
+	sCode		: T_MaxString;
+END_VAR
+VAR
+	nCharIndex	: INT;
+	sChar		: STRING(1);
+	nCharInDec	: BYTE;
+	sCharInHex	: STRING(2);
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* reset output *)
+F_CodeToHex := '';
+
+(* strPackCode contains data *)
+IF LEN(sCode)  > 0  AND LEN(sCode) < 256 THEN
+
+	(* check each char in the code *)
+	FOR nCharIndex := 1 TO LEN(sCode)  DO
+
+		(* get char from string *)
+		sChar := MID(sCode, 1, nCharIndex);
+		nCharInDec := F_ToASC(sChar);
+		sCharInHex := DATA_TO_HEXSTR(ADR(nCharInDec), SIZEOF(nCharInDec), FALSE);
+		F_CodeToHex := CONCAT(F_CodeToHex, sCharInHex);
+	END_FOR
+
+ELSIF LEN(sCode) >= 256 THEN
+	F_CodeToHex :='Exceed_String_Length';
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

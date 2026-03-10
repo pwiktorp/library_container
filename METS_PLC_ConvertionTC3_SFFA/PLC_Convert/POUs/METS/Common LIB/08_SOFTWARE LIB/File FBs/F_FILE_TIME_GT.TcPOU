@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_FILE_TIME_GT" Id="{5288176d-6e1f-408b-9396-4d67b8565b05}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+Compares two T_FILETIME structures. Returs true if ftTime1 > ftTime2. i.e ftTime1 is LATER (more recent) than ftTime2.
+*)
+FUNCTION F_FILE_TIME_GT : BOOL
+VAR_INPUT
+	ftTime1			: T_FILETIME;
+	ftTime2			: T_FILETIME;
+END_VAR
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF ftTime1.dwHighDateTime > ftTime2.dwHighDateTime THEN
+	F_FILE_TIME_GT := TRUE;
+	RETURN;
+ELSIF ftTime1.dwHighDateTime = ftTime2.dwHighDateTime AND ftTime1.dwLowDateTime >ftTime2.dwLowDateTime  THEN
+	F_FILE_TIME_GT := TRUE;
+	RETURN;
+ELSE
+	F_FILE_TIME_GT := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="F_FILE_TIME_GT">
+      <LineId Id="10" Count="8" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

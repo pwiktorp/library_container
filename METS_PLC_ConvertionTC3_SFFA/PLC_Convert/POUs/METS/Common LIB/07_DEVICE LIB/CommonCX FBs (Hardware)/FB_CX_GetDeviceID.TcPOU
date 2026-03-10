@@ -1,0 +1,179 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CX_GetDeviceID" Id="{8150abee-eac7-4e52-ae73-b37e91916d0b}" SpecialFunc="None">
+    <Declaration><![CDATA[(* scan TwinCAT system for DeviceID of specified device type *)
+FUNCTION_BLOCK FB_CX_GetDeviceID
+VAR_INPUT
+	bExecute			: BOOL;		(* start scan for NOVRAM on rising edge *)
+	eDeviceType			: IODEVICETYPES;	(* device typelast DeviceID to check before giving Not Found error *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;		(* TRUE = scan complete *)
+	bBusy				: BOOL;		(* TRUE = scan in progress *)
+	bError				: BOOL;		(* TRUE = NOVRAM device not found *)
+	nErrorID			: UDINT;	(* error code *)
+	bDeviceFound		: BOOL;		(* TRUE = eDeviceType found *)
+	nDeviceID			: WORD;		(* DeviceID of eDeviceType *)
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	eState				: E_CX_DeviceState;
+	eErrorState			: E_CX_DeviceState;
+	fbGetDeviceIDs		: IOF_GetDeviceIDs;
+	arrDeviceIDs		: ARRAY[0..16] OF WORD;
+	nIndex				: INT;
+	fbGetDeviceType		: IOF_GetDeviceType;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		No change
+
+-------------------------------------------------------------------------------------------------
+02/02/2011	1.01.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge starts scan for NOVRAM *)
+fbExecute(CLK:= bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_CX_DeviceState.IDLE:
+
+		(* rising edge detected in IDLE state *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* set outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+			nDeviceID := 0;
+
+			(* initialise internal vars *)
+			MEMSET(ADR(arrDeviceIDs), 16#00, SIZEOF(arrDeviceIDs));
+			eErrorState := eState;
+
+			eState := E_CX_DeviceState.ID;
+
+		(* no action required *)
+		ELSIF bExecute = FALSE THEN
+
+			(* set outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* get active DeviceIDs *)
+	E_CX_DeviceState.ID:
+
+		(* read Device IDs *)
+		fbGetDeviceIDs(
+			NETID	:= '',
+			LEN		:= SIZEOF(arrDeviceIDs),
+			DESTADDR:= ADR(arrDeviceIDs),
+			START	:= TRUE,
+			TMOUT	:= T#1s
+		);
+
+		(* read Device IDs complete *)
+		IF fbGetDeviceIDs.BUSY = FALSE THEN
+
+			(* read Device IDs completed OK *)
+			IF fbGetDeviceIDs.ERR = FALSE THEN
+
+				(* start with 1st device in list *)
+				nIndex := 1;
+
+				eState := E_CX_DeviceState.DEVTYPE;
+
+			(* read Device IDs error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbGetDeviceIDs.ERRID;
+				eErrorState := eState;
+
+				eState := E_CX_DeviceState.DONE;
+			END_IF
+
+			(* close off fbGetDeviceIDs *)
+			fbGetDeviceIDs(START := FALSE);
+		END_IF
+
+
+	(* get device type *)
+	E_CX_DeviceState.DEVTYPE:
+
+		(* read DeviceType *)
+		fbGetDeviceType(
+			NETID	:= '',
+			DEVICEID:= arrDeviceIDs[nIndex],
+			START	:= TRUE,
+			TMOUT	:= T#1s,
+		);
+
+		(* read DeviceType complete *)
+		IF fbGetDeviceType.BUSY = FALSE THEN
+
+			(* read DeviceType completed OK *)
+			IF fbGetDeviceType.ERR = FALSE THEN
+
+				(* target device type found *)
+				IF fbGetDeviceType.IODeviceType = eDeviceType THEN
+
+					(* NOVRAM Device ID found *)
+					bDeviceFound := TRUE;
+					nDeviceID := arrDeviceIDs[nIndex];
+
+					eState := E_CX_DeviceState.DONE;
+
+				(* target device type does not match *)
+				ELSE
+
+					(* all active devices checked *)
+					IF nIndex = arrDeviceIDs[0] THEN
+
+						eState := E_CX_DeviceState.DONE;
+
+					(* move to next device *)
+					ELSE
+
+						(* check next DeviceID *)
+						nIndex := nIndex + 1;
+					END_IF
+				END_IF
+
+			(* read DeviceType error*)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbGetDeviceType.ERRID;
+				eErrorState := eState;
+
+				eState := E_CX_DeviceState.DONE;
+			END_IF
+
+			(* close fbGetDeviceType *)
+			fbGetDeviceType(START := FALSE);
+		END_IF
+
+
+	(* done *)
+	E_CX_DeviceState.DONE:
+
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_CX_DeviceState.IDLE;
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

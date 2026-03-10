@@ -1,0 +1,145 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_TCP_ReceiveLongString" Id="{f34dc74e-88c4-4adc-a6d4-cf7d90bf6583}" SpecialFunc="None">
+    <Declaration><![CDATA[(* poll TCP Server for incoming data, transfer in long string *)
+FUNCTION_BLOCK FB_TCP_ReceiveLongString
+VAR_INPUT
+	bEnable				: BOOL;			(* set TRUE to enable periodic TCP data receive *)
+	hSocket				: T_HSocket;	(* TCP socket *)
+	tUpdateTime			: TIME;			(* receive update rate *)
+	nSyncOffset			: DINT;			(* ms offset to spread TCP Server access loading *)
+END_VAR
+VAR_IN_OUT
+	strTCPRxString		: T_LongString;	(* string to which incoming TCP data will be appended *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;			(* TRUE = complete *)
+	bBusy				: BOOL;			(* TRUE = in progress *)
+	bError 				: BOOL;			(* TRUE = error *)
+	nErrorID			: UDINT;		(* error code *)
+	bDataReceived		: BOOL;			(* TRUE = data received *)
+END_VAR
+VAR
+	fbTimer				: FB_PulseGenerator_Sync;
+	bTCPReceive			: BOOL;
+	nMaxBytes			: UDINT;
+	fbTCPReceive		: FB_SocketReceive;
+	aTCPRxChars			: ARRAY[0..1023] OF BYTE;
+	aDebug				: ARRAY[0..1023] OF BYTE;
+	nMaxBytesDebug		: UDINT;
+	sChar				: STRING(2);
+	nDebugIndex			: INT;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* TCP update timer *)
+fbTimer(
+	bEnable		:= bEnable,
+	tPeriod		:= tUpdateTime,
+	nSyncOffset	:= nSyncOffset
+);
+
+(* TCP update timer elapsed and fbTCPReceive is not active *)
+IF fbTimer.bOutput = TRUE THEN
+
+	(* max number of bytes that can be received into strTCPRxString on next cycle *)
+	nMaxBytes := SIZEOF(strTCPRxString) - LEN2(ADR(strTCPRxString)) - 1;
+
+	(* clear strTCPRxChars *)
+	MEMSET(ADR(aTCPRxChars), 16#00, SIZEOF(aTCPRxChars));
+
+	(* strTCPRxString has space for 1 or more bytes *)
+	IF nMaxBytes > 0 THEN
+
+		(* receive data from TCP port *)
+		bTCPReceive := TRUE;
+		bBusy := TRUE;
+	END_IF
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bError := FALSE;
+	nErrorID := 0;
+	bDataReceived := FALSE;
+
+(* TPC receive not active *)
+ELSIF bTCPReceive = FALSE THEN
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+	nErrorID := 0;
+	bDataReceived := FALSE;
+END_IF
+
+
+(* receive data from TCP server, max length determined by free chars available in strTCPData *)
+fbTCPReceive(
+	sSrvNetId	:= '',
+	hSocket		:= hSocket,
+	cbLen		:= nMaxBytes,
+	pDest		:= ADR(aTCPRxChars),
+	bExecute	:= bTCPReceive,
+	tTimeout	:= T#500ms,
+	bBusy		=> bBusy
+);
+
+
+(* receive TCP data complete *)
+IF bTCPReceive = TRUE AND fbTCPReceive.bBusy = FALSE THEN
+
+	(* receive TCP data completed OK *)
+	IF fbTCPReceive.bError = FALSE THEN
+
+		(* data bytes received *)
+		IF fbTCPReceive.nRecBytes > 0 THEN
+
+			IF fbTCPReceive.nRecBytes > 90 THEN
+			nMaxBytesDebug	:= nMaxBytes;
+			aDebug	:= aTCPRxChars;
+
+			END_IF
+
+			FOR nDebugIndex := 0 TO 1023 DO
+					IF aTCPRxChars[nDebugIndex] <> 0 THEN
+						sChar := F_ToCHR(aTCPRxChars[nDebugIndex]);
+						//strTCPRxString := F_LongCONCAT(strTCPRxString, sChar);
+						CONCAT2(ADR(strTCPRxString), ADR(sChar), ADR(strTCPRxString), SIZEOF(strTCPRxString));
+					END_IF
+			END_FOR
+
+			(* append returned data to TCP data string *)
+			(*strTCPRxString := F_LongCONCAT(strTCPRxString, strTCPRxChars);*)
+			bDataReceived := TRUE;
+		END_IF
+
+	(* receive data error *)
+	ELSE
+
+		bDataReceived := FALSE;
+		bError := TRUE;
+		nErrorID := fbTCPReceive.nErrId;
+	END_IF
+
+
+	(* clear TCP Receive flag *)
+	bTCPReceive := FALSE;
+
+	(* update outputs *)
+	bDone := TRUE;
+	bBusy := FALSE;
+
+	(* close off fbReceiveTCPData *)
+	fbTCPReceive(bExecute := FALSE);
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

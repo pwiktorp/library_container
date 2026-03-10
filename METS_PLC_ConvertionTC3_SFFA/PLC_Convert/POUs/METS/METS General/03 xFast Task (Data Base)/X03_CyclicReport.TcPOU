@@ -1,0 +1,131 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="X03_CyclicReport" Id="{8fef1785-10e1-481d-bcc9-96ddb2c6786e}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM X03_CyclicReport
+VAR
+	bDone				: BOOL;			(* TRUE = validation complete *)
+	bBusy				: BOOL;			(* TRUE = validation in progress *)
+	bError				: BOOL;			(* TRUE = validation error *)
+	nErrorID			: UDINT;		(* error ID *)
+	nDBErrorID			: UDINT;
+
+
+	fbPulseCheckReport				: FB_PulseGenerator;
+	rtg_Execute			: R_TRIG;
+	eState				: E_DB_ScanState;
+	tonDBTimeout					: TON;
+
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* monitor rising edge of bExecute *)
+IF NOT stMachineConfig.stDBConfig.bDBConfigured	THEN
+	nErrorID := 0;
+	gDevice.stMachineDevices.stDBStatus.bDB_Healthy 		:= FALSE;
+END_IF
+
+fbPulseCheckReport(bEnable:= gDevice.stMachineDevices.stDBStatus.bDBConnectionParamsCreated 	AND
+						stMachineConfig.stDBConfig.bDBConfigured	AND
+						stMetsStatus.bSettingsValid				AND
+						(eState = E_DB_IDLE),
+						tPeriod := t#1s);
+
+rtg_Execute(CLK := fbPulseCheckReport.bOutput);
+
+
+(* rising edge of bExecute *)
+CASE eState OF
+
+	(* idle *)
+E_DB_IDLE:
+
+		(* scan for completed Outer when OAC files are required *)
+		IF rtg_Execute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			eState := E_DB_SENDREQ;
+
+		(* no action required *)
+		ELSIF NOT fbPulseCheckReport.bOutput THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+
+		END_IF
+
+	(* Send data to DB *)
+E_DB_SENDREQ:
+
+		(*MEMSET(ADR(gDevice.stDBReport), 16#00, SIZEOF(gDevice.stDBReport));*)
+		gDevice.stDBReport.bExecuteCheck	:= TRUE;
+		eState := E_DB_RECIVED;
+
+
+	(* recived data from DB *)
+E_DB_RECIVED:
+
+	gDevice.stDBReport.bExecuteCheck	:= FALSE;
+
+	IF gDevice.stDBReport.bCheckComplete   THEN
+
+		IF NOT gDevice.stDBReport.bDBError	THEN
+
+			gDevice.stMachineDevices.stDBStatus.bDB_Healthy := TRUE;
+
+			gHMI.stDBReportHMI := gDevice.stDBReport.stResultRecord;
+		ELSE
+
+			gDevice.stMachineDevices.stDBStatus.bDB_Healthy 		:= FALSE;
+			bError			:= TRUE;			(* TRUE = validation error *)
+			nErrorID			:= 1001;		(* error ID *)
+			nDBErrorID		:= gDevice.stDBReport.nDBErrorID;
+		END_IF
+		
+		gDevice.stDBReport.bCheckComplete := FALSE;
+		eState := E_DB_DONE;
+	END_IF
+
+
+E_DB_DONE:
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_DB_IDLE;
+
+
+(* unknown state *)
+ELSE
+	(* update outputs *)
+	bDone := TRUE;
+	bBusy := FALSE;
+	eState := E_DB_IDLE;
+END_CASE
+
+(* I/O time-out delay *)
+tonDBTimeout(IN:= bBusy ,	PT	:= T#5S);
+
+(* I/O timeout elapsed *)
+IF tonDBTimeout.Q THEN
+
+	gDevice.stMachineDevices.stDBStatus.bDB_Healthy 		:= FALSE;
+
+(* update outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := TRUE;
+	nErrorID	:= 1002;
+
+	eState :=  E_DB_IDLE;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

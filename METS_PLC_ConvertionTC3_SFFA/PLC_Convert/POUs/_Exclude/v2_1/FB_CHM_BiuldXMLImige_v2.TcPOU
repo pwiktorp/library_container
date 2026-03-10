@@ -1,0 +1,748 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CHM_BiuldXMLImige_v2" Id="{3cc2622d-9955-4c12-8b3f-1887c572bbcd}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_CHM_BiuldXMLImige_v2
+VAR_INPUT
+	bExecute					: BOOL;					(* set TRUE to write Case Produced file *)
+	hTarget					: UINT;
+	eMode						: E_XML_WritingMode;
+	nMaxPackItem				: UINT;
+	nOuterIndex				: UINT;
+	nCodingAndTrackingMode	: UINT;
+END_VAR
+VAR_IN_OUT
+	stAgregationData	 			: ST_CHM_Data;		(* case data to be written to XML *)
+END_VAR
+VAR_OUTPUT
+	bDone						: BOOL;					(* TRUE = XML file write complete *)
+	bBusy						: BOOL;					(* TRUE = XML file write in progress *)
+	bError						: BOOL;					(* TRUE = XML file write error *)
+	nErrorID					: UDINT;				(* file write error code *)
+	bVerifyError				: BOOL;					(* TRUE = XML file verification error *)
+	nImageByte				: UDINT;
+	nWriteImageSize			: UDINT;
+END_VAR
+VAR
+	fbExecute					: R_TRIG;
+	eState						: E_XML_CtrlState;
+	eErrorState					: E_XML_CtrlState;
+
+	fbWriteFile					: FB_FileWrite;
+
+	bGenerateImage			: BOOL;
+	aXMLImage					: ARRAY[0..32767] OF BYTE;
+	sString						: T_MaxString;
+	nPackIndex				: UINT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute triggers new sequence *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* waiting for trigger *)
+	E_XML_IDLE:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* reset internal values *)
+			bGenerateImage := FALSE;
+			MEMSET(ADR(aXMLImage), 16#00, SIZEOF(aXMLImage));
+			nImageByte := 0;
+			nWriteImageSize := 0;
+
+			(* update outputs *)
+			bBusy := TRUE;
+			bDone := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+			bVerifyError	:= FALSE;
+
+			eErrorState := E_XML_IDLE;
+
+			eState := E_XML_WRITEXML;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* update outputs *)
+			bBusy := FALSE;
+			bDone := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+			bVerifyError	:= FALSE;
+		END_IF
+
+	E_XML_WRITEXML:
+
+		IF NOT bGenerateImage THEN
+			CASE eMode OF
+
+				E_CS_HEADER:
+					A_CaseHeaderGenerator();
+
+				E_OUTER_HEADER:
+					IF nCodingAndTrackingMode >= 7 THEN
+						A_OuterHeaderContentGenerator();
+
+						IF nCodingAndTrackingMode = 11 THEN
+							FOR nPackIndex := 1 TO nMaxPackItem DO
+								A_PackContentGenerator();
+							END_FOR
+						END_IF
+
+						A_OuterEndPartGenerator();
+					END_IF
+
+				E_CS_ENDING:
+					A_CaseEndPartGenerator();
+
+			END_CASE
+
+			bGenerateImage := TRUE;
+		END_IF
+
+		(* write data to open file *)
+		fbWriteFile(
+			sNetId		:= '',
+			hFile		:= hTarget,
+			pWriteBuff	:= ADR(aXMLImage),
+			cbWriteLen	:= nImageByte,
+			bExecute	:= TRUE,
+			tTimeout	:= t#1s
+		);
+
+		(* file write completed *)
+		IF fbWriteFile.bBusy = FALSE THEN
+
+			(* file write completed OK *)
+			IF fbWriteFile.bError = FALSE THEN
+
+				(* log total bytes written *)
+				nWriteImageSize := fbWriteFile.cbWrite;
+
+				eState := E_XML_DONE;
+
+			(* file write error *)
+			ELSE
+				(* no previous error *)
+				IF bError = FALSE THEN
+
+					(* log error code and failure state *)
+					bError := TRUE;
+					nErrorID := fbWriteFile.nErrId;
+					eErrorState := eState;
+				END_IF
+
+				eState := E_XML_DONE;
+			END_IF
+
+			(* close off fbReadFile *)
+			fbWriteFile(bExecute := FALSE);
+		END_IF
+
+(* sequence complete *)
+	E_XML_DONE:
+
+		IF nImageByte <> nWriteImageSize THEN
+			bVerifyError := TRUE;
+		END_IF
+
+		(* update outputs *)
+		bBusy := FALSE;
+		bDone := TRUE;
+
+		eState := E_XML_IDLE;
+END_CASE]]></ST>
+    </Implementation>
+    <Action Name="A_CaseEndPartGenerator" Id="{a218a572-3185-4167-a8a0-482906a4acac}">
+      <Implementation>
+        <ST><![CDATA[	IF nCodingAndTrackingMode >= 7 THEN
+
+
+				(* ItemList end*)
+				sString := '$T$T$T$T</ItemList>$R$N';
+				MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+				nImageByte := nImageByte + LEN(sString);
+
+(***********CASE CONTENT END***********)
+			(* Case Content END *)
+			sString := '$T$T$T</Content>$R$N';
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+	END_IF
+			(* ProductionOrder *)
+			sString := F_CONCAT3('$T$T$T<ProductionOrder>',stAgregationData.GenericHierarchy.CaseItem.ProductionOrder, '</ProductionOrder>$R$N');
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+			(* LocalProductionOrder *)
+			sString := F_CONCAT3('$T$T$T<LocalProductionOrder>',stAgregationData.GenericHierarchy.CaseItem.LocalProductionOrder, '</LocalProductionOrder>$R$N');
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+			(* PITCode *)
+			sString := F_CONCAT3('$T$T$T<PITCode>',stAgregationData.GenericHierarchy.CaseItem.PITCode, '</PITCode>$R$N');
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+			(* BatchID *)
+			sString := F_CONCAT3('$T$T$T<BatchID>',stAgregationData.GenericHierarchy.CaseItem.BatchID, '</BatchID>$R$N');
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+			(* ProductionLine *)
+			sString := F_CONCAT3('$T$T$T<ProductionLine>',stAgregationData.GenericHierarchy.CaseItem.ProductionLine, '</ProductionLine>$R$N');
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+
+(***********Item CONTENT END***********)
+		(* Item END *)
+		sString := '$T$T</Item>$R$N';
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);
+
+(***********GENERIC HIERARCHY CONTENT END***********)
+
+	(* GenericHierarchy END *)
+	sString := '$T</GenericHierarchy>$R$N';
+	MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+	nImageByte := nImageByte + LEN(sString);
+
+	(* Attributes *)
+	sString := F_CONCAT3('$T<Attributes>', stAgregationData.Attributes.CSProductionTime, '</Attributes>$R$N');
+	MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+	nImageByte := nImageByte + LEN(sString);
+
+(* XPath leading tag  END*)
+sString := '</GenericHierarchyList> $R$N';
+MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+nImageByte := nImageByte + LEN(sString);]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_CaseHeaderGenerator" Id="{97b216cc-d194-473b-91d3-e1b1aa930f65}">
+      <Implementation>
+        <ST><![CDATA[(* XML file version *)
+(*sString := '<?xml version="1.0" encoding="utf-8"?>$R$N';
+MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+nImageByte := nImageByte + LEN(sString);*)
+
+(* XPath leading tag *)
+sString := '<GenericHierarchyList xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"> $R$N';
+MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+nImageByte := nImageByte + LEN(sString);
+
+	(* MessageHeader *)
+	sString := '$T<MessageHeader>$R$N';
+	MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+	nImageByte := nImageByte + LEN(sString);
+
+(***********MESSAGE HEADER CONTENT***********)
+
+		(*(* CreationDate *)
+		sString := F_CONCAT3('$T$T<CreationDate>',stAgregationData.MessageHeader.CreationDate, '</CreationDate>$R$N');
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);
+	
+		(* CreationTime *)
+		sString := F_CONCAT3('$T$T<CreationTime>',stAgregationData.MessageHeader.CreationTime, '</CreationTime>$R$N');
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);*)
+
+		(* ReferenceID *)
+		sString := F_CONCAT3('$T$T<ReferenceID>',stAgregationData.MessageHeader.ReferenceID, '</ReferenceID>$R$N');
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);
+
+		(* CreationTimeLocalUTC *)
+		sString := F_CONCAT3('$T$T<CreationTimeLocalUTC>',stAgregationData.MessageHeader.CreationTimeLocalUTC, '</CreationTimeLocalUTC>$R$N');
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);
+
+		(* MessageType *)
+		sString := F_CONCAT3('$T$T<MessageType>',stAgregationData.MessageHeader.MessageType, '</MessageType>$R$N');
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);
+
+		(* SenderSystem *)
+		sString := F_CONCAT3('$T$T<SenderSystem>',stAgregationData.MessageHeader.SenderSystem, '</SenderSystem>$R$N');
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);
+
+		(* ReceiverSystem *)
+		sString := F_CONCAT3('$T$T<ReceiverSystem>',stAgregationData.MessageHeader.ReceiverSystem, '</ReceiverSystem>$R$N');
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);
+
+(***********MESSAGE HEADER CONTENT END***********)
+
+	(* MessageHeader END *)
+	sString := '$T</MessageHeader>$R$N';
+	MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+	nImageByte := nImageByte + LEN(sString);
+
+	(* Factory*)
+	sString := F_CONCAT3('$T<Factory>', stAgregationData.Factory, '</Factory>$R$N');
+	MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+	nImageByte := nImageByte + LEN(sString);
+
+	(* GenericHierarchy *)
+	sString := '$T<GenericHierarchy>$R$N';
+	MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+	nImageByte := nImageByte + LEN(sString);
+
+(***********GENERIC HIERARCHY CONTENT***********)
+
+		(* HierarchyType *)
+		sString := F_CONCAT3('$T$T<HierarchyType>',stAgregationData.GenericHierarchy.HierarchyType, '</HierarchyType>$R$N');
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);
+
+		(* PerformedAction *)
+		sString := F_CONCAT3('$T$T<ACTION>',stAgregationData.GenericHierarchy.PerformedAction, '</ACTION>$R$N');
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);
+
+		(* TrackingLevels *)
+		sString := F_CONCAT3('$T$T<TrackingLevels>',stAgregationData.GenericHierarchy.TrackingLevels, '</TrackingLevels>$R$N');
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);
+
+		(* TrackingIndicator *)
+		sString := F_CONCAT3('$T$T<TrackingIndicator>',stAgregationData.GenericHierarchy.TrackingIndicator, '</TrackingIndicator>$R$N');
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);
+
+		(* Item Type *)
+		sString := '$T$T<Item Type="CS">$R$N';
+		MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+		nImageByte := nImageByte + LEN(sString);
+
+(***********Item Type CONTENT***********)
+			(* Identity*)
+			sString := '$T$T$T<Identity>$R$N';
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+(***********Identity CONTENT***********)
+					(* SKU *)
+					sString := F_CONCAT3('$T$T$T$T<SKU>',stAgregationData.GenericHierarchy.CaseItem.Identity.SKU, '</SKU>$R$N');
+					MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+					nImageByte := nImageByte + LEN(sString);
+
+					(* GTIN *)
+					sString := F_CONCAT3('$T$T$T$T<GTIN>',stAgregationData.GenericHierarchy.CaseItem.Identity.GTIN, '</GTIN>$R$N');
+					MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+					nImageByte := nImageByte + LEN(sString);
+
+					(* ID *)
+					sString := F_CONCAT3('$T$T$T$T<ID>',stAgregationData.GenericHierarchy.CaseItem.Identity.ID, '</ID>$R$N');
+					MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+					nImageByte := nImageByte + LEN(sString);
+
+					(* ReadQuality *)
+					sString := F_CONCAT3('$T$T$T$T<ReadQuality>',stAgregationData.GenericHierarchy.CaseItem.Identity.ReadQuality, '</ReadQuality>$R$N');
+					MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+					nImageByte := nImageByte + LEN(sString);
+
+(***********Identity CONTENT END***********)
+
+			(* Identity END *)
+			sString := '$T$T$T</Identity>$R$N';
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+			(* ItemState *)
+			sString := F_CONCAT3('$T$T$T<ItemState>',stAgregationData.GenericHierarchy.CaseItem.ItemState, '</ItemState>$R$N');
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+			(* RejectReason *)
+			sString := '$T$T$T<RejectReason>$R$N';
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+				sString := F_CONCAT3('$T$T$T$T<Reason>',stAgregationData.GenericHierarchy.CaseItem.RejectReason, '</Reason>$R$N');
+				MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+				nImageByte := nImageByte + LEN(sString);
+
+			sString := '$T$T$T</RejectReason>$R$N';
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+			(*logs *)
+			sString := '$T$T$T<logs>$R$N';
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+				(* TimeStamp *)
+				sString := F_CONCAT3('$T$T$T$T<TimeStamp Topic="Aggregation">',stAgregationData.GenericHierarchy.CaseItem.TimeStamp, '</TimeStamp>$R$N');
+				MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+				nImageByte := nImageByte + LEN(sString);
+
+			(* logs END *)
+			sString := '$T$T$T</logs>$R$N';
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+			(* NoRead *)
+			sString := F_CONCAT3('$T$T$T<NoRead>',stAgregationData.GenericHierarchy.CaseItem.NoRead, '</NoRead>$R$N');
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+(***********CONTENT***********)
+	IF nCodingAndTrackingMode >= 7 THEN
+
+			(* Case Content *)
+			sString := '$T$T$T<Content>$R$N';
+			MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+			nImageByte := nImageByte + LEN(sString);
+
+				(* Case DefaultIdentity*)
+				sString := '$T$T$T$T<DefaultIdentity>$R$N';
+				MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+				nImageByte := nImageByte + LEN(sString);
+
+						(* SKU *)
+						sString := F_CONCAT3('$T$T$T$T$T<SKU>',stAgregationData.GenericHierarchy.CaseItem.Content.DefaultIdentity.SKU, '</SKU>$R$N');
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+						(* GTIN *)
+						sString := F_CONCAT3('$T$T$T$T$T<GTIN>',stAgregationData.GenericHierarchy.CaseItem.Content.DefaultIdentity.GTIN, '</GTIN>$R$N');
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+						(* ProductionOrder *)
+						sString := F_CONCAT3('$T$T$T$T$T<ProductionOrder>',stAgregationData.GenericHierarchy.CaseItem.Content.DefaultIdentity.ProductionOrder, '</ProductionOrder>$R$N');
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+						(* LocalProductionOrder *)
+						sString := F_CONCAT3('$T$T$T$T$T<LocalProductionOrder>',stAgregationData.GenericHierarchy.CaseItem.Content.DefaultIdentity.LocalProductionOrder, '</LocalProductionOrder>$R$N');
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+						(* PITCode *)
+						sString := F_CONCAT3('$T$T$T$T$T<PITCode>',stAgregationData.GenericHierarchy.CaseItem.Content.DefaultIdentity.PITCode, '</PITCode>$R$N');
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+						(* BatchID *)
+						sString := F_CONCAT3('$T$T$T$T$T<BatchID>',stAgregationData.GenericHierarchy.CaseItem.Content.DefaultIdentity.BatchID, '</BatchID>$R$N');
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+						(* ProductionLine *)
+						sString := F_CONCAT3('$T$T$T$T$T<ProductionLine>',stAgregationData.GenericHierarchy.CaseItem.Content.DefaultIdentity.ProductionLine, '</ProductionLine>$R$N');
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+				(* Case DefaultIdentity END*)
+				sString := '$T$T$T$T</DefaultIdentity>$R$N';
+				MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+				nImageByte := nImageByte + LEN(sString);
+
+				(* ExpectedItemCount *)
+				sString := F_CONCAT3('$T$T$T$T<ExpectedItemCount>',stAgregationData.GenericHierarchy.CaseItem.Content.ExpectedItemCount, '</ExpectedItemCount>$R$N');
+				MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+				nImageByte := nImageByte + LEN(sString);
+
+				(* ItemReadRate *)
+				sString := F_CONCAT3('$T$T$T$T<ItemReadRate>',stAgregationData.GenericHierarchy.CaseItem.Content.ItemReadRate, '</ItemReadRate>$R$N');
+				MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+				nImageByte := nImageByte + LEN(sString);
+
+				(* ItemList*)
+				sString := '$T$T$T$T<ItemList>$R$N';
+				MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+				nImageByte := nImageByte + LEN(sString);
+	END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_OuterEndPartGenerator" Id="{cfa0c76e-9864-439d-8e02-b7c0450b5578}">
+      <Implementation>
+        <ST><![CDATA[(*
+    </ItemList> 
+                        </Content> 
+                    </Item> 
+
+*)
+						IF nCodingAndTrackingMode = 11 THEN
+								(* ItemList end*)
+								sString := '$T$T$T$T$T$T$T</ItemList>$R$N';
+								MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+								nImageByte := nImageByte + LEN(sString);
+	(***********CASE CONTENT END***********)
+							(* Outer Content END *)
+							sString := '$T$T$T$T$T$T</Content>$R$N';
+							MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+							nImageByte := nImageByte + LEN(sString);
+						END_IF
+
+								(* Item Type END *)
+								sString := '$T$T$T$T$T</Item>$R$N';
+							MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+							nImageByte := nImageByte + LEN(sString);]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_OuterHeaderContentGenerator" Id="{cf567ac6-17df-43ab-ac83-923c17c864c0}">
+      <Implementation>
+        <ST><![CDATA[(*
+                  <Item Type="OUT"> 
+                        <Identity> 
+                         	   <ID>55128CY203644964300</ID> 
+                        	    <ReadQuality>100</ReadQuality> 
+                        </Identity> 
+                        <ItemState>Verified</ItemState> 
+                        <RejectReason /> 
+                        <logs> 
+                   		        <TimeStamp Topic="Aggregation">2018-03-22T20:46:01.5229666+01:00</TimeStamp> 
+                        </logs> 
+                        <NoRead>false</NoRead> 
+                        <Content> 
+                           	 <DefaultIdentity> 
+                      	     	     <SKU>10045622</SKU> 
+                        	   	     <GTIN>00000087295993</GTIN> 
+                        		        <ProductionOrder>2523549</ProductionOrder> 
+                         		       <LocalProductionOrder>2523549</LocalProductionOrder> 
+                           		     <PITCode>3</PITCode> 
+                          		      <BatchID>55122018</BatchID> 
+                        		        <ProductionLine>12</ProductionLine> 
+                       	     </DefaultIdentity> 
+                      	      <ExpectedItemCount>10</ExpectedItemCount> 
+                       	     <ItemReadRate>100</ItemReadRate> 
+                       	     <ItemList> 
+
+*)
+
+
+					(* Item Type *)
+					sString := '$T$T$T$T$T<Item Type="OUT">$R$N';
+					MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+					nImageByte := nImageByte + LEN(sString);
+
+						(* Identity *)
+						sString := '$T$T$T$T$T$T<Identity>$R$N';
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+							(* ID *)
+							sString := F_CONCAT3('$T$T$T$T$T$T$T<ID><![CDATA[',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Identity.ID, ']]]]><![CDATA[></ID>$R$N');
+							MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+							nImageByte := nImageByte + LEN(sString);
+
+							(* ReadQuality *)
+							sString := F_CONCAT3('$T$T$T$T$T$T$T<ReadQuality>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Identity.ReadQuality, '</ReadQuality>$R$N');
+							MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+							nImageByte := nImageByte + LEN(sString);
+
+						(* Identity END *)
+						sString := '$T$T$T$T$T$T</Identity>$R$N';
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+
+						(* ItemState *)
+						sString := F_CONCAT3('$T$T$T$T$T$T<ItemState>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].ItemState, '</ItemState>$R$N');
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+						(* RejectReason *)
+						sString := '$T$T$T$T$T$T<RejectReason>$R$N';
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+			
+							sString := F_CONCAT3('$T$T$T$T$T$T$T<Reason>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].RejectReason, '</Reason>$R$N');
+							MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+							nImageByte := nImageByte + LEN(sString);
+			
+						sString := '$T$T$T$T$T$T</RejectReason>$R$N';
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+
+						(*logs *)
+						sString := '$T$T$T$T$T$T<logs>$R$N';
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+							(* TimeStamp *)
+							sString := F_CONCAT3('$T$T$T$T$T$T$T<TimeStamp Topic="Aggregation">',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].TimeStamp, '</TimeStamp>$R$N');
+							MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+							nImageByte := nImageByte + LEN(sString);
+
+						(* logs END *)
+						sString := '$T$T$T$T$T$T</logs>$R$N';
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+
+						(* NoRead *)
+						sString := F_CONCAT3('$T$T$T$T$T$T<NoRead>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].NoRead, '</NoRead>$R$N');
+						MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+						nImageByte := nImageByte + LEN(sString);
+(***********CONTENT***********)
+
+						IF nCodingAndTrackingMode = 11 THEN
+							(* Outer Content *)
+							sString := '$T$T$T$T$T$T<Content>$R$N';
+							MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+							nImageByte := nImageByte + LEN(sString);
+	
+	
+								(* Case DefaultIdentity*)
+								sString := '$T$T$T$T$T$T$T<DefaultIdentity>$R$N';
+								MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+								nImageByte := nImageByte + LEN(sString);
+	
+										(* SKU *)
+										sString := F_CONCAT3('$T$T$T$T$T$T$T$T<SKU>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.SKU, '</SKU>$R$N');
+										MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+										nImageByte := nImageByte + LEN(sString);
+	
+										(* GTIN *)
+										sString := F_CONCAT3('$T$T$T$T$T$T$T$T<GTIN>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.GTIN, '</GTIN>$R$N');
+										MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+										nImageByte := nImageByte + LEN(sString);
+	
+										(* ProductionOrder *)
+										sString := F_CONCAT3('$T$T$T$T$T$T$T$T<ProductionOrder>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.ProductionOrder, '</ProductionOrder>$R$N');
+										MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+										nImageByte := nImageByte + LEN(sString);
+	
+										(* LocalProductionOrder *)
+										sString := F_CONCAT3('$T$T$T$T$T$T$T$T<LocalProductionOrder>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.LocalProductionOrder, '</LocalProductionOrder>$R$N');
+										MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+										nImageByte := nImageByte + LEN(sString);
+	
+										(* PITCode *)
+										sString := F_CONCAT3('$T$T$T$T$T$T$T$T<PITCode>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.PITCode, '</PITCode>$R$N');
+										MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+										nImageByte := nImageByte + LEN(sString);
+	
+										(* BatchID *)
+										sString := F_CONCAT3('$T$T$T$T$T$T$T$T<BatchID>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.BatchID, '</BatchID>$R$N');
+										MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+										nImageByte := nImageByte + LEN(sString);
+	
+										(* ProductionLine *)
+										sString := F_CONCAT3('$T$T$T$T$T$T$T$T<ProductionLine>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.DefaultIdentity.ProductionLine, '</ProductionLine>$R$N');
+										MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+										nImageByte := nImageByte + LEN(sString);
+	
+								(* Case DefaultIdentity END*)
+								sString := '$T$T$T$T$T$T$T</DefaultIdentity>$R$N';
+								MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+								nImageByte := nImageByte + LEN(sString);
+	
+								(* ExpectedItemCount *)
+								sString := F_CONCAT3('$T$T$T$T$T$T$T<ExpectedItemCount>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.ExpectedItemCount, '</ExpectedItemCount>$R$N');
+								MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+								nImageByte := nImageByte + LEN(sString);
+	
+								(* ItemReadRate *)
+								sString := F_CONCAT3('$T$T$T$T$T$T$T<ItemReadRate>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.ItemReadRate, '</ItemReadRate>$R$N');
+								MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+								nImageByte := nImageByte + LEN(sString);
+	
+								(* ItemList*)
+								sString := '$T$T$T$T$T$T$T<ItemList>$R$N';
+								MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+								nImageByte := nImageByte + LEN(sString);
+						END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_PackContentGenerator" Id="{1ba7c198-7e25-4425-b5dc-3f8c1f954aeb}">
+      <Implementation>
+        <ST><![CDATA[(*
+                             <Item Type="PK"> 
+                                    <Identity> 
+                                        <ID>1XJWVXUS1FM7</ID> 
+                                        <ReadQuality>100</ReadQuality> 
+                                    </Identity> 
+                                    <ItemState>Verified</ItemState> 
+                                    <RejectReason /> 
+                                    <logs> 
+                                        <TimeStamp Topic="Aggregation">2018-03-22T20:45:38.4129952+01:00</TimeStamp> 
+                                    </logs> 
+                                    <NoRead>false</NoRead> 
+                                </Item> 
+*)
+
+								(* Item Type *)
+								sString := '$T$T$T$T$T$T$T$T<Item Type="PK">$R$N';
+								MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+								nImageByte := nImageByte + LEN(sString);
+
+									(* Identity *)
+									sString := '$T$T$T$T$T$T$T$T$T<Identity>$R$N';
+									MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+									nImageByte := nImageByte + LEN(sString);
+
+										(* ID *)
+										sString := F_CONCAT3('$T$T$T$T$T$T$T$T$T$T<ID><![CDATA[',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].Identity.ID, ']]]]><![CDATA[></ID>$R$N');
+										MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+										nImageByte := nImageByte + LEN(sString);
+
+										(* ReadQuality *)
+										sString := F_CONCAT3('$T$T$T$T$T$T$T$T$T$T<ReadQuality>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].Identity.ReadQuality, '</ReadQuality>$R$N');
+										MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+										nImageByte := nImageByte + LEN(sString);
+
+									(* Identity END *)
+									sString := '$T$T$T$T$T$T$T$T$T</Identity>$R$N';
+									MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+									nImageByte := nImageByte + LEN(sString);
+
+									(* ItemState *)
+									sString := F_CONCAT3('$T$T$T$T$T$T$T$T$T<ItemState>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].ItemState, '</ItemState>$R$N');
+									MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+									nImageByte := nImageByte + LEN(sString);
+			
+
+									(* RejectReason *)
+									sString := '$T$T$T$T$T$T$T$T$T<RejectReason>$R$N';
+									MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+									nImageByte := nImageByte + LEN(sString);
+
+										sString := F_CONCAT3('$T$T$T$T$T$T$T$T$T$T<Reason>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].RejectReason, '</Reason>$R$N');
+										MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+										nImageByte := nImageByte + LEN(sString);
+			
+									sString := '$T$T$T$T$T$T$T$T$T</RejectReason>$R$N';
+									MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+									nImageByte := nImageByte + LEN(sString);
+
+
+									(*logs *)
+									sString := '$T$T$T$T$T$T$T$T$T<logs>$R$N';
+									MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+									nImageByte := nImageByte + LEN(sString);
+	
+										(* TimeStamp *)
+										sString := F_CONCAT3('$T$T$T$T$T$T$T$T$T$T<TimeStamp Topic="Aggregation">',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].TimeStamp, '</TimeStamp>$R$N');
+										MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+										nImageByte := nImageByte + LEN(sString);
+			
+									(* logs END *)
+									sString := '$T$T$T$T$T$T$T$T$T</logs>$R$N';
+									MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+									nImageByte := nImageByte + LEN(sString);
+
+									(* No Read *)
+									sString := F_CONCAT3('$T$T$T$T$T$T$T$T$T<NoRead>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].NoRead, '</NoRead>$R$N');
+									MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+									nImageByte := nImageByte + LEN(sString);
+
+								(* Item Type END *)
+								sString := '$T$T$T$T$T$T$T$T</Item>$R$N';
+								MEMMOVE(ADR(aXMLImage[nImageByte]), ADR(sString), LEN(sString));
+								nImageByte := nImageByte + LEN(sString);]]></ST>
+      </Implementation>
+    </Action>
+  </POU>
+</TcPlcObject>

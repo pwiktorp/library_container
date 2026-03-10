@@ -1,0 +1,67 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_COG_Checker" Id="{b735cb08-5ca2-4cd1-b824-a95e5276c981}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_COG_Checker : INT
+VAR_INPUT
+	sSUPI		: STRING[12];
+END_VAR
+VAR
+	CogID		: INT;
+	biCogID		: T_ULARGE_INTEGER;
+	biLenDIGITS	: T_ULARGE_INTEGER;
+	biPos		: T_ULARGE_INTEGER;
+	biMSUPI_SIZE	: T_ULARGE_INTEGER;
+	M			: T_ULARGE_INTEGER;
+	biSUPI		: T_ULARGE_INTEGER;
+	biPPrime		: T_ULARGE_INTEGER;
+	biCODE_SIZE	: T_ULARGE_INTEGER;
+	sM			: STRING[255];
+	i			: INT;
+	Pos			: DINT;
+	strSUPI		: STRING[255];
+END_VAR
+VAR CONSTANT
+	CODEGENID_SIZE	: DINT :=	49553;
+	CODE_SIZE		: LREAL :=	2386420683693101056;
+	DIGITS			: STRING[34] :=	'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
+	PPrime			: LREAL:= 618222249914457027;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[	CogID := -1;
+	biCODE_SIZE := LREAL_TO_UINT64(CODE_SIZE);
+	biPPrime := LREAL_TO_UINT64(PPrime);
+
+	(*MSUPI_SIZE := 10*366*24*60*1110*8232;*)
+	biMSUPI_SIZE := STRING_TO_UINT64('48158385408000');
+
+	bisupi := STRING_TO_UINT64('0');
+
+	FOR i := LEN(sSUPI) TO 1 BY -1 DO
+		Pos := FIND(DIGITS, MID(sSUPI, 1, i)) - 1;
+		IF Pos >= 0 THEN
+			(*supi := (supi* LEN(DIGITS)) + Pos;*)
+			biPos.dwLowPart := TO_DWORD(Pos);
+			biLenDIGITS.dwLowPart := TO_DWORD(LEN(DIGITS));
+			biSUPI := UInt64Mul64(biSUPI, biLenDIGITS);
+			biSUPI := UInt64Add64(biSUPI, biPos);
+		END_IF
+	END_FOR
+
+	strSUPI := UINT64_TO_STRING(biSUPI);
+	biPPrime := STRING_TO_UINT64('618222249914457027');
+	biCODE_SIZE := STRING_TO_UINT64('2386420683693101056');
+
+	M := F_MulMod(biPPrime, bisupi, biCODE_SIZE);
+	sM := UINT64_TO_STRING(M);
+	biCogID := UInt64Div64(M, biMSUPI_SIZE);
+	CogID := DWORD_TO_INT(biCogID.dwLowPart);
+
+IF CogID <= 0 OR CogID > CODEGENID_SIZE THEN
+	CogID := -1;
+END_IF
+
+F_COG_Checker := CogID;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

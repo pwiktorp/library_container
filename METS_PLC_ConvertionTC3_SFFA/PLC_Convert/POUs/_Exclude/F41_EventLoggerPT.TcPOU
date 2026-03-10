@@ -1,0 +1,69 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F41_EventLoggerPT" Id="{17d0b466-1647-448e-897d-f3e0a408e7c4}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM F41_EventLoggerPT
+VAR
+	fbLogEventTime			: NT_GetTime;
+	fbSystemTime				: RTC_EX2;
+	rtWriteLogData				: R_TRIG;
+
+	nImageByte				: UINT;
+	(*aDataLogImage				: ARRAY[0..65000] OF BYTE;*)
+	fbWriteFile				: FB_FILE_ApendWriteByByte;
+
+	sCurrentLogPathFile			: STRING;
+	sMemoLogPathFile				: STRING;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF NOT stMachineConfig.bSystemLogEnable THEN
+	MEMSET(ADR(gProcess.stEventDataPT.aDataLogImage), 16#00, SIZEOF(gProcess.stEventDataPT.aDataLogImage));
+	MEMSET(ADR(stWriteImageData.aLogPT), 16#00, SIZEOF(stWriteImageData.aLogPT));
+	gProcess.stEventDataPT.bEnable		:= FALSE;
+	RETURN;
+ELSE
+	gProcess.stEventDataPT.bEnable := stMetsStatus.bSystemTimeValid;
+END_IF
+
+
+
+(* 	$T - Tab
+	$R$N - end line + carier return*)
+(*sCurrentLogPathFile	:= F_CONCAT6(stMetsStatus.sLocalSystemLog,'DL_',F_SYSTEM_Date(fbSystemTime.CDT),'_', LEFT(F_SYSTEM_TimeSuperFine(fbSystemTime.CDT),2), '.txt');*)
+sCurrentLogPathFile	:= F_CONCAT4(stMetsStatus.sLocalSystemLogPath,'METS-PT_',F_SYSTEM_Date(stMetsStatus.stCTDateTime.sSystemTime), '.txt');
+
+(*stEventData.sTimeStamp := F_SYSTEM_SystemTimeAsISO8601(fbSystemTime.CDT, stMetsStatus.stCTDateTime.sUTCTimeZoneOffset );*)
+gProcess.stEventDataPT.sTimeStamp :=MID( F_SYSTEM_SystemTimeAsISO8601(stMetsStatus.stCTDateTime.sSystemTime, stMetsStatus.stCTDateTime.sUTCTimeZoneOffset ), 12, 12);
+
+rtWriteLogData(CLK:= bPulse1s AND gProcess.stEventDataPT.bEnable);
+
+IF rtWriteLogData.Q THEN
+	MEMMOVE(ADR(stWriteImageData.aLogPT), ADR(gProcess.stEventDataPT.aDataLogImage), SIZEOF(gProcess.stEventDataPT.aDataLogImage));
+	nImageByte := gProcess.stEventDataPT.nImageByte;
+
+	IF sCurrentLogPathFile <> sMemoLogPathFile THEN
+		gProcess.stEventDataPT.nCounter :=0;
+		sMemoLogPathFile := sCurrentLogPathFile;
+	END_IF
+
+END_IF
+
+fbWriteFile(
+	bExecute	:= rtWriteLogData.Q AND nImageByte <> 0,
+	pSourceAddr	:= ADR(stWriteImageData.aLogPT),
+	nSourceSize	:= nImageByte,
+	strPathFile	:= sCurrentLogPathFile,
+	tTimeout	:= T#1s
+);
+
+IF rtWriteLogData.Q  THEN
+
+
+	gProcess.stEventDataPT.bBufferOverflow := FALSE;
+	gProcess.stEventDataPT.nImageByte := 0;
+	gProcess.stEventDataPT.nControlSize := 0;
+	MEMSET(ADR(gProcess.stEventDataPT.aDataLogImage), 16#00, SIZEOF(gProcess.stEventDataPT.aDataLogImage));
+
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

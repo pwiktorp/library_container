@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="E_CodeAIType" Id="{8d2f2325-e513-4ee1-8c75-7739ccae6e18}">
+    <Declaration><![CDATA[TYPE E_CodeAIType :
+STRUCT
+	GTIN 			: 	INT := 1;
+	BatchID 			: 	INT := 10;
+	SerialCode		: 	INT := 21;
+	ProductionOrder 	: 	INT := 91;
+	CryptoCode		: 	INT := 93;
+	RSKU 			: 	INT := 240;
+	MRP				:	INT := 8005;
+	BrandSpecification 	:	INT := 92;
+	ProduceDate		:	INT := 94;
+	UserField3		:	INT;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

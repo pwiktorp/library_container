@@ -1,0 +1,95 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_OUTER_CheckDuplicateStatus" Id="{e126479a-95dd-4574-ad8f-d13368cb7349}" SpecialFunc="None">
+    <Declaration><![CDATA[(* Outer DMC status monitor *)
+FUNCTION_BLOCK FB_OUTER_CheckDuplicateStatus
+VAR_INPUT
+	bExecute				: BOOL;			(* code scan done *)
+	bReset			: BOOL;
+	stImageData			: ST_SCANNER_ImageData;	(* image data structure *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;
+	bLastBarcodeValid		: BOOL;			(* strLastBarcode is valid against strRetailSKU *)
+	sLastBarcode			: STRING(255);		(* last barcode read *)
+	nNoCodeFound		: INT;
+	stLastImageData		: ST_SCANNER_ImageData;	(* image data structure *)
+	tAveScanTime			: TIME;			(* average of last 10 scans *)
+	bDuplicateAlarm		: BOOL;
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	sSerialCode			: STRING(255);
+	sPreviousBarcode		: STRING(255);
+
+	tScanTime			: ARRAY[1..10] OF TIME;
+	nMaxIndex			: INT;
+	nScanValues			: INT;
+	nIndex				: INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF bReset THEN
+
+	bLastBarcodeValid := FALSE;
+	sLastBarcode := '';
+	nNoCodeFound := 0;
+
+	MEMSET(ADR(stLastImageData), 16#00, SIZEOF(stLastImageData));
+END_IF
+
+(* rising edge of bDone *)
+fbExecute(CLK := bExecute);
+IF fbExecute.Q = TRUE THEN
+	bDone:= FALSE;
+	bDuplicateAlarm := FALSE;
+
+	(* log image data *)
+	stLastImageData := stImageData;
+	(* extract data string and status *)
+	sLastBarcode := stLastImageData.aCodeData[1].strDataString;
+
+	(* barcode found *)
+	IF LEN(sLastBarcode) > 0 THEN
+		bLastBarcodeValid := TRUE;
+
+		IF sLastBarcode <> '' AND sLastBarcode = sPreviousBarcode THEN
+			bDuplicateAlarm := TRUE;
+		END_IF
+
+		sPreviousBarcode := sLastBarcode;
+
+		(* shifttScanTime array and add new tScanTime *)
+		nMaxIndex := UDINT_TO_INT(SIZEOF(tScanTime) / SIZEOF(tScanTime[1]));
+		MEMMOVE(ADR(tScanTime[2]), ADR(tScanTime[1]), SIZEOF(tScanTime) - SIZEOF(tScanTime[1]));
+		tScanTime[1] := stLastImageData.tScanTime;
+		nScanValues := LIMIT(1, nScanValues + 1, nMaxIndex);
+
+		(* re-calculate average *)
+		tAveScanTime := T#0ms;
+		FOR nIndex := 1 TO nScanValues DO
+			(* total scan time *)
+			tAveScanTime := tAveScanTime + tScanTime[nIndex];
+		END_FOR
+
+		(* average scan time *)
+		tAveScanTime := tAveScanTime / nScanValues;
+	(* no code found *)
+	ELSE
+		(* reset Valid flag *)
+		bLastBarcodeValid := FALSE;
+		nNoCodeFound := nNoCodeFound + 1;
+	END_IF
+	bDone:= TRUE;
+ELSE
+
+	bDone:= FALSE;
+	bDuplicateAlarm := FALSE;
+
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_OUTER_CheckDuplicateStatus">
+      <LineId Id="27" Count="57" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

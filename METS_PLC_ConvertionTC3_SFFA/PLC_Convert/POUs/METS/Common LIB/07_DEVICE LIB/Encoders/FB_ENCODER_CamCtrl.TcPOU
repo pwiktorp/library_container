@@ -1,0 +1,407 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_ENCODER_CamCtrl" Id="{872f8831-f0d7-4ade-a923-97a0ddb9d9bd}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ENCODER_CamCtrl
+VAR_INPUT
+	bReadCams						: BOOL;
+	bWriteCams						: BOOL;
+	sAMSNetID						: T_AmsNetID;
+	nSlaveAddr						: UINT;
+	_fScalingFactor					: LREAL := 0.001373291015625; (* 360/262144 *)
+END_VAR
+VAR_OUTPUT
+	bCam1							: BOOL;
+	bCam2							: BOOL;
+	bCam3							: BOOL;
+	bCam4							: BOOL;
+	bCam5							: BOOL;
+	bCam6							: BOOL;
+	bCam7							: BOOL;
+	bCam8							: BOOL;
+	fTemp							: LREAL;
+	fActualValue					: LREAL;
+END_VAR
+VAR_IN_OUT
+	stCamsHMi						: ARRAY[1..8] OF ST_AFS60_CamHMi;
+	nZeroPosition					: UDINT;
+	stAFS50CamStatus				: ST_AFS60_Status;
+	(* IO *)
+	nTemp							: UINT; (* AT%I*		: UINT;*)
+	nCam1State						: USINT; (* AT%I*		: USINT; *)
+	nPosValue						: UDINT; (* AT%I*		: UDINT; *)
+	nMsecUpTime					: UDINT; (* AT%I*		: UDINT; *)
+END_VAR
+VAR
+
+
+	_bCompleteAccess				: BOOL := TRUE;
+	_ReadCams						: UINT;
+	_WriteCams						: UINT;
+	_CamNumber						: UINT;
+	_TempEnabled					: UINT;
+	_Hours							: UINT;
+	_Minutes						: UINT;
+	_Seconds						: UINT;
+	_Time							: TIME;
+	_nMSTemp						: UDINT;
+	fbReadTrig						: R_TRIG;
+	fbWriteTrig						: R_TRIG;
+	fbEcCoESdoReadEx				: FB_EcCoESdoReadEx;
+	fbEcCoESdoWriteEx				: FB_EcCoESdoWriteEx;
+	_stCams							: ARRAY[1..8] OF ST_AFS60_Cam;
+	bDebug: BOOL;
+	fDebug1: LREAL;
+	fDebug2: LREAL;
+	fDebug3: LREAL;
+	fDebug4: LREAL;
+	fDebug5: LREAL;
+	fDebug6: LREAL;
+	fDebug7: LREAL;
+	fDebug8: LREAL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* A bit crude *)
+bCam1 := nCam1State.0;
+bCam2 := nCam1State.1;
+bCam3 := nCam1State.2;
+bCam4 := nCam1State.3;
+bCam5 := nCam1State.4;
+bCam6 := nCam1State.5;
+bCam7 := nCam1State.6;
+bCam8 := nCam1State.7;
+
+(* its the same thing *)
+fTemp := nTemp;
+
+(* A lot of faffing to get 2dp *)
+fActualValue := UDINT_TO_LREAL(LREAL_TO_UDINT((UDINT_TO_LREAL(nPosValue) * _fScalingFactor) * 100)) / 100;
+
+stAFS50CamStatus.bCam1 := bCam1;
+stAFS50CamStatus.bCam2 := bCam2;
+stAFS50CamStatus.bCam3 := bCam3;
+stAFS50CamStatus.bCam4 := bCam4;
+stAFS50CamStatus.bCam5 := bCam5;
+stAFS50CamStatus.bCam6 := bCam6;
+stAFS50CamStatus.bCam7 := bCam7;
+stAFS50CamStatus.bCam8 := bCam8;
+
+stAFS50CamStatus.fActualValue := fActualValue;
+stAFS50CamStatus.fTemp := fTemp;
+stAFS50CamStatus.nMsecUpTime := nMsecUpTime;
+
+
+_Time := UDINT_TO_TIME(nMsecUpTime);
+_Hours := UDINT_TO_UINT(nMsecUpTime / 1000 / 60 / 60);
+_nMSTemp := nMsecUpTime - (_Hours * 1000 * 60 * 60);
+_Minutes := UDINT_TO_UINT(_nMSTemp / 1000 / 60);
+_nMSTemp := _nMSTemp - (_Minutes * 1000 * 60);
+_Seconds := UDINT_TO_UINT(_nMSTemp / 1000 / 60);
+
+
+
+
+
+(* READ CAMS *)
+CASE _ReadCams OF
+
+	0:
+		fbReadTrig(CLK := bReadCams);
+		IF fbReadTrig.Q THEN
+
+			_CamNumber := 1;
+			fbEcCoESdoReadEx(bExecute := FALSE);
+			_ReadCams := _ReadCams + 1;
+
+		END_IF
+	(* ---------------------------------- *)
+
+	1:
+		(* Read Enabled *)
+		fbEcCoESdoReadEx(
+			sNetId:= sAMSNetID,
+			nSlaveAddr:= nSlaveAddr,
+			nSubIndex:= 1,
+			nIndex:= 16#6302,
+			pDstBuf:= ADR(_TempEnabled),
+			cbBufLen:= 2,
+			bExecute:= TRUE,
+			tTimeout:= T#2.0S,
+			bCompleteAccess:= _bCompleteAccess,
+			bBusy=> ,
+			bError=> ,
+			nErrId=> );
+
+		IF NOT fbEcCoESdoReadEx.bBusy THEN
+
+			FOR _CamNumber := 1 TO 8 DO
+
+				_stCams[_CamNumber].bEnable := GETBIT32(_TempEnabled, UINT_TO_BYTE(_CamNumber) - 1);
+
+			END_FOR
+
+			_CamNumber := 1;
+			_ReadCams := _ReadCams + 1;
+			fbEcCoESdoReadEx(bExecute := FALSE);
+
+
+		END_IF
+	(* ---------------------------------- *)
+
+	2:
+		(* Read Lower Limit *)
+		fbEcCoESdoReadEx(
+			sNetId:= sAMSNetID,
+			nSlaveAddr:= nSlaveAddr,
+			nSubIndex:= 1,
+			nIndex:= 16#6310 + (_CamNumber - 1),
+			pDstBuf:= ADR(_stCams[_CamNumber].nLowerLimit1),
+			cbBufLen:= 8,
+			bExecute:= TRUE,
+			tTimeout:= T#2.0S,
+			bCompleteAccess:= _bCompleteAccess,
+			bBusy=> ,
+			bError=> ,
+			nErrId=> );
+
+		IF NOT fbEcCoESdoReadEx.bBusy THEN
+
+			_ReadCams := _ReadCams + 1;
+			fbEcCoESdoReadEx(bExecute := FALSE);
+
+		END_IF
+	(* ---------------------------------- *)
+	3:
+		(* Read the Upper limit *)
+		fbEcCoESdoReadEx(
+			sNetId:= sAMSNetID,
+			nSlaveAddr:= nSlaveAddr,
+			nSubIndex:= 1,
+			nIndex:= 16#6320 + (_CamNumber - 1),
+			pDstBuf:= ADR(_stCams[_CamNumber].nUpperLimit1),
+			cbBufLen:= 8,
+			bExecute:= TRUE,
+			tTimeout:= T#2.0S,
+			bCompleteAccess:= _bCompleteAccess,
+			bBusy=> ,
+			bError=> ,
+			nErrId=> );
+
+		IF NOT fbEcCoESdoReadEx.bBusy THEN
+
+			_CamNumber := _CamNumber + 1;
+
+			IF _CamNumber > 8 THEN
+
+				_ReadCams := _ReadCams + 1;
+
+			ELSE
+
+				_ReadCams := 2;
+				fbEcCoESdoReadEx(bExecute := FALSE);
+
+			END_IF
+
+		END_IF
+	(* ---------------------------------- *)
+
+	4:
+		FOR _CamNumber := 1 TO 8 DO
+
+			stCamsHMi[_CamNumber].fLowerLimit1 := UDINT_TO_LREAL(_stCams[_CamNumber].nLowerLimit1) * _fScalingFactor;
+			stCamsHMi[_CamNumber].fLowerLimit2 := UDINT_TO_LREAL(_stCams[_CamNumber].nLowerLimit2) * _fScalingFactor;
+			stCamsHMi[_CamNumber].fUpperLimit1 := UDINT_TO_LREAL(_stCams[_CamNumber].nUpperLimit1) * _fScalingFactor;
+			stCamsHMi[_CamNumber].fUpperLimit2 := UDINT_TO_LREAL(_stCams[_CamNumber].nUpperLimit2) * _fScalingFactor;
+			stCamsHMi[_CamNumber].bEnable := _stCams[_CamNumber].bEnable;
+
+		END_FOR
+
+		_ReadCams := _ReadCams + 1;
+	(* ---------------------------------- *)
+
+	5 : (* Read Preset *)
+
+		fbEcCoESdoReadEx(
+			sNetId:= sAMSNetID,
+			nSlaveAddr:= nSlaveAddr,
+			nSubIndex:= 0,
+			nIndex:= 16#6003,
+			pDstBuf:= ADR(nZeroPosition),
+			cbBufLen:= 8,
+			bExecute:= TRUE,
+			tTimeout:= T#2.0S,
+			bCompleteAccess:= _bCompleteAccess,
+			bBusy=> ,
+			bError=> ,
+			nErrId=> );
+
+		IF NOT fbEcCoESdoReadEx.bBusy THEN
+
+			fbEcCoESdoReadEx(bExecute := FALSE);
+
+			_ReadCams := 0;
+		END_IF
+
+	(*-----------------------------------*)
+END_CASE
+
+
+
+(* WRITE CAMS *)
+CASE _WriteCams OF
+
+	0:
+		fbWriteTrig(CLK := bWriteCams);
+		IF fbWriteTrig.Q THEN
+
+			bDebug := TRUE;
+			FOR _CamNumber := 1 TO 8 DO
+
+				_stCams[_CamNumber].bEnable := stCamsHMi[_CamNumber].bEnable;
+				_stCams[_CamNumber].nLowerLimit1 := LREAL_TO_UDINT(F_SafeDIV(stCamsHMi[_CamNumber].fLowerLimit1, _fScalingFactor));
+				_stCams[_CamNumber].nLowerLimit2 := LREAL_TO_UDINT(F_SafeDIV(stCamsHMi[_CamNumber].fLowerLimit2, _fScalingFactor));
+				_stCams[_CamNumber].nUpperLimit1 := LREAL_TO_UDINT(F_SafeDIV(stCamsHMi[_CamNumber].fUpperLimit1, _fScalingFactor));
+				_stCams[_CamNumber].nUpperLimit2 := LREAL_TO_UDINT(F_SafeDIV(stCamsHMi[_CamNumber].fUpperLimit2, _fScalingFactor));
+
+			END_FOR
+
+			fDebug1 := _stCams[7].nLowerLimit1 ;
+			fDebug6 := stCamsHMi[7].fLowerLimit1 ;
+
+			_CamNumber := 1;
+			fbEcCoESdoWriteEx(bExecute := FALSE);
+			_WriteCams := _WriteCams + 1;
+
+		END_IF
+	(* ---------------------------------- *)
+
+	1:
+		(* Write Enabled *)
+		_TempEnabled := 0;
+		FOR _CamNumber := 1 TO 8 DO
+
+			IF _stCams[_CamNumber].bEnable THEN
+
+			 _TempEnabled := DWORD_TO_UINT(SETBIT32(_TempEnabled, UINT_TO_BYTE(_CamNumber) - 1));
+
+			END_IF
+
+		END_FOR
+
+		fbEcCoESdoWriteEx(
+			sNetId:= sAMSNetID,
+			nSlaveAddr:= nSlaveAddr,
+			nSubIndex:= 1,
+			nIndex:= 16#6302,
+			pSrcBuf:= ADR(_TempEnabled),
+			cbBufLen:= 2,
+			bExecute:= TRUE,
+			tTimeout:= T#2.0S,
+			bCompleteAccess:= _bCompleteAccess,
+			bBusy=> ,
+			bError=> ,
+			nErrId=> );
+
+		IF NOT fbEcCoESdoWriteEx.bBusy THEN
+
+			_CamNumber := 1;
+			_WriteCams := _WriteCams + 1;
+			fbEcCoESdoWriteEx(bExecute := FALSE);
+
+			fDebug2 := _stCams[7].nLowerLimit1 ;
+		END_IF
+	(* ---------------------------------- *)
+
+	2:
+		(* Write Lower Limit *)
+		fbEcCoESdoWriteEx(
+			sNetId:= sAMSNetID,
+			nSlaveAddr:= nSlaveAddr,
+			nSubIndex:= 1,
+			nIndex:= 16#6310 + (_CamNumber - 1),
+			pSrcBuf:= ADR(_stCams[_CamNumber].nLowerLimit1),
+			cbBufLen:= 8,
+			bExecute:= TRUE,
+			tTimeout:= T#2.0S,
+			bCompleteAccess:= _bCompleteAccess,
+			bBusy=> ,
+			bError=> ,
+			nErrId=> );
+
+		IF NOT fbEcCoESdoWriteEx.bBusy THEN
+
+			_WriteCams := _WriteCams + 1;
+			fbEcCoESdoWriteEx(bExecute := FALSE);
+
+			fDebug3 := _stCams[7].nLowerLimit1 ;
+
+		END_IF
+	(* ---------------------------------- *)
+	3:
+		(* Write the Upper limit *)
+		fbEcCoESdoWriteEx(
+			sNetId:= sAMSNetID,
+			nSlaveAddr:= nSlaveAddr,
+			nSubIndex:= 1,
+			nIndex:= 16#6320 + (_CamNumber - 1),
+			pSrcBuf:= ADR(_stCams[_CamNumber].nUpperLimit1),
+			cbBufLen:= 8,
+			bExecute:= TRUE,
+			tTimeout:= T#2.0S,
+			bCompleteAccess:= _bCompleteAccess,
+			bBusy=> ,
+			bError=> ,
+			nErrId=> );
+
+		IF NOT fbEcCoESdoWriteEx.bBusy THEN
+
+			_CamNumber := _CamNumber + 1;
+
+			IF _CamNumber > 8 THEN
+
+				_WriteCams := _WriteCams + 1;
+(*			_WriteCams := 0; (* debug *) *)
+			fDebug4 := _stCams[7].nLowerLimit1 ;
+			ELSE
+
+				_WriteCams := 2;
+				fbEcCoESdoWriteEx(bExecute := FALSE);
+
+			END_IF
+
+		END_IF
+	(* ---------------------------------- *)
+
+	4:  (* Write Preset *)
+
+		fbEcCoESdoWriteEx(
+			sNetId:= sAMSNetID,
+			nSlaveAddr:= nSlaveAddr,
+			nSubIndex:= 0,
+			nIndex:= 16#6320 + (_CamNumber - 1),
+			pSrcBuf:= ADR(nZeroPosition),
+			cbBufLen:= 8,
+			bExecute:= TRUE,
+			tTimeout:= T#2.0S,
+			bCompleteAccess:= _bCompleteAccess,
+			bBusy=> ,
+			bError=> ,
+			nErrId=> );
+
+		IF NOT fbEcCoESdoReadEx.bBusy THEN
+
+			fDebug5 := _stCams[7].nLowerLimit1 ;
+
+			fbEcCoESdoWriteEx(bExecute := FALSE);
+
+			_WriteCams := 0;
+		END_IF
+
+	(*-----------------------------------*)
+
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_ENCODER_CamCtrl">
+      <LineId Id="58" Count="338" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

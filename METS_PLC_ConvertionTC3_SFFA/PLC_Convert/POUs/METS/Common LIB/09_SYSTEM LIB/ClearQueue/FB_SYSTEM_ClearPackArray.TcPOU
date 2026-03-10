@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_SYSTEM_ClearPackArray" Id="{76f822b9-19b2-45f6-b64f-8b77e020e71d}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SYSTEM_ClearPackArray
+VAR_INPUT
+	bClearAllQueues		: BOOL;
+	bClearInfeedArray		: BOOL;
+	bClearStackerArray		: BOOL;
+	bClearInterimArray		: BOOL;
+	bClearPLASArray		: BOOL;
+END_VAR
+VAR_IN_OUT
+	stPackInFeedQueue						: ST_PACK_InfeedQueue; (* Infeed queue *)
+	aStackerQueue							: ARRAY[1..cMAX_PACK_INFEED_QUEUE] OF ST_PACK_Data;
+	aInterimCodeQueue						: ARRAY[1..cMAX_INTERMEDIATE_CODE_QUEUE] OF T_MaxString;
+	aOCVPackStatus						: ARRAY[1..cMAX_OUTER_STATUS_QUEUE] OF ST_OUTER_Status;
+END_VAR
+VAR_OUTPUT
+	bDone								: BOOL;
+END_VAR
+VAR
+	rtrigClearAllQueues						: R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bDone:=FALSE;
+
+rtrigClearAllQueues(CLK:=bClearAllQueues);
+
+IF bClearInfeedArray OR rtrigClearAllQueues.Q THEN
+	MEMSET(ADR(stPackInFeedQueue), 16#00, SIZEOF(stPackInFeedQueue));
+	bDone:=TRUE;
+END_IF
+
+IF  bClearInterimArray OR rtrigClearAllQueues.Q THEN
+	MEMSET(ADR(aInterimCodeQueue), 16#00, SIZEOF(aInterimCodeQueue));
+	bDone:=TRUE;
+END_IF
+
+IF  bClearStackerArray OR rtrigClearAllQueues.Q THEN
+	MEMSET(ADR(aStackerQueue), 16#00, SIZEOF(aStackerQueue));
+	bDone:=TRUE;
+END_IF
+
+IF  bClearPLASArray OR rtrigClearAllQueues.Q THEN
+	MEMSET(ADR(aInterimCodeQueue), 16#00, SIZEOF(aInterimCodeQueue));
+	MEMSET(ADR(aOCVPackStatus[1]), 16#00, SIZEOF(aOCVPackStatus[1]));
+	bDone:=TRUE;
+END_IF
+
+IF   rtrigClearAllQueues.Q THEN
+	MEMSET(ADR(aOCVPackStatus), 16#00, SIZEOF(aOCVPackStatus));
+	bDone:=TRUE;
+END_IF
+
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_SYSTEM_ClearPackArray">
+      <LineId Id="20" Count="30" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

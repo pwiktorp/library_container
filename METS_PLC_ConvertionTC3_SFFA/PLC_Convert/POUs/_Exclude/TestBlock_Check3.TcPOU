@@ -1,0 +1,65 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="TestBlock_Check3" Id="{b401cc26-b420-4896-92de-2c3b887b0c35}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM TestBlock_Check3
+VAR
+
+	sProduceDate	: STRING(14) := '20230906132030';
+
+
+	sYYYY		: STRING(4);
+	sMM		: STRING(2);
+	sDD		: STRING(2);
+	sHH		: STRING(2);
+	sMMi		: STRING(2);
+	sSS			: STRING(2);
+
+	bCodeAlphaNumeric		: BOOL;
+	sDateValide : BOOL;
+
+	nCharIndex		: INT;
+	sChar			: STRING(1);
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[sDateValide := TRUE;
+
+sYYYY		:=MID(sProduceDate, 4, 1);
+sMM		:=MID(sProduceDate, 2, 5);
+sDD		:=MID(sProduceDate, 2, 7);
+sHH		:=MID(sProduceDate, 2, 9);
+sMMi		:=MID(sProduceDate, 2, 11);
+sSS			:=MID(sProduceDate, 2, 13);
+
+(* strPackCode contains data *)
+IF LEN(sProduceDate) > 0 THEN
+
+	(* check each char in the code *)
+	FOR nCharIndex := 1 TO LEN(sProduceDate) DO
+
+		(* get char from string *)
+		sChar := MID(sProduceDate, 1, nCharIndex);
+
+		(* char is every alphanumeric char *)
+		IF (F_ToASC(sChar) < 16#30 OR  F_ToASC(sChar) > 16#39) THEN
+			sDateValide := FALSE;
+			EXIT;
+		END_IF
+	END_FOR
+END_IF
+
+IF sDateValide THEN
+
+	IF STRING_TO_INT( MID(sYYYY, 2, 1)) <> 20 THEN sDateValide := FALSE; END_IF
+	IF STRING_TO_INT(sMM) <1 OR  STRING_TO_INT(sMM) > 12 THEN sDateValide := FALSE; END_IF
+	IF STRING_TO_INT(sDD) <1 OR  STRING_TO_INT(sDD) > 31 THEN sDateValide := FALSE; END_IF
+	IF STRING_TO_INT(sHH) <0 OR  STRING_TO_INT(sHH) > 23 THEN sDateValide := FALSE; END_IF
+	IF STRING_TO_INT(sMMi) <0 OR  STRING_TO_INT(sMMi) > 59 THEN sDateValide := FALSE; END_IF
+	IF STRING_TO_INT(sSS) <0 OR  STRING_TO_INT(sSS) > 59 THEN sDateValide := FALSE; END_IF
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="TestBlock_Check3">
+      <LineId Id="20" Count="34" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

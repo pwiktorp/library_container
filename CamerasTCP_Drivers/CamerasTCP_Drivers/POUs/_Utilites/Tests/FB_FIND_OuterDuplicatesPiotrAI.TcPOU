@@ -1,0 +1,66 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_FIND_OuterDuplicatesPiotrAI" Id="{0bbbd4f2-c28f-4f54-886e-42d27d0851e2}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_FIND_OuterDuplicatesPiotrAI
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	nOuterIndex			: UINT;
+	nInnerOuterIndex	: UINT;
+	nInnerPackIndex		: UINT;
+	nPackIndex			: UINT;
+	sCurrentOuterCode	: T_MaxString;
+	sCurrentPackCode	: T_MaxString;	
+	bIsDuplicate 		: BOOL;
+	bISOuterDuplicate	: BOOL;
+	bIsDuplicateOuters	: BOOL;
+	nIterationAI		: UINT;
+	bIsDuplicatePacks	: BOOL;
+END_VAR
+
+VAR_IN_OUT	
+	stCase				: ST_LAB_CaseData;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* Loop throught all packs in one case 'stCase' *)
+	FOR nOuterIndex := 1 TO GVL_test.nMax_Outers BY 1 DO
+		FOR nPackIndex := 1 TO GVL_test.nMax_Packs BY 1 DO			
+			(* Looking for same pack codes in all outers *)
+			FOR nInnerOuterIndex := nOuterIndex TO GVL_test.nMax_Outers BY 1 DO
+				
+				IF stCase.aOuters[nOuterIndex].sOuterCode = stCase.aOuters[nInnerOuterIndex].sOuterCode AND 
+					stCase.aOuters[nOuterIndex].sOuterCode <> ''										AND 
+					NOT (nInnerOuterIndex = nOuterIndex) 											THEN
+				 
+						
+					bIsDuplicateOuters := TRUE; 
+					
+					stCase.aOuters[nOuterIndex].nOuterRejectID			:=	200;		
+					stCase.aOuters[nInnerOuterIndex].nOuterRejectID		:=	200;
+				END_IF
+				
+				FOR nInnerPackIndex := 1 TO GVL_test.nMax_Packs BY 1 DO
+					nIterationAI := nIterationAI + 1;					
+					(* Exclude comparing same pack with itself *)
+					IF stCase.aOuters[nOuterIndex].aPacks[nPackIndex].sPackCode = stCase.aOuters[nInnerOuterIndex].aPacks[nInnerPackIndex].sPackCode 	AND 
+						stCase.aOuters[nOuterIndex].aPacks[nPackIndex].sPackCode  <> ''														AND 
+						stCase.aOuters[nInnerOuterIndex].aPacks[nInnerPackIndex].nPackRejectID <> 200 				AND 
+						NOT ((nInnerOuterIndex = nOuterIndex) AND (nInnerPackIndex = nPackIndex)) 										THEN
+							
+						bIsDuplicatePacks := TRUE;
+						stCase.aOuters[nOuterIndex].nOuterRejectID		:= 200;						
+						stCase.aOuters[nInnerOuterIndex].nOuterRejectID	:= 200;
+						
+						stCase.aOuters[nOuterIndex].aPacks[nPackIndex].nPackRejectID			:= 200;
+						stCase.aOuters[nInnerOuterIndex].aPacks[nInnerPackIndex].nPackRejectID	:= 200;
+					END_IF
+				END_FOR
+			END_FOR			
+		END_FOR
+	END_FOR]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

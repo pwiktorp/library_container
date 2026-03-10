@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_WriteEscapeCharacters" Id="{0e4c4e99-febc-4214-916e-47ae1c50a45f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_WriteEscapeCharacters : T_MaxString
+VAR_INPUT
+	Value		: T_MaxString;
+END_VAR
+VAR
+	nPosition	: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[nPosition := FIND(Value, '&');
+IF nPosition > 0 THEN
+
+	F_WriteEscapeCharacters := REPLACE(Value, '&amp;',1 , nPosition);
+
+(*	F_WriteEscapeCharacters := LEFT(Value, nPosition - 1);
+	F_WriteEscapeCharacters := CONCAT(F_WriteEscapeCharacters, '&amp;');
+	F_WriteEscapeCharacters :=  CONCAT(F_WriteEscapeCharacters, RIGHT(Value, LEN(Value) - (nPosition)));
+*)
+ELSE
+
+	F_WriteEscapeCharacters := Value;
+
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

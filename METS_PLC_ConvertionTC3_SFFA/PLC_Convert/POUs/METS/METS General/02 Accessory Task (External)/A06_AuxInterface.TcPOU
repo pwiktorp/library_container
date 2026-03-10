@@ -1,0 +1,246 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="A06_AuxInterface" Id="{f4d02a60-7652-431f-9ca8-950d24e7c414}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM A06_AuxInterface
+VAR
+	sCorePLCVersionHMI  : STRING;
+	
+	nPackIndex			: INT;
+	nConvQueueIndex	: INT;
+	nPacker0QueueIndex	:INT;
+	nPacker1QueueIndex	:INT;
+	nCaseQueueIndex		:INT;
+	nVerifiedCaseQueueIndex		:INT;
+	nFailedCaseQueueIndex		:INT;
+	
+	eCodeAIType							: E_CodeAIType;
+
+	stSystemInfoHMI      : PlcAppSystemInfo;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[stSystemInfoHMI 				:=  _AppInfo;
+gHMI.sPLCVersionHMI				:=  _AppInfo.ProjectName;
+sCorePLCVersionHMI	:= F_CONCAT3(gDevice.stPLCAppSys.ProjectName, ' - ',  DELETE(DT_TO_STRING(gDevice.stPLCAppSys.AppTimestamp),1,3));
+
+gHMI.sPLCVersionInfoHMI 			:= 'METS PLC designed for British American Tobacco. $R$N$R$NHardware configuration details: v007. $R$NCompatible with all PLC-METS-8.04.07 or newer. $R$N$R$NRelease published 01.05.2025, developed by PP';
+gHMI.sPLCExternalInterfceHMI		:= gDevice.stMetsStatus.stNetworkInfo.arrAdapterInfo[2].strIPAddress;
+gHMI.sScreenVersionInfoHMI 		:= 'METS HMI designed for British American Tobacco. $R$N$R$NRequires HMI version: 1.2.0.16 or newer for DB compatibility. Bridge version: 3.1.1.0 or newer.  $R$N$R$NRelease published 04.04.2025, by MJMS';
+gHMI.sBridgeVersionHMI				:= gDevice.stBridge.sBridgeVersion;
+
+gDevice.stMachineConfig.stSoftVersion.sPLCVersionHMI		:= gHMI.sPLCVersionHMI;
+gDevice.stMachineConfig.stSoftVersion.sScreenVersionInfoHMI	:= '1.2.0.16';
+gDevice.stMachineConfig.stSoftVersion.sBridgeVersionHMI 		:= gHMI.sBridgeVersionHMI;
+
+(******************** copy pack buffer struct  to hmi structure******************************* *)
+
+gHMI.stPackBufferStatusHMI.nPacksPerOuter		:= gDevice.stMetsStatus.stPCMStatus.nPacksPerOuter;
+gHMI.stPackBufferStatusHMI.nMaxPackPerOuter		:= cMAX_PACKS_PER_OUTER;
+
+(******************** copy pack linear struct  to hmi structure******************************* *)
+(*
+	(*Update PACK HMI Status*)
+	gHMI.stPackLinearStatusHMI.nInfeedIndex := stPackInFeedQueue.nIndex;
+
+	FOR nPackIndex := 1 TO MIN(stPackInFeedQueue.nIndex ,cMAX_PACKS_PER_OUTER) BY 1 DO
+		IF stPackInFeedQueue.aPackQueue[nPackIndex].sPackRejectCode = 'OK' THEN
+
+			gHMI.stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex]:= F_CONCAT3(stPackInFeedQueue.aPackQueue[nPackIndex].sPackCode,'(999)','1');
+
+			IF stPackInFeedQueue.aPackQueue[1].ePackCodeFilledIn = E_PACK_PRIMARYMASTERLISTRESTORED  THEN
+
+				gHMI.stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex] := CONCAT(gHMI.stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex],'1');
+			ELSE
+				gHMI.stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex] := CONCAT(gHMI.stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex],'0');
+			END_IF
+		ELSE
+			gHMI.stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex]:= F_CONCAT3(stPackInFeedQueue.aPackQueue[nPackIndex].sPackCode,'(999)','00');
+		END_IF
+	END_FOR
+*)
+(******************** copy outer error struct  to hmi structure******************************* *)
+
+(*MEMSET(ADR(gHMI.stFailureDiagnosticHMI), 16#00, SIZEOF(gHMI.stFailureDiagnosticHMI));
+
+gHMI.stFailureDiagnosticHMI.sBarcode	:= stErrorOuter.stOACData.Barcode;
+
+MEMMOVE(ADR(gHMI.stFailureDiagnosticHMI.aAggregationCodes), ADR(stErrorOuter.stOACData.AggregationCodes), SIZEOF(gHMI.stFailureDiagnosticHMI.aAggregationCodes));*)
+
+gHMI.stFailureDiagnosticHMI.aAggregationCodesPosition[1] := gDevice.stMachineConfig.nConfirmationPackCode1;
+gHMI.stFailureDiagnosticHMI.aAggregationCodesPosition[2] := gDevice.stMachineConfig.nConfirmationPackCode2;
+
+(*MEMMOVE(ADR(gHMI.stFailureDiagnosticHMI.aPackRejectCode), ADR(stErrorOuter.stOACData.PackRejectCode), SIZEOF(stErrorOuter.stOACData.PackRejectCode));
+MEMMOVE(ADR(gHMI.stFailureDiagnosticHMI.aPackRejectID), ADR(stErrorOuter.stOACData.PackRejectID), SIZEOF(stErrorOuter.stOACData.PackRejectID));
+
+gHMI.stFailureDiagnosticHMI.sProductionDate 	:= 	stErrorOuter.stOACData.ProductionDate;
+gHMI.stFailureDiagnosticHMI.sProductionTime	:=	stErrorOuter.stOACData.ProductionTime;
+
+gHMI.stFailureDiagnosticHMI.sOuterRejectCode		:= stErrorOuter.stOACData.OuterRejectCode;
+gHMI.stFailureDiagnosticHMI.nOuterRejectID		:= stErrorOuter.stOACData.OuterRejectID;
+
+MEMMOVE(ADR(gHMI.stFailureDiagnosticHMI.aPackCode), ADR(stErrorOuter.stOACData.PackCode), SIZEOF(stErrorOuter.stOACData.PackCode));
+MEMMOVE(ADR(gHMI.stFailureDiagnosticHMI.aOACPackStatus), ADR(stErrorOuter.aOACPackStatus), SIZEOF(stErrorOuter.aOACPackStatus));
+
+gHMI.stFailureDiagnosticHMI.nNumberOfPacks			:=	stErrorOuter.stOACData.NumberOfPacks;
+gHMI.stFailureDiagnosticHMI.nAcceptanceLevel			:=	stErrorOuter.stOACData.AcceptanceLevel;
+gHMI.stFailureDiagnosticHMI.nNumberOfLinkedPacks	:=	stErrorOuter.stOACData.NumberOfLinkedPacks;*)
+gHMI.stFailureDiagnosticHMI.nMaxOuterStatusQueue	:=	cMAX_OUTER_STATUS_QUEUE;
+
+(******************** copy outer infeed queue barcodes  to hmi structure******************************* *)
+MEMSET(ADR(gHMI.stInfeedConvQueueHMI.aOuterBarcode), 16#00, SIZEOF(gHMI.stInfeedConvQueueHMI.aOuterBarcode));
+
+gHMI.stInfeedConvQueueHMI.nIndex := gProcess.stInfeedConvQueue.nIndex;
+
+FOR nConvQueueIndex := 1 TO MIN(gProcess.stInfeedConvQueue.nIndex, cMAX_INFEED_QUEUE)  DO
+
+	IF gProcess.stInfeedConvQueue.aOuter[nConvQueueIndex].Barcode <> '' AND gProcess.stInfeedConvQueue.aOuter[nConvQueueIndex].OuterTimeStamp <> ''  AND gProcess.stInfeedConvQueue.aOuter[nConvQueueIndex].OuterRejectCode = 'OK'  THEN
+
+		gHMI.stInfeedConvQueueHMI.aOuterBarcode[nConvQueueIndex] := F_CONCAT3(RIGHT(F_CODE_GetItem(gProcess.stInfeedConvQueue.aOuter[nConvQueueIndex].Barcode, eCodeAIType.SerialCode, gDevice.stMachineConfig.stCodeInfo_Outer), cMAX_HMI_SERIALCODE_LENGHT), '(999)', '1');
+
+		IF gProcess.stInfeedConvQueue.aOuter[nConvQueueIndex].OuterMasterListRestored THEN
+
+			gHMI.stInfeedConvQueueHMI.aOuterBarcode[nConvQueueIndex] := CONCAT(gHMI.stInfeedConvQueueHMI.aOuterBarcode[nConvQueueIndex],'1');
+		ELSE
+			gHMI.stInfeedConvQueueHMI.aOuterBarcode[nConvQueueIndex] := CONCAT(gHMI.stInfeedConvQueueHMI.aOuterBarcode[nConvQueueIndex],'0');
+		END_IF
+
+	ELSIF gProcess.stInfeedConvQueue.aOuter[nConvQueueIndex].DataSource <> ''(*= 'NO_R'*) THEN
+		gHMI.stInfeedConvQueueHMI.aOuterBarcode[nConvQueueIndex] := F_CONCAT3(RIGHT(F_CODE_GetItem(gProcess.stInfeedConvQueue.aOuter[nConvQueueIndex].Barcode, eCodeAIType.SerialCode, gDevice.stMachineConfig.stCodeInfo_Outer), cMAX_HMI_SERIALCODE_LENGHT), '(999)', '00');
+	END_IF
+END_FOR
+
+(******************** copy Packer 0 queue to hmi structure******************************* *)
+
+MEMSET(ADR(gHMI.aPackerQueueHMI[0].aOuterBarcode), 16#00, SIZEOF(gHMI.aPackerQueueHMI[0].aOuterBarcode));
+
+gHMI.aPackerQueueHMI[0].nIndex	:= gProcess.aPackerQueue[0].nIndex;
+
+FOR nPacker0QueueIndex := 1 TO MIN(gProcess.aPackerQueue[0].nIndex, cMAX_INFEED_QUEUE) DO
+
+	IF gProcess.aPackerQueue[0].aOuter[nPacker0QueueIndex].Barcode <> '' AND gProcess.aPackerQueue[0].aOuter[nPacker0QueueIndex].OuterTimeStamp <> '' AND gProcess.aPackerQueue[0].aOuter[nPacker0QueueIndex].OuterRejectCode = 'OK' THEN
+
+		gHMI.aPackerQueueHMI[0].aOuterBarcode[nPacker0QueueIndex] := F_CONCAT3(RIGHT(F_CODE_GetItem(gProcess.aPackerQueue[0].aOuter[nPacker0QueueIndex].Barcode, eCodeAIType.SerialCode, gDevice.stMachineConfig.stCodeInfo_Outer), cMAX_HMI_SERIALCODE_LENGHT), '(999)', '1');
+
+		IF gProcess.aPackerQueue[0].aOuter[nPacker0QueueIndex].OuterMasterListRestored THEN
+
+			gHMI.aPackerQueueHMI[0].aOuterBarcode[nPacker0QueueIndex] := CONCAT(gHMI.aPackerQueueHMI[0].aOuterBarcode[nPacker0QueueIndex],'1');
+		ELSE
+			gHMI.aPackerQueueHMI[0].aOuterBarcode[nPacker0QueueIndex] := CONCAT(gHMI.aPackerQueueHMI[0].aOuterBarcode[nPacker0QueueIndex],'0');
+		END_IF
+	ELSE
+		gHMI.aPackerQueueHMI[0].aOuterBarcode[nPacker0QueueIndex] := F_CONCAT3(RIGHT(F_CODE_GetItem(gProcess.aPackerQueue[0].aOuter[nPacker0QueueIndex].Barcode, eCodeAIType.SerialCode, gDevice.stMachineConfig.stCodeInfo_Outer), cMAX_HMI_SERIALCODE_LENGHT), '(999)', '00');
+	END_IF
+END_FOR
+
+(******************** copy Packer 1 queue to hmi structure******************************* *)
+
+MEMSET(ADR(gHMI.aPackerQueueHMI[1].aOuterBarcode), 16#00, SIZEOF(gHMI.aPackerQueueHMI[1].aOuterBarcode));
+
+gHMI.aPackerQueueHMI[1].nIndex	:= gProcess.aPackerQueue[1].nIndex;
+
+FOR nPacker1QueueIndex := 1 TO MIN(gProcess.aPackerQueue[1].nIndex, cMAX_INFEED_QUEUE) DO
+
+	IF gProcess.aPackerQueue[1].aOuter[nPacker1QueueIndex].Barcode <> '' AND gProcess.aPackerQueue[1].aOuter[nPacker1QueueIndex].OuterTimeStamp <> '' AND gProcess.aPackerQueue[1].aOuter[nPacker1QueueIndex].OuterRejectCode = 'OK' THEN
+
+		gHMI.aPackerQueueHMI[1].aOuterBarcode[nPacker1QueueIndex] := F_CONCAT3(RIGHT(F_CODE_GetItem(gProcess.aPackerQueue[1].aOuter[nPacker1QueueIndex].Barcode, eCodeAIType.SerialCode, gDevice.stMachineConfig.stCodeInfo_Outer), cMAX_HMI_SERIALCODE_LENGHT), '(999)', '1');
+
+		IF gProcess.aPackerQueue[1].aOuter[nPacker1QueueIndex].OuterMasterListRestored THEN
+
+			gHMI.aPackerQueueHMI[1].aOuterBarcode[nPacker1QueueIndex] := CONCAT(gHMI.aPackerQueueHMI[1].aOuterBarcode[nPacker1QueueIndex],'1');
+		ELSE
+			gHMI.aPackerQueueHMI[1].aOuterBarcode[nPacker1QueueIndex] := CONCAT(gHMI.aPackerQueueHMI[1].aOuterBarcode[nPacker1QueueIndex],'0');
+		END_IF
+	ELSE
+		gHMI.aPackerQueueHMI[1].aOuterBarcode[nPacker1QueueIndex] := F_CONCAT3(RIGHT(F_CODE_GetItem(gProcess.aPackerQueue[1].aOuter[nPacker1QueueIndex].Barcode, eCodeAIType.SerialCode, gDevice.stMachineConfig.stCodeInfo_Outer), cMAX_HMI_SERIALCODE_LENGHT), '(999)', '00');
+	END_IF
+END_FOR
+
+(******************** copy reject codes to hmi structure********************************)
+FOR nCaseQueueIndex := 1 TO cMAX_CASE_QUEUE DO
+
+	gHMI.aCaseQueueRejectCodeHMI[nCaseQueueIndex].sCaseIDCode			:= RIGHT( F_CODE_GetItem(gProcess.stCaseQueue.aCACData[nCaseQueueIndex].Barcode, eCodeAIType.SerialCode, gDevice.stMachineConfig.stCodeInfo_Case), 7);
+	gHMI.aCaseQueueRejectCodeHMI[nCaseQueueIndex].sCaseRejectCode 	:= gProcess.stCaseQueue.aCACData[nCaseQueueIndex].CaseRejectCode;
+	gHMI.aCaseQueueRejectCodeHMI[nCaseQueueIndex].sProductionDate 		:= gProcess.stCaseQueue.aCACData[nCaseQueueIndex].ProductionDate;
+	gHMI.aCaseQueueRejectCodeHMI[nCaseQueueIndex].sProductionTime 		:= gProcess.stCaseQueue.aCACData[nCaseQueueIndex].ProductionTime;
+END_FOR
+
+FOR nVerifiedCaseQueueIndex := 1 TO cMAX_VERIFIED_CASE_QUEUE DO
+
+	gHMI.aVerifiedCaseIDCodeHMI[nVerifiedCaseQueueIndex].sCaseIDCode:= RIGHT( F_CODE_GetItem(gProcess.aVerifiedCACData[nVerifiedCaseQueueIndex].Barcode, eCodeAIType.SerialCode, gDevice.stMachineConfig.stCodeInfo_Case), 7);
+	gHMI.aVerifiedCaseIDCodeHMI[nVerifiedCaseQueueIndex].sProductionDate := gProcess.aVerifiedCACData[nVerifiedCaseQueueIndex].ProductionDate;
+	gHMI.aVerifiedCaseIDCodeHMI[nVerifiedCaseQueueIndex].sProductionTime := gProcess.aVerifiedCACData[nVerifiedCaseQueueIndex].ProductionTime;
+END_FOR
+
+FOR nFailedCaseQueueIndex := 1 TO cMAX_FAILED_CASE_QUEUE DO
+
+	IF gProcess.aFailedCACData[nFailedCaseQueueIndex].Barcode <>  cCASE_PACKER_REJECT THEN
+		gHMI.aFailedCaseRejectCodeHMI[nFailedCaseQueueIndex].sCaseIDCode		:= RIGHT( F_CODE_GetItem(gProcess.aFailedCACData[nFailedCaseQueueIndex].Barcode, eCodeAIType.SerialCode, gDevice.stMachineConfig.stCodeInfo_Case), 7);
+	ELSE
+		gHMI.aFailedCaseRejectCodeHMI[nFailedCaseQueueIndex].sCaseIDCode := '';
+	END_IF
+	(*gHMI.aFailedCaseRejectCodeHMI[nFailedCaseQueueIndex].sCaseIDCode:= RIGHT( F_CODE_GetItem(aFailedCACData[nFailedCaseQueueIndex].Barcode, eCodeAIType.SerialCode, stMAchineConfig.stCodeInfo_Case), 7);*)
+	gHMI.aFailedCaseRejectCodeHMI[nFailedCaseQueueIndex].sCaseRejectCode := gProcess.aFailedCACData[nFailedCaseQueueIndex].CaseRejectCode;
+	gHMI.aFailedCaseRejectCodeHMI[nFailedCaseQueueIndex].sProductionDate := gProcess.aFailedCACData[nFailedCaseQueueIndex].ProductionDate;
+	gHMI.aFailedCaseRejectCodeHMI[nFailedCaseQueueIndex].sProductionTime:= gProcess.aFailedCACData[nFailedCaseQueueIndex].ProductionTime;
+END_FOR
+
+(****************************** Case Packer Error Log stats ****************************************)
+(*infeed conveyor*)
+gHMI.nOuterProcessedHMI				:=	gNovRAM.stCaseInspactionLogNV.nOuterProcessed;
+gHMI.nOuterAggregatedHMI				:= 	gNovRAM.stCaseInspactionLogNV.nOuterAggregated;
+gHMI.nMasterListRestoredSuccessfulHMI		:=	gNovRAM.stCaseInspactionLogNV.nMasterListRestoredSuccessful;
+gHMI.nMasterListRemovedHMI				:=	gNovRAM.stCaseInspactionLogNV.nMasterListRemoved;
+gHMI.nQAButtonRejectOuterHMI			:=	gNovRAM.stCaseInspactionLogNV.nQualityRejects;
+
+(*row validation*)
+gHMI.nRowValidationIndexUnderHMI			:=	gNovRAM.stCaseInspactionLogNV.nRowValidationIndexUnder;
+gHMI.nRowValidationIndexOverHMI			:= 	gNovRAM.stCaseInspactionLogNV.nRowValidationIndexOver;
+gHMI.nRowValidationIndexCorrectHMI			:=	gNovRAM.stCaseInspactionLogNV.nRowValidationIndexCorrect;
+gHMI.nRowValidationIndexNotFoundHMI		:=	gNovRAM.stCaseInspactionLogNV.nRowValidationIndexNotFound;
+
+(*outer to case validation*)
+gHMI.nOuterToCaseValidationIndexUnderHMI		:=	gNovRAM.stCaseInspactionLogNV.nOuterToCaseValidationIndexUnder;
+gHMI.nOuterToCaseValidationIndexOverHMI		:=	gNovRAM.stCaseInspactionLogNV.nOuterToCaseValidationIndexOver;
+gHMI.nOuterToCaseValidationIndexCorrectHMI	:=	gNovRAM.stCaseInspactionLogNV.nOuterToCaseValidationIndexCorrect;
+gHMI.nOuterToCaseValidationIndexNoDataHMI	:=	gNovRAM.stCaseInspactionLogNV.nOuterToCaseValidationIndexNoData;
+
+(*case validation*)
+gHMI.nCaseValidationScannedHMI				:=	gNovRAM.stCaseInspactionLogNV.nCaseValidationScanned;
+gHMI.nCaseValidationCorrectHMI				:=	gNovRAM.stCaseInspactionLogNV.nCaseValidationCorrect;
+gHMI.nCaseValidationCasePackerRejectHMI		:=	gNovRAM.stCaseInspactionLogNV.nCaseValidationCasePackerReject;
+gHMI.nCaseValidationNoCaseLabelHMI			:=	gNovRAM.stCaseInspactionLogNV.nCaseValidationNoCaseLabel;
+
+
+(****************************** Case Packer Dual input stats ****************************************)
+
+(*RowComplete*)
+gHMI.nRowCompleteSensorHMI			:=	gNovRAM.stCasePackerSignalsNV.RowComplete.nSensor;
+gHMI.nRowCompleteMachineHMI			:=	gNovRAM.stCasePackerSignalsNV.RowComplete.nMachine;
+gHMI.nRowCompleteHMI					:=	gNovRAM.stCasePackerSignalsNV.RowComplete.nPLC;
+
+(*LayerComplete*)
+gHMI.nLayerCompleteSensorHMI			:=	gNovRAM.stCasePackerSignalsNV.LayerComplete.nSensor;
+gHMI.nLayerCompleteMachineHMI			:=	gNovRAM.stCasePackerSignalsNV.LayerComplete.nMachine;
+gHMI.nLayerCompleteHMI					:=	gNovRAM.stCasePackerSignalsNV.LayerComplete.nPLC;
+
+(*CaseComplete*)
+gHMI.nCaseCompleteSensorHMI			:=	gNovRAM.stCasePackerSignalsNV.CaseComplete.nSensor;
+gHMI.nCaseCompleteMachineHMI			:=	gNovRAM.stCasePackerSignalsNV.CaseComplete.nMachine;
+gHMI.nCaseCompleteHMI					:=	gNovRAM.stCasePackerSignalsNV.CaseComplete.nPLC;
+
+(*CaseDischarged*)
+gHMI.nCaseDischargedSensorHMI			:=	gNovRAM.stCasePackerSignalsNV.CaseDischarged.nSensor;
+gHMI.nCaseDischargedMachineHMI			:=	gNovRAM.stCasePackerSignalsNV.CaseDischarged.nMachine;
+gHMI.nCaseDischargedHMI				:=	gNovRAM.stCasePackerSignalsNV.CaseDischarged.nPLC;
+
+(*CaseLabelValidation*)
+gHMI.nCaseLabelValidationSensorHMI		:=	gNovRAM.stCasePackerSignalsNV.CaseLabelValidation.nSensor;
+gHMI.nCaseLabelValidationMachineHMI		:=	gNovRAM.stCasePackerSignalsNV.CaseLabelValidation.nMachine;
+gHMI.nCaseLabelValidationHMI				:=	gNovRAM.stCasePackerSignalsNV.CaseLabelValidation.nPLC;
+
+
+
+
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

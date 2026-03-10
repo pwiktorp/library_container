@@ -1,0 +1,133 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_SCANNER_CheckOS" Id="{a0c05016-6a92-4fbd-8eb1-a273ea5d19ee}" SpecialFunc="None">
+    <Declaration><![CDATA[(* reads a registry key to determine if OS is WinCE or full Windows *)
+FUNCTION_BLOCK FB_SCANNER_CheckOS
+VAR_INPUT
+	bExecute		: BOOL;		(* check OS type *)
+END_VAR
+VAR_OUTPUT
+	bDone		: BOOL;		(* TRUE = OS check complete *)
+	bBusy 		: BOOL;		(* TRUE = OS check active *)
+	bError		: BOOL;		(* TRUE = OS check error *)
+	nErrorID		: UDINT;	(* error code *)
+	eOSType		: E_SYSTEM_OSType;	(* OS type *)
+END_VAR
+VAR
+	fbExecute		: R_TRIG;
+	nState		: INT;
+	strData		: T_MaxString;
+	fbReadRegKey	: FB_RegQueryValue;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* monitor bExecute *)
+fbExecute(CLK := bExecute);
+
+CASE nState OF
+
+	(* idle *)
+	0:
+
+		(* rising edge on bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* reset status outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			(* reset vars *)
+			eOSType := E_OS_UNKNOWN;
+			MEMSET(ADR(strData), 16#00, SIZEOF(strData));
+
+			nState := 1;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset status outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* read registry *)
+	1:
+
+		(* read registry key *)
+		fbReadRegKey(
+			sNetId		:= '',
+			sSubKey		:= 'SOFTWARE\Beckhoff\TwinCAT',
+			sValName	:= 'InstallationPath',
+			cbData		:= SIZEOF(strData),
+			pData		:= ADR(strData),
+			bExecute	:= TRUE,
+			tTimeOut	:= T#1s
+		);
+
+		(* read registry key complete *)
+		IF fbReadRegKey.bBusy = FALSE THEN
+
+			(* read registry key completed OK *)
+			IF fbReadRegKey.bError = FALSE THEN
+
+				(* value on WinCE will be '\Hard Disk\TwinCAT' *)
+				IF strData = '\Hard Disk\TwinCAT' THEN
+
+					(* OS is WinCE *)
+					eOSType := E_OS_WINCE;
+
+				(* other value *)
+				ELSE
+
+					(* OS is full Windows *)
+					eOSType := E_OS_WINDOWS;
+				END_IF
+
+			(* read registry key error *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbReadRegKey.nErrId;
+			END_IF
+
+			nState := 20;
+
+			(* close off fbReadRegKey *)
+			fbReadRegKey(bExecute := FALSE);
+		END_IF
+
+
+	(* done *)
+	20:
+
+		(* update status outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		nState := 0;
+
+
+(* unknown state *)
+ELSE
+
+	nState := 0;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_SCANNER_CheckOS">
+      <LineId Id="26" Count="96" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

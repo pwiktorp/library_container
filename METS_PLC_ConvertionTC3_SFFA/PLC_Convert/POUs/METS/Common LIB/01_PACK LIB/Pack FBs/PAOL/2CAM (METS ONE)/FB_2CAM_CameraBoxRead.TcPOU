@@ -1,0 +1,259 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_2CAM_CameraBoxRead" Id="{4ca6abed-fb08-4689-8ed1-7afa55c4415f}" SpecialFunc="None">
+    <Declaration><![CDATA[ FUNCTION_BLOCK FB_2CAM_CameraBoxRead
+VAR_INPUT
+	bArmSensor					: BOOL; (*This is the sensor before the first trigger. This is used to stop false sensor readings from triggering the cameras NOTE: This must be set 20mm from Trigger Sensor 1*)
+	fEncoderPosition				: LREAL;	(*position in mm*)
+	bFixedTriggerOffsetEnable			: BOOL;
+	stPackAgregationCameraOffset	: ST_PACK_TriggerOffset;
+	timeSequenceOff				: TIME 	:= T#20ms;
+	timeStepTimeOut				: TIME	:= T#1000ms;
+END_VAR
+VAR_OUTPUT
+	bTriggersAreArmed			: BOOL;
+
+	bCameraTrigger1				: BOOL;
+	bCameraTrigger2				: BOOL;
+	bCameraTrigger3				: BOOL;
+	bCameraTrigger4				: BOOL;
+	bCameraTrigger5				: BOOL;
+	bCameraTrigger6				: BOOL;
+END_VAR
+VAR
+	eStep							: E_PACK_ReadStep ;
+
+	rtrigArmTriggers				: R_TRIG;
+	(*fEncoderArmPosition			: REAL;*)
+
+	nEncoderPosition				: DINT;
+
+	rtrigCameraTrigger1			: R_TRIG;
+	rtrigCameraTrigger2			: R_TRIG;
+	rtrigCameraTrigger3			: R_TRIG;
+	rtrigCameraTrigger4			: R_TRIG;
+	rtrigCameraTrigger5			: R_TRIG;
+	rtrigCameraTrigger6			: R_TRIG;
+
+	nSensArm						: UINT;
+	nTrigCounter1					: UINT;
+	nTrigCounter2					: UINT;
+	nTrigCounter3					: UINT;
+	nTrigCounter4					: UINT;
+	nTrigCounter5					: UINT;
+	nTrigCounter6					: UINT;
+
+	tonTimeoutStep				: TON;
+	tonSequenceDwell 				: TON;
+
+END_VAR
+
+(*
+FORMAT 10 PACKS 5x2
+
+Trigger 1 Buffor 1	|_________________|_________________|_________________|_________________ |Camera 1 ScanNo 1|
+
+Trigger 2 Buffor 2	|_________________|_________________|_________________|Camera 1 ScanNo 2|Camera 2  ScanNo 1|	
+
+Trigger 3 Buffor 1	|_________________|_________________|Camera 1 ScanNo 3|Camera 2  ScanNo 2|_________________|
+
+Trigger 4 Buffor 2	|_________________|Camera 1 ScanNo 4|Camera 2  ScanNo 3|_________________ |_________________|
+
+Trigger 5 Buffor 1	|Camera 1 ScanNo 5|Camera 2  ScanNo 4|_________________|_________________ |_________________|
+
+Trigger 6 Buffor 2	|Camera 2  ScanNo 5|_________________|_________________|_________________ |_________________|
+*)
+
+
+
+
+
+
+(* extended descripton
+FORMAT 10 PACKS 5x2
+
+Trigger 1 Buffor 1	|_________________|_________________|_________________|_________________ |Camera 1 ScanNo 1|
+
+							Trigger 1 Buffor 2	|_________________|_________________|_________________|_________________ |_________________|												
+
+							Trigger 2 Buffor 1	|_________________|_________________|_________________|_________________ |_________________ |	
+
+Trigger 2 Buffor 2	|_________________|_________________|_________________|Camera 1 ScanNo 2|Camera 2  ScanNo 1|	
+
+Trigger 3 Buffor 1	|_________________|_________________|Camera 1 ScanNo 3|Camera 2  ScanNo 2|_________________|
+
+							Trigger 3 Buffor 2	|_________________|_________________|_________________|_________________ |_________________|
+
+							Trigger 4 Buffor 1	|_________________|_________________|_________________|_________________ |_________________|
+
+Trigger 4 Buffor 2	|_________________|Camera 1 ScanNo 4|Camera 2  ScanNo 3|_________________ |_________________|
+
+Trigger 5 Buffor 1	|Camera 1 ScanNo 5|Camera 2  ScanNo 4|_________________|_________________ |_________________|
+
+							Trigger 5 Buffor 2	|_________________|_________________|_________________|_________________ |_________________|
+
+							Trigger 6 Buffor 1	|_________________|_________________|_________________|_________________ |_________________|
+
+Trigger 6 Buffor 2	|Camera 2  ScanNo 5|_________________|_________________|_________________ |_________________|
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*R_TRIGs for each Trigger Sensor*)
+nEncoderPosition	:= LREAL_TO_DINT(fEncoderPosition);
+
+rtrigArmTriggers(CLK:= bArmSensor);
+
+(*******if many false trigers - R_Trig will be replaces here by Set block. For now Set block is made be Case sequence***************************)
+IF bFixedTriggerOffsetEnable THEN
+
+	rtrigCameraTrigger1(CLK:= nEncoderPosition >= stPackAgregationCameraOffset.nArmPositionOffset);
+	rtrigCameraTrigger2(CLK:= nEncoderPosition >= (stPackAgregationCameraOffset.nArmPositionOffset + stPackAgregationCameraOffset.nCameraPositionOffset));
+	rtrigCameraTrigger3(CLK:= nEncoderPosition >= (stPackAgregationCameraOffset.nArmPositionOffset + 2*stPackAgregationCameraOffset.nCameraPositionOffset));
+	rtrigCameraTrigger4(CLK:= nEncoderPosition >= (stPackAgregationCameraOffset.nArmPositionOffset + 3*stPackAgregationCameraOffset.nCameraPositionOffset));
+	rtrigCameraTrigger5(CLK:= nEncoderPosition >= (stPackAgregationCameraOffset.nArmPositionOffset + 4*stPackAgregationCameraOffset.nCameraPositionOffset));
+	rtrigCameraTrigger6(CLK:= nEncoderPosition >= (stPackAgregationCameraOffset.nArmPositionOffset + 5*stPackAgregationCameraOffset.nCameraPositionOffset));
+
+ELSE
+	rtrigCameraTrigger1(CLK:= fEncoderPosition > DINT_TO_REAL(stPackAgregationCameraOffset.nArmPositionOffset));
+	rtrigCameraTrigger2(CLK:= fEncoderPosition > DINT_TO_REAL(stPackAgregationCameraOffset.nTrigger1PositionOffset));
+	rtrigCameraTrigger3(CLK:= fEncoderPosition > DINT_TO_REAL(stPackAgregationCameraOffset.nTrigger2PositionOffset));
+	rtrigCameraTrigger4(CLK:= fEncoderPosition > DINT_TO_REAL(stPackAgregationCameraOffset.nTrigger3PositionOffset));
+	rtrigCameraTrigger5(CLK:= fEncoderPosition > DINT_TO_REAL(stPackAgregationCameraOffset.nTrigger4PositionOffset));
+	rtrigCameraTrigger6(CLK:= fEncoderPosition > DINT_TO_REAL(stPackAgregationCameraOffset.nTrigger5PositionOffset));
+END_IF
+
+(****Diagnostic Counters******)
+IF rtrigArmTriggers.Q THEN
+	nSensArm := nSensArm+1;
+END_IF
+IF rtrigCameraTrigger1.Q THEN
+	nTrigCounter1 := nTrigCounter1+1;
+END_IF
+IF rtrigCameraTrigger2.Q THEN
+	nTrigCounter2 := nTrigCounter2+1;
+END_IF
+IF rtrigCameraTrigger3.Q THEN
+	nTrigCounter3 := nTrigCounter3+1;
+END_IF
+IF rtrigCameraTrigger4.Q THEN
+	nTrigCounter4 := nTrigCounter4+1;
+END_IF
+IF rtrigCameraTrigger5.Q THEN
+	nTrigCounter5 := nTrigCounter5+1;
+END_IF
+IF rtrigCameraTrigger6.Q THEN
+	nTrigCounter6 := nTrigCounter6+1;
+END_IF
+
+(******* Timers *******)
+
+tonTimeoutStep(IN:= (eStep <> E_DISARMED) , PT:= timeStepTimeout);
+tonSequenceDwell(IN:= (eStep = E_2CAM_SEQDWELL) , PT:= timeSequenceOff);
+
+(******* Sequence *******)
+CASE eStep OF
+
+	E_DISARMED:
+
+		bTriggersAreArmed			:= FALSE;
+	
+		bCameraTrigger1				:= FALSE;
+		bCameraTrigger2				:= FALSE;
+		bCameraTrigger3				:= FALSE;
+		bCameraTrigger4				:= FALSE;
+		bCameraTrigger5				:= FALSE;
+		bCameraTrigger6				:= FALSE;
+
+		IF rtrigArmTriggers.Q  THEN
+			bTriggersAreArmed := TRUE;
+			eStep := E_2CAM_TRIG01;
+		END_IF
+
+
+	E_2CAM_TRIG01:
+
+		IF rtrigCameraTrigger1.Q THEN
+
+			bCameraTrigger1 := TRUE;
+			eStep :=E_2CAM_TRIG02;
+
+		ELSIF tonTimeoutStep.Q THEN
+
+			eStep := E_DISARMED;
+		END_IF
+
+	E_2CAM_TRIG02:
+
+		IF rtrigCameraTrigger2.Q THEN
+
+			bCameraTrigger2 := TRUE;
+			eStep :=E_2CAM_TRIG03;
+
+		ELSIF tonTimeoutStep.Q THEN
+
+			eStep := E_DISARMED;
+		END_IF
+
+	E_2CAM_TRIG03:
+
+		IF rtrigCameraTrigger3.Q THEN
+
+			bCameraTrigger3 := TRUE;
+			eStep :=E_2CAM_TRIG04;
+
+		ELSIF tonTimeoutStep.Q THEN
+
+			eStep := E_DISARMED;
+		END_IF
+
+	E_2CAM_TRIG04:
+
+		IF rtrigCameraTrigger4.Q THEN
+
+			bCameraTrigger4 := TRUE;
+			eStep :=E_2CAM_TRIG05;
+
+		ELSIF tonTimeoutStep.Q THEN
+
+			eStep := E_DISARMED;
+		END_IF
+
+	E_2CAM_TRIG05:
+
+		IF rtrigCameraTrigger5.Q THEN
+
+			bCameraTrigger5 := TRUE;
+			eStep :=E_2CAM_TRIG06;
+
+		ELSIF tonTimeoutStep.Q THEN
+
+			eStep := E_DISARMED;
+		END_IF
+
+	E_2CAM_TRIG06:
+
+		IF rtrigCameraTrigger6.Q THEN
+
+			bCameraTrigger6 := TRUE;
+			eStep := E_2CAM_SEQDWELL;
+
+		ELSIF tonTimeoutStep.Q THEN
+
+			eStep := E_DISARMED;
+		END_IF
+
+	E_2CAM_SEQDWELL:
+
+		IF tonSequenceDwell.Q THEN
+
+			eStep := E_DISARMED;
+
+		ELSIF tonTimeoutStep.Q THEN
+
+			eStep := E_DISARMED;
+		END_IF
+ELSE
+		eStep := E_DISARMED;
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_ModuloPos" Id="{fe8767c7-fbb9-425b-8816-e523377e2ed4}" SpecialFunc="None">
+    <Declaration><![CDATA[(* converts absolute position to modulo position, 0 <= fModuloPos < fModuloFactor *)
+FUNCTION F_ModuloPos : LREAL
+VAR_INPUT
+	fAbsPos			: LREAL;	(* absolute position *)
+	fModuloFactor	: LREAL;	(* modulo factor *)
+END_VAR
+VAR
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* absolute position is +ive *)
+IF fAbsPos >= 0 THEN
+
+	(* LMOD produces modulo position *)
+	F_ModuloPos := LMOD(fAbsPos, fModuloFactor);
+
+(* absolute position is -ive *)
+ELSE
+
+	(* LMOD gives negative value, add fModuloFactor to convert to positive value *)
+	F_ModuloPos := LMOD(fAbsPos, fModuloFactor) + fModuloFactor;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="F_ModuloPos">
+      <LineId Id="16" Count="11" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

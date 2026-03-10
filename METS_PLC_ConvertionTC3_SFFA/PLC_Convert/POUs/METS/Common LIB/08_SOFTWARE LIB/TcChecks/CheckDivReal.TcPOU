@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="CheckDivReal" Id="{ad82391b-7d7f-4b56-b937-bf5ae08821ff}" SpecialFunc="CheckDivReal32">
+    <Declaration><![CDATA[FUNCTION CheckDivReal : REAL
+VAR_INPUT
+    divisor : REAL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF divisor = 0 THEN
+    CheckDivReal := 2;
+nTooHigh := nTooHigh + 1;
+ELSE
+    CheckDivReal := divisor;
+END_IF
+]]></ST>
+    </Implementation>
+    <LineIds Name="CheckDivReal">
+      <LineId Id="4" Count="6" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

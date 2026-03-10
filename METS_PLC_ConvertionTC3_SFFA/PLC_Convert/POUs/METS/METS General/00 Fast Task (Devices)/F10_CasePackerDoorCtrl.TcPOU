@@ -1,0 +1,79 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F10_CasePackerDoorCtrl" Id="{a2df4b29-e6d4-4312-8944-f6b25c00f686}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM F10_CasePackerDoorCtrl
+VAR
+	stDoorOpenRejectZone1		: ST_SYSTEM_Door;
+	stDoorOpenRejectZone2		: ST_SYSTEM_Door;
+
+	nIndex					: INT;
+	nMaxCaseIndex			: INT;
+END_VAR
+
+(*
+Modification history:
+Date		|	Author 		|	Remark
+----------------------------------------------------------------------------------------------------
+02.09.20	|	PP			|	Start Remarking.
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF NOT gIOFiltered.stDoorOpenZone1.bStateInput AND NOT gIOFiltered.stDoorOpenZone2.bStateInput THEN
+	gProcess.bClearCaseQueue 		:= FALSE;
+	gProcess.bClearConveyorQueue	:= FALSE;
+	gProcess.bClearPackerQueue		:= FALSE;
+END_IF
+nMaxCaseIndex := UDINT_TO_INT(SIZEOF(gProcess.stCaseQueue.aCACData) / SIZEOF(gProcess.stCaseQueue.aCACData[1]));
+
+IF gIOFiltered.stDoorOpenZone1.bStateInput THEN
+	stDoorOpenRejectZone1:=gDevice.stMachineConfig.stDoorSettingsZone1;
+ELSE
+	MEMSET(ADR(stDoorOpenRejectZone1), 16#00, SIZEOF(stDoorOpenRejectZone1));
+END_IF
+
+IF gIOFiltered.stDoorOpenZone2.bStateInput THEN
+	stDoorOpenRejectZone2:=gDevice.stMachineConfig.stDoorSettingsZone2;
+ELSE
+	MEMSET(ADR(stDoorOpenRejectZone2), 16#00, SIZEOF(stDoorOpenRejectZone2));
+END_IF
+
+gProcess.stDoorOpenClearData.bClearConveyorQueue:=stDoorOpenRejectZone1.bClearConveyorQueue OR stDoorOpenRejectZone2.bClearConveyorQueue;
+gProcess.stDoorOpenClearData.bClearPackerQueue:=stDoorOpenRejectZone1.bClearPackerQueue OR stDoorOpenRejectZone2.bClearPackerQueue;
+
+FOR nIndex:=1 TO nMaxCaseIndex DO
+	gProcess.stDoorOpenClearData.aClearCaseQueue[nIndex]:=stDoorOpenRejectZone1.aClearCaseQueue[nIndex] OR stDoorOpenRejectZone2.aClearCaseQueue[nIndex];
+	IF gProcess.stDoorOpenClearData.aClearCaseQueue[nIndex] THEN
+		gProcess.bClearCaseQueue := TRUE;
+	END_IF
+END_FOR
+
+
+gProcess.bClearConveyorQueue	:= gProcess.stDoorOpenClearData.bClearConveyorQueue;
+gProcess.bClearPackerQueue		:= gProcess.stDoorOpenClearData.bClearPackerQueue;
+
+IF gProcess.stDoorOpenClearData.bClearConveyorQueue THEN
+	MEMSET(ADR(gProcess.stInfeedConvQueue), 16#00, SIZEOF(gProcess.stInfeedConvQueue));
+	IF NOT gDevice.stMachineConfig.bResetPushCountOnDoorOpen THEN
+		gProcess.stInfeedConvQueue.bDoorReject := TRUE;
+	END_IF
+END_IF
+IF gProcess.stDoorOpenClearData.bClearPackerQueue THEN
+	MEMSET(ADR(gProcess.aPackerQueue), 16#00, SIZEOF(gProcess.aPackerQueue));
+	IF NOT gDevice.stMachineConfig.bResetPushCountOnDoorOpen THEN
+		gProcess.aPackerQueue[0].bDoorReject := TRUE;
+		gProcess.aPackerQueue[1].bDoorReject := TRUE;
+	END_IF
+END_IF
+FOR nIndex := 1 TO nMaxCaseIndex DO
+	IF gProcess.stDoorOpenClearData.aClearCaseQueue[nIndex]  AND gProcess.stCaseQueue.aCACData[nIndex].CodingAndTrackingMode > 0 THEN
+		MEMSET(ADR(gProcess.stCaseQueue.aCACData[nIndex]), 16#00, SIZEOF(gProcess.stCaseQueue.aCACData[nIndex]));
+		gProcess.stCaseQueue.aCACData[nIndex].CaseRejectCode :=  gProcess.stCaseRejectReasons.stDoorGuardReject.sMetsDisplayCode;
+		gProcess.stCaseQueue.aCACData[nIndex].CaseRejectID :=  gProcess.stCaseRejectReasons.stDoorGuardReject.nRejectID;
+		gProcess.stCaseQueue.aCACData[nIndex].ProductionDate := F_StringWildcard('#YYYYMMDD#', gDevice.stMetsStatus.stCTDateTime.sSystemTime);
+		gProcess.stCaseQueue.aCACData[nIndex].ProductionTime := F_StringWildcard('#hhmmss#', gDevice.stMetsStatus.stCTDateTime.sSystemTime);
+		gProcess.stCaseQueue.aCACData[nIndex].ProductionTimeOffset := F_SYSTEM_SystemTimeOffsetToHHMM(gDevice.stMetsStatus.stCTDateTime.nSystemTimeOffset);
+	END_IF
+END_FOR]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

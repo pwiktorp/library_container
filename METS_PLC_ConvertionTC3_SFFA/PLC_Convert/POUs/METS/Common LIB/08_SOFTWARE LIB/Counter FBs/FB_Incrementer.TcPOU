@@ -1,0 +1,68 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_Incrementer" Id="{aff24bf0-e5e6-4e8e-8f51-c238bc00f6e5}" SpecialFunc="None">
+    <Declaration><![CDATA[(* pulse incrementer with coarse and fine adjustment *)
+FUNCTION_BLOCK FB_Incrementer
+VAR_INPUT
+	bIncrementHigh		: BOOL;		(* increment fValue in large steps *)
+	bIncrementLow		: BOOL;		(* increment fValue in small steps *)
+	bDecrementLow		: BOOL;		(* decrement fValue in small steps *)
+	bDecrementHigh		: BOOL;		(* decrement fValue in large steps *)
+	fLowIncValue		: LREAL;	(* large step change value *)
+	fHighIncValue		: LREAL;	(* small step change value *)
+END_VAR
+VAR_IN_OUT
+	fValue				: LREAL;	(* setpoint value *)
+END_VAR
+VAR
+	fbIncrementHigh		: R_TRIG;
+	fbIncrementLow		: R_TRIG;
+	fbDecrementLow		: R_TRIG;
+	fbDecrementHigh		: R_TRIG;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		No change
+
+-------------------------------------------------------------------------------------------------
+26/09/2012	1.09.01	PB		Bug fix - output now LREAL instead of REAL
+05/02/10	1.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* add high increment value on rising edge of bIncrementHigh *)
+fbIncrementHigh(CLK:= bIncrementHigh);
+IF fbIncrementHigh.Q = TRUE THEN
+
+	fValue := fValue + fHighIncValue;
+END_IF
+
+(* add low increment value on rising edge of bIncrementLow *)
+fbIncrementLow(CLK:= bIncrementLow);
+IF fbIncrementLow.Q = TRUE THEN
+
+	fValue := fValue + fLowIncValue;
+END_IF
+
+(* subtract low increment value on rising edge of bDecrementLow *)
+fbDecrementLow(CLK:= bDecrementLow);
+IF fbDecrementLow.Q = TRUE THEN
+
+	fValue := fValue - fLowIncValue;
+END_IF
+
+(* subtract high increment value on rising edge of bDecrementHigh *)
+fbDecrementHigh(CLK:= bDecrementHigh);
+IF fbDecrementHigh.Q = TRUE THEN
+
+	fValue := fValue - fHighIncValue;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Incrementer">
+      <LineId Id="31" Count="26" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

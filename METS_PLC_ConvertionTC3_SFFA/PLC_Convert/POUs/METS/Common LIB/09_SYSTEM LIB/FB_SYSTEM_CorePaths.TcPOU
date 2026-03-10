@@ -1,0 +1,115 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SYSTEM_CorePaths" Id="{f20755d9-555a-4de5-a7d4-564da5275bdf}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SYSTEM_CorePaths
+VAR_INPUT
+	bExecute				: BOOL;		(* set TRUE to generate system folders *)
+	sMETSAppPath				: T_FolderPath;
+	sMETSLogsPath				: T_FolderPath;	
+	sMETSProcessPath			: T_FolderPath;
+	aCoreFolders			: ARRAY[1..cSYSTEM_FOLDER_LIMIT] OF T_FolderName;
+	aAuxFolders				: ARRAY[1..cSYSTEM_FOLDER_LIMIT] OF T_FolderName;
+END_VAR
+VAR_OUTPUT
+	sArchiveDBPath			: T_FolderPath;	(*local ArchiveDB path*)
+	sBridgeAppPath 			: T_FolderPath;	(* local Bridge path *)
+	sLoggerAppPath			: T_FolderPath;	(*  *)
+	sWebHMIPath				: T_FolderPath;	(*  *)
+	sDeleteArchivePath		: T_FolderPath;	(*  *)
+	
+	sPCMPath 			: T_FolderPath;	(* local PCM path *)
+	sPCMIncomingPath 	: T_FolderPath;	(* local PCM/Incoming path *)
+	sCHMPath 			: T_FolderPath;	(* local CHM path *)
+	sSettingsPath		 	: T_FolderPath;	(* local Setting*)
+	sBackupsPath			: T_FolderPath; (*local Setting/Backup path*)
+	sRecipePath				: T_FolderPath; (*local Setting/Recipe path*)
+	sCamerasPath				: T_FolderPath;	(* local Camera path *)
+	sPrintersPath			: T_FolderPath;	(* local Camera path *)
+	
+	sOCVPath 			: T_FolderPath;	(* local OCV path *)
+	sOACPath 			: T_FolderPath;	(* local OAC path *)
+	sCACPath 			: T_FolderPath;	(* local CAC path *)
+	sSystemLogPath			: T_FolderPath;	(* local Log path *)
+	
+END_VAR
+VAR
+	fbExecute				: R_TRIG;
+
+END_VAR
+(*
+cMETS_CORE_FOLDERS					: ARRAY[1..cSYSTEM_FOLDER_LIMIT] OF T_FolderName :=[
+			(*01*)'CHM\',		(*02*)'CHM\Archive\',		(*03*)'CHM\Error\',		(*04*)'CHM\OK\',		(*05*)'CHM\Commissioning_Mode\',	(*06*)'CHM\Restore\',
+			(*07*)'PCM\',		(*08*)'PCM\Archive\',		(*09*)'PCM\Error\',		(*10*)'PCM\Incoming\',
+			(*11*)'Settings\',	(*12*)'Settings\Backups\',	(*13*)'Settings\Recipe\',
+			(*14*)'Cameras\',
+			(*15*)'Printers\',	(*16*)'Printers\Templates'];
+			
+cMETS_AUX_FOLDERS					: ARRAY[1..cSYSTEM_FOLDER_LIMIT] OF T_FolderName :=[
+			(*01*)'CAC\',		(*02*)'CAC\Archive\',		(*03*)'CAC\Error\',		(*04*)'CAC\Restored\',
+			(*05*)'OAC\',		(*06*)'OAC\Error\',			(*07*)'OAC\Empty\',
+			(*08*)'OCV\',		(*09*)'OCV\Error\',			(*10*)'OCV\Empty\',
+			(*11*)'SystemLog\',
+			(*12*)'ArchiveDB\',
+			(*13*)'BridgeApp\Bridge_Core\',
+			(*14*)'LoggerApp\Service\',
+			(*15*)'WebHMI\',
+			(*16*)'DeleteArchiveTool\'];
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+(* rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+(* rising edge of bExecute *)
+IF fbExecute.Q = TRUE THEN
+
+(* populate local folder paths *)
+	sArchiveDBPath			:= CONCAT(sMETSAppPath, aAuxFolders[12]);
+	sBridgeAppPath 			:= CONCAT(sMETSAppPath, aAuxFolders[13]);
+	sLoggerAppPath			:= CONCAT(sMETSAppPath, aAuxFolders[14]);
+	sWebHMIPath				:= CONCAT(sMETSAppPath, aAuxFolders[15]);
+	sDeleteArchivePath		:= CONCAT(sMETSAppPath, aAuxFolders[16]);
+	
+	sPCMPath 				:= CONCAT(sMETSProcessPath, aCoreFolders[7]);
+	sPCMIncomingPath 		:= CONCAT(sMETSProcessPath, aCoreFolders[10]);
+	sCHMPath 				:= CONCAT(sMETSProcessPath, aCoreFolders[1]);
+	sSettingsPath		 	:= CONCAT(sMETSProcessPath, aCoreFolders[11]);
+	sBackupsPath			:= CONCAT(sMETSProcessPath, aCoreFolders[12]);
+	sRecipePath				:= CONCAT(sMETSProcessPath, aCoreFolders[13]);
+	sCamerasPath			:= CONCAT(sMETSProcessPath, aCoreFolders[14]);
+	sPrintersPath			:= CONCAT(sMETSProcessPath, aCoreFolders[15]);
+	
+	sOCVPath 				:= CONCAT(sMETSProcessPath, aAuxFolders[8]);
+	sOACPath 				:= CONCAT(sMETSProcessPath, aAuxFolders[5]);
+	sCACPath 				:= CONCAT(sMETSProcessPath, aAuxFolders[1]);
+	
+	sSystemLogPath			:= CONCAT(sMETSLogsPath, aAuxFolders[11]);
+			
+ELSIF NOT bExecute THEN		
+			
+	(* populate local folder paths *)
+	sArchiveDBPath			:='';
+	sBridgeAppPath 			:='';
+	sLoggerAppPath			:='';
+	sWebHMIPath				:='';
+	sDeleteArchivePath		:='';
+	
+	sPCMPath 				:='';
+	sPCMIncomingPath 		:='';
+	sCHMPath 				:='';
+	sSettingsPath		 	:='';
+	sBackupsPath			:='';
+	sRecipePath				:='';
+	sCamerasPath			:='';
+	sPrintersPath			:='';
+	
+	sOCVPath 				:='';
+	sOACPath 				:='';
+	sCACPath 				:='';
+	
+	sSystemLogPath			:='';		
+			
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

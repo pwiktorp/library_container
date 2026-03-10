@@ -1,0 +1,257 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_OAC_BuildXMLData" Id="{13ea6ea9-fc8e-4876-aecb-e1d49c49cbbd}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_OAC_BuildXMLData
+VAR_INPUT
+	bExecute			: BOOL;
+	bAddXMLHeader	: BOOL;
+	nTabIndent		: BYTE;
+	nOuterIndex		: INT;		(* Outer index when building for CAC file *)
+	stOACData			: ST_OAC_Data;
+END_VAR
+VAR_OUTPUT
+	bDone			: BOOL;
+	nOACByte			: INT;		(* total bytes for OAC template *)
+	arrOACImage		: ARRAY[0..20000] OF BYTE;
+	bBufferOverflow	: BOOL;
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	strPrefix			: T_MaxString; (*T_Char. strPrefix is assigned T_MaxString so T-Char will casue *)
+	strString			: T_MaxString;
+	nStringLen		: INT;
+	nMaxOACImageSize	: UINT;
+	nControlSize		: UINT;
+	nMaxPackIndex	: INT;
+	nPackIndex		: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+
+(* rising edge of bExecute *)
+IF fbExecute.Q = TRUE THEN
+
+	(* update outputs *)
+	bDone := FALSE;
+	bBufferOverflow	:=FALSE;
+
+	(* clear output array and reset byte counter *)
+	MEMSET(ADR(arrOACImage), 16#00, SIZEOF(arrOACImage));
+	nOACByte := 0;
+	nControlSize := 0;
+	nMaxOACImageSize := SIZEOF(arrOACImage);
+
+	(* XML header required *)
+	IF bAddXMLHeader = TRUE THEN
+
+		(* no prefix required, include XML header *)
+		strString := cXML_HEADER;
+		nStringLen := LEN(strString);
+		MEMMOVE(ADR(arrOACImage[nOACByte]), ADR(strString), nStringLen);
+		nOACByte := nOACByte + nStringLen;
+		nControlSize := nOACByte;
+
+		(* <Comment> tag *)
+		strString := '<!--File OAC builder. Version 2.2.000 Relase 06.09.2022 PTR -->$R$N';
+		AppendImageData();
+
+	END_IF
+
+	(* tab indent required *)
+	IF nTabIndent > 0 THEN
+
+		(* generate strPrefix with specified number of tabs *)
+		strPrefix := F_StringAddPrefix('$T', nTabIndent, '$T');
+
+	(* no tab index required *)
+	ELSE
+
+		(* clear strPrefix *)
+		strPrefix := '';
+	END_IF
+
+	(* output is for CAC file *)
+	IF nOuterIndex > 0 THEN
+
+		(* <Outer index="xx"> tag *)
+		strString := F_CONCAT4(strPrefix, '<Outer index="', INT_TO_STRING(nOuterIndex), '">$R$N');
+		AppendImageData();
+
+	(* output is for OAC file *)
+	ELSE
+
+		(* <Outer> tag *)
+		strString := CONCAT(strPrefix, '<Outer>$R$N');
+		AppendImageData();
+
+	END_IF
+
+	(* <Barcode> field *)
+	strString := F_CONCAT4(strPrefix, '$T<Barcode><![CDATA[', stOACData.Barcode,']]]]><![CDATA[></Barcode>$R$N');
+	AppendImageData();
+
+	(* <ProductionDate> field *)
+	strString := F_CONCAT4(strPrefix, '$T<ProductionDate>', stOACData.ProductionDate, '</ProductionDate>$R$N');
+	AppendImageData();
+
+	(* <ProductionTime> field *)
+	strString := F_CONCAT4(strPrefix, '$T<ProductionTime>', stOACData.ProductionTime, '</ProductionTime>$R$N');
+	AppendImageData();
+
+	(* <ProductionTimeOffset> field *)
+	strString := F_CONCAT4(strPrefix, '$T<ProductionTimeOffset>', stOACData.ProductionTimeOffset, '</ProductionTimeOffset>$R$N');
+	AppendImageData();
+
+	(* <ProductionTimeStamp> field *)
+	strString := F_CONCAT4(strPrefix, '$T<OuterTimeStamp>', stOACData.OuterTimeStamp, '</OuterTimeStamp>$R$N');
+	AppendImageData();
+
+	(* <ProductionTimeStamp> field *)
+	strString := F_CONCAT4(strPrefix, '$T<PackTimeStamp>', stOACData.PackTimeStamp, '</PackTimeStamp>$R$N');
+	AppendImageData();
+
+	(* <RetailSKU> field *)
+	strString := F_CONCAT4(strPrefix, '$T<RetailSKU>', stOACData.RetailSKU, '</RetailSKU>$R$N');
+	AppendImageData();
+
+	(* <OuterMachine> tag *)
+	strString := CONCAT(strPrefix, '$T<OuterMachine>$R$N');
+	AppendImageData();
+
+	(* <ProductionSite> tag *)
+	strString := F_CONCAT4(strPrefix, '$T$T<ProductionSite>', stOACData.OuterMachine.ProductionSite, '</ProductionSite>$R$N');
+	AppendImageData();
+
+	(* <ProductionLine> tag *)
+	strString := F_CONCAT4(strPrefix, '$T$T<ProductionLine>', stOACData.OuterMachine.ProductionLine, '</ProductionLine>$R$N');
+	AppendImageData();
+
+	(* <OuterMachine> closing tag *)
+	strString := CONCAT(strPrefix, '$T</OuterMachine>$R$N');
+	AppendImageData();
+
+	(* <strAggregationCodes[1]> field *)
+	strString := F_CONCAT6(strPrefix, '$T<AggregationCodes index="','1', '"><![CDATA[',stOACData.AggregationCodes[1], ']]]]><![CDATA[></AggregationCodes>$R$N');
+	AppendImageData();
+
+	(* <strAggregationCodes[2]> field *)
+	strString := F_CONCAT6(strPrefix, '$T<AggregationCodes index="', '2', '"><![CDATA[',stOACData.AggregationCodes[2], ']]]]><![CDATA[></AggregationCodes>$R$N');
+	AppendImageData();
+
+	(* <OuterMasterListRestored> field *)
+	strString := F_CONCAT4(strPrefix, '$T<OuterMasterListRestored>', BOOL_TO_STRING(stOACData.OuterMasterListRestored), '</OuterMasterListRestored>$R$N');
+	AppendImageData();
+
+	(* <CodingAndTrackingMode> field *)
+	strString := F_CONCAT4(strPrefix, '$T<CodingAndTrackingMode>', INT_TO_STRING(stOACData.CodingAndTrackingMode), '</CodingAndTrackingMode>$R$N');
+	AppendImageData();
+
+	(* <NumberOfPacks> field *)
+	strString := F_CONCAT4(strPrefix, '$T<NumberOfPacks>', INT_TO_STRING(stOACData.NumberOfPacks), '</NumberOfPacks>$R$N');
+	AppendImageData();
+
+	(* <AcceptanceLevel> field *)
+	strString := F_CONCAT4(strPrefix, '$T<AcceptanceLevel>', INT_TO_STRING(stOACData.AcceptanceLevel), '</AcceptanceLevel>$R$N');
+	AppendImageData();
+
+	(* <NumberOfLinkedPacks> field *)
+	strString := F_CONCAT4(strPrefix, '$T<NumberOfLinkedPacks>', INT_TO_STRING(stOACData.NumberOfLinkedPacks), '</NumberOfLinkedPacks>$R$N');
+	AppendImageData();
+
+	(* <BatchNumber> field *)
+	strString := F_CONCAT4(strPrefix, '$T<BatchNumber>', stOACData.BatchNumber, '</BatchNumber>$R$N');
+	AppendImageData();
+
+	(* <DataSource> field *)
+	strString := F_CONCAT4(strPrefix, '$T<DataSource>', stOACData.DataSource, '</DataSource>$R$N');
+	AppendImageData();
+
+	(* <OuterRejectCode> field *)
+	strString := F_CONCAT4(strPrefix, '$T<OuterRejectCode>', stOACData.OuterRejectCode, '</OuterRejectCode>$R$N');
+	AppendImageData();
+
+	(* <OuterRejectID> field *)
+	strString := F_CONCAT4(strPrefix, '$T<OuterRejectID>', UINT_TO_STRING(stOACData.OuterRejectID), '</OuterRejectID>$R$N');
+	AppendImageData();
+
+	(* <OuterCodeStatus> field *)
+	strString := F_CONCAT4(strPrefix, '$T<OuterCodeStatus>', WORD_TO_STRING(stOACData.OuterCodeStatus), '</OuterCodeStatus>$R$N');
+	AppendImageData();
+
+	(* max number of Packs/Outer *)
+	nMaxPackIndex := UDINT_TO_INT(SIZEOF(stOACData.PackCode) / SIZEOF(stOACData.PackCode[1]));
+
+	(* OAC data contains pack codes number of packs is valid *)
+	IF stOACData.NumberOfPacks > 0 AND stOACData.NumberOfPacks <= nMaxPackIndex THEN
+
+		(* for each pack code *)
+		FOR nPackIndex := 1 TO stOACData.NumberOfPacks DO
+
+			(* <PackCode index="xx"> field *)
+			strString := F_CONCAT6(strPrefix, '$T<PackCode index="', INT_TO_STRING(nPackIndex), '"><![CDATA[', stOACData.PackCode[nPackIndex], ']]]]><![CDATA[></PackCode>$R$N');
+			AppendImageData();
+		END_FOR
+
+	(* for each pack code *)
+		FOR nPackIndex := 1 TO stOACData.NumberOfPacks DO
+
+			(* <PackRejectCode index="xx"> field *)
+			strString := F_CONCAT6(strPrefix, '$T<PackRejectCode index="', INT_TO_STRING(nPackIndex), '">', stOACData.PackRejectCode[nPackIndex], '</PackRejectCode>$R$N');
+			AppendImageData();
+		END_FOR
+
+	(* for each pack code *)
+		FOR nPackIndex := 1 TO stOACData.NumberOfPacks DO
+
+			(* <PackRejectID index="xx"> field *)
+			strString := F_CONCAT6(strPrefix, '$T<PackRejectID index="', INT_TO_STRING(nPackIndex), '">', UINT_TO_STRING(stOACData.PackRejectID[nPackIndex]), '</PackRejectID>$R$N');
+			AppendImageData();
+		END_FOR
+
+		(* for each pack code *)
+		FOR nPackIndex := 1 TO stOACData.NumberOfPacks DO
+			(* <PackCodeStatus index="xx"> field *)
+			strString := F_CONCAT6(strPrefix, '$T<PackCodeStatus index="', INT_TO_STRING(nPackIndex), '">', WORD_TO_STRING(stOACData.PackCodeStatus[nPackIndex]), '</PackCodeStatus>$R$N');
+			AppendImageData();
+		END_FOR
+
+	END_IF
+
+	(* <Outer> closing tag *)
+	strString := CONCAT(strPrefix, '</Outer>$R$N');
+	AppendImageData();
+
+	(* update outputs *)
+	bDone := TRUE;
+
+(* unknown state *)
+ELSIF bExecute = FALSE THEN
+
+	(* clear outputs *)
+	bDone := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <Action Name="AppendImageData" Id="{d78c5498-db0c-41a0-9b27-b5748cf58dab}">
+      <Implementation>
+        <ST><![CDATA[nStringLen := LEN(strString);
+nControlSize := nControlSize + nStringLen;
+IF nControlSize <  nMaxOACImageSize THEN
+	MEMMOVE(ADR(arrOACImage[nOACByte]), ADR(strString), nStringLen);
+	nOACByte := nOACByte + nStringLen;
+ELSE
+	bBufferOverflow	:=TRUE;
+	bDone := TRUE;
+	(*RETURN;*)
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="FB_OAC_BuildXMLData">
+      <LineId Id="24" Count="205" />
+    </LineIds>
+    <LineIds Name="FB_OAC_BuildXMLData.AppendImageData">
+      <LineId Id="0" Count="9" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

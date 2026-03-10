@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_FILE_ULargeToFileTime" Id="{789b1e71-d643-4580-a5e2-b17ba3dd9060}" SpecialFunc="None">
+    <Declaration><![CDATA[(* convert value from 64-bit T_ULARGE_INTEGER to 64-bit T_FILETIME *)
+FUNCTION F_FILE_ULargeToFileTime : T_FILETIME
+VAR_INPUT
+	nULarge		: T_ULARGE_INTEGER;
+END_VAR
+VAR
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+03/08/2012	1.39.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[MEMMOVE(ADR(F_FILE_ULargeToFileTime), ADR(nULarge), SIZEOF(nULarge));]]></ST>
+    </Implementation>
+    <LineIds Name="F_FILE_ULargeToFileTime">
+      <LineId Id="15" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

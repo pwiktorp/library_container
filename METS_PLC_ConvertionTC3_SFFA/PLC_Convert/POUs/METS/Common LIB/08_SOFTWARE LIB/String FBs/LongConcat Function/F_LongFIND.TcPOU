@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_LongFIND" Id="{c33bda06-7c54-4d8c-acf2-e30e62ef7baf}" SpecialFunc="None">
+    <Declaration><![CDATA[(* FIND function for long string *)
+FUNCTION F_LongFIND : UINT
+VAR_INPUT
+	strString1			: T_LongSTRING;
+	strString2			: T_LongSTRING;	(* search string *)
+END_VAR
+VAR
+	nString1Len			: UINT;
+	nString2Len			: UINT;
+	nIndex				: UINT;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+DATE		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* get lengths of both strings *)
+nString1Len:= TO_UINT(LEN2(ADR(strString1)));
+nString2Len := TO_UINT(LEN2(ADR(strString2)));
+
+(* strString1 and strString2 are 255 chars or less *)
+IF nString1Len <= 255 AND nString2Len <= 255 THEN
+
+	(* use standard FIND function *)
+	F_LongFIND := TO_UINT(FIND(strString1, strString2));
+
+(* strString1 string length > 255 chars *)
+ELSE
+
+	(* String1 is at least as long as String2 and String2 contains data *)
+	IF nString1Len >= nString2Len AND nString2Len > 0 THEN
+
+		(* for each char in source string *)
+		FOR nIndex := 0 TO nString1Len - nString2Len DO
+
+			(* compare source data with search string *)
+			IF MEMCMP(ADR(strString1) + nIndex, ADR(strString2), nString2Len) = 0 THEN
+
+				(* match found, return index where 1st char of matching string was found *)
+				F_LongFIND := nIndex + 1;
+				EXIT;
+			END_IF
+		END_FOR
+
+	(* invalid input strings *)
+	ELSE
+
+		(* string not found *)
+		F_LongFIND := 0;
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

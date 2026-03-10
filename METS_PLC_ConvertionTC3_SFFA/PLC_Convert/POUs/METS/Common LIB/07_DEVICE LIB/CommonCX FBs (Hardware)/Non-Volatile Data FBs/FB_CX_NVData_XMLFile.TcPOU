@@ -1,0 +1,403 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CX_NVData_XMLFile" Id="{4245bb78-c892-41ca-842d-adbfaafc9ddb}" SpecialFunc="None">
+    <Declaration><![CDATA[(* implements non-volatile data using XML file and XML Server (max 32K) *)
+FUNCTION_BLOCK FB_CX_NVData_XMLFile
+VAR_INPUT
+	bEnable				: BOOL;		(* set TRUE to load and monitor XML data *)
+	bBackup				: BOOL;		(* set TRUE to write data to backup XML file *)
+	bRestore			: BOOL;		(* set TRUE to restore data from backup XML file *)
+	pSourceData			: POINTER TO BYTE;	(* pointer to source data structure *)
+	nSourceBytes		: UDINT;		(* no of bytes in source data structure *)
+	strXPath			: T_FolderPath;	(* XPath for XML file *)
+	strXMLPathFile		: T_FolderPath;	(* XML file name*)
+	strXMLBackupPathFile : T_FolderPath; (* XML file name, backup XML file will have '.bak' appended to the end *)
+	strXMLRestorePathFile : T_FolderPath;(* XML file name, restore  XML file will get name from HMI and have '.bak' appended to the end *)
+	tUpdateTime			: TIME;		(* update time to check for changes in memory *)
+	nAppOnlineChangeCnt 	: UDINT;
+END_VAR
+VAR_OUTPUT
+	bNVDataInitOK		: BOOL;		(* TRUE = data loaded OK *)
+	bFileWriteError		: BOOL;		(* TRUE = XML file write error *)
+	bDataChanged		: BOOL;		(* TRUE = change of data detected *)
+	nTotalChanges		: UDINT;	(* total number of data changes *)
+	bBackupOK		: BOOL;
+	bRestoreOK		: BOOL;
+	bFileSzieExceedLimit	: BOOL;  (*Uncomment proper if condition if use cMAX_FILE_BUFFER as a file limit*)
+END_VAR
+VAR
+	fbBackup			: R_TRIG;
+	bBackupReq			: BOOL;
+	fbRestore			: R_TRIG;
+	bRestoreReq			: BOOL;
+
+	eState				: E_CX_NVXMLState;
+	fbDelayTimer		: TON;
+	nRetries			: BYTE;
+	fbReadXML		 	: FB_XmlSrvRead;
+	fbMonitor			: FB_StructureMonitor;
+	fbWriteXML			: FB_XmlSrvWrite;
+	nOnlineChangeCount	: UDINT;
+
+	test1:BOOL;
+	test2:BOOL;
+	test3:BOOL;
+	test4:BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* backup requested *)
+fbBackup(CLK := bBackup);
+IF fbBackup.Q = TRUE THEN
+
+	bBackupReq := TRUE;
+END_IF
+
+(* restore requested *)
+fbRestore(CLK := bRestore);
+IF fbRestore.Q = TRUE THEN
+
+	bRestoreReq := TRUE;
+END_IF
+(*
+IF nSourceBytes > cMAX_FILE_BUFFER THEN
+	bFileSzieExceedLimit		:= TRUE;
+	eState := E_CX_NVXMLState.IDLE;
+ELSE
+	bFileSzieExceedLimit		:= FALSE;
+END_IF
+*)
+CASE eState OF
+
+	(* idle state *)
+	E_CX_NVXMLState.IDLE:
+
+		(* enabled*)
+		IF bEnable = TRUE THEN
+
+			(* update outputs *)
+			bNVDataInitOK := FALSE;
+			bFileWriteError := FALSE;
+			bBackupOK 	:= FALSE;
+			bRestoreOK	:= FALSE;
+
+			eState := E_CX_NVXMLState.READXML;
+
+		(* disabled *)
+		ELSE
+
+			(* reset outputs *)
+			bNVDataInitOK := FALSE;
+			bFileWriteError := FALSE;
+			bDataChanged := FALSE;
+			nTotalChanges := 0;
+
+			(* reset event flags *)
+			bBackupReq := FALSE;
+			bBackupOK := FALSE;
+			bRestoreReq := FALSE;
+			bRestoreOK	:= FALSE;
+		END_IF
+
+
+	(* read data *)
+	E_CX_NVXMLState.READXML:
+
+		(* read XML file *)
+		fbReadXML(
+			sNetId		:= '',
+			ePath		:= PATH_GENERIC,
+			nMode		:= XMLSRV_SKIPMISSING,
+			pSymAddr	:= pSourceData,
+			cbSymSize	:= nSourceBytes,
+			sFilePath	:= strXMLPathFile,
+			sXPath		:= strXPath,
+			bExecute	:= TRUE,
+			tTimeout	:= T#3s
+		);
+
+	IF fbReadXML.bError THEN
+		test1:=TRUE;
+	END_IF
+
+
+		(* XML read complete *)
+		IF fbReadXML.bBusy = FALSE THEN
+
+			(* XML read completed OK *)
+			IF fbReadXML.bError = FALSE THEN
+
+				(* XML file has been read at least once *)
+				bNVDataInitOK := TRUE;
+
+				eState := E_CX_NVXMLState.MONITOR;
+
+			(* XML read error *)
+			ELSE
+
+				(* file access error *)
+				IF fbReadXML.nErrId < 16#8000 THEN
+
+					(* increment retry counter and wait for next read attempt *)
+					nRetries := nRetries + 1;
+
+					eState := E_CX_NVXMLState.RETRY;
+
+				(* XML server error *)
+				ELSE
+
+					(* data has previously been read using XML Server *)
+					IF bNVDataInitOK = TRUE THEN
+
+						eState := E_CX_NVXMLState.MONITOR;
+
+					(* data has not previously been read using XML Server *)
+					ELSE
+
+						eState := E_CX_NVXMLState.RESTORE;
+					END_IF
+				END_IF
+			END_IF
+
+			(* close off fbReadXML *)
+			fbReadXML(bExecute := FALSE);
+		END_IF
+
+
+	(* restore backup data *)
+	E_CX_NVXMLState.RESTORE:
+
+		(* read XML backup file *)
+		fbReadXML(
+			sNetId		:= '',
+			ePath		:= PATH_GENERIC,
+			nMode		:= XMLSRV_SKIPMISSING,
+			pSymAddr	:= pSourceData,
+			cbSymSize	:= nSourceBytes,
+			sFilePath		:= strXMLRestorePathFile,
+			sXPath		:= strXPath,
+			bExecute		:= TRUE,
+			tTimeout		:= T#3s
+		);
+
+	IF fbReadXML.bError THEN
+		test2:=TRUE;
+	END_IF
+
+		(* XML backup read complete *)
+		IF fbReadXML.bBusy = FALSE THEN
+
+			(* XML backup read completed OK *)
+			IF fbReadXML.bError = FALSE THEN
+
+				(* XML file has been read at least once *)
+				bNVDataInitOK := TRUE;
+
+				(* cancel restore request flag *)
+				bRestoreReq := FALSE;
+				bRestoreOK	:= TRUE;
+				eState := E_CX_NVXMLState.MONITOR;
+
+			(* XML backup read error *)
+			ELSE
+
+				(* data has previously been read using XML Server *)
+				IF bNVDataInitOK = TRUE THEN
+
+					bRestoreReq := FALSE;
+					eState := E_CX_NVXMLState.MONITOR;
+
+
+				(* data has not previously been read using XML Server *)
+				ELSE
+
+					eState := E_CX_NVXMLState.WRITEXML;
+				END_IF
+			END_IF
+
+			(* close off fbReadXML *)
+			fbReadXML(bExecute := FALSE);
+		END_IF
+
+
+	(* monitor state *)
+	E_CX_NVXMLState.MONITOR:
+
+		(* monitor specified data area for change of value *)
+		fbMonitor(
+			bEnable			:= TRUE,
+			pSourceData		:= pSourceData,
+			nSourceBytes	:= nSourceBytes,
+			tUpdateTime		:= tUpdateTime,
+			bDataChanged	=> bDataChanged,
+			nTotalChanges	=> nTotalChanges
+		);
+
+		(* data monitoring disabled *)
+		IF bEnable = FALSE THEN
+
+			eState := E_CX_NVXMLState.IDLE;
+
+		(* online program change, re-read data *)
+		ELSIF  nAppOnlineChangeCnt <> nOnlineChangeCount THEN
+
+			eState := E_CX_NVXMLState.READXML;
+
+		(* restore from XML backup file requested *)
+		ELSIF bRestoreReq = TRUE THEN
+
+			bRestoreOK	:= FALSE;
+			eState := E_CX_NVXMLState.RESTORE;
+
+		(* data has changed *)
+		ELSIF bDataChanged = TRUE THEN
+
+			eState := E_CX_NVXMLState.WRITEXML;
+
+		(* write to XML backup file requested *)
+		ELSIF bBackupReq = TRUE THEN
+
+			bBackupOK 	:= FALSE;
+			eState := E_CX_NVXMLState.BACKUP;
+		END_IF
+
+
+	(* write data *)
+	E_CX_NVXMLState.WRITEXML:
+
+		(* write XML file *)
+		fbWriteXML(
+			sNetId		:= '',
+			ePath		:= PATH_GENERIC,
+			nMode		:= XMLSRV_ADDMISSING,
+			pSymAddr	:= pSourceData,
+			cbSymSize	:= nSourceBytes,
+			sFilePath	:= strXMLPathFile,
+			sXPath		:= strXPath,
+			bExecute	:= TRUE,
+			tTimeout	:= T#3s
+		);
+
+	IF fbWriteXML.bError THEN
+		test3:=TRUE;
+	END_IF
+
+		(* XML file write complete *)
+		IF fbWriteXML.bBusy = FALSE THEN
+
+			(* XML file write completed OK *)
+			IF fbWriteXML.bError = FALSE THEN
+
+				(* cancel XML file write error *)
+				bFileWriteError := FALSE;
+
+				(* data has previously been read using XML Server *)
+				IF bNVDataInitOK = TRUE THEN
+
+					eState := E_CX_NVXMLState.MONITOR;
+
+				(* data has not previously been read using XML Server *)
+				ELSE
+
+					eState := E_CX_NVXMLState.READXML;
+				END_IF
+
+			(* XML file write error *)
+			ELSE
+
+				(* unable to access file *)
+				bFileWriteError := TRUE;
+
+				(* return to monitor state *)
+				eState := E_CX_NVXMLState.MONITOR;
+			END_IF
+
+			(* close off fbWriteXML *)
+			fbWriteXML(bExecute := FALSE);
+		END_IF
+
+
+	(* write backup data *)
+	E_CX_NVXMLState.BACKUP:
+
+		(* write XML backup file *)
+		fbWriteXML(
+			sNetId		:= '',
+			ePath		:= PATH_GENERIC,
+			nMode		:= XMLSRV_ADDMISSING,
+			pSymAddr	:= pSourceData,
+			cbSymSize	:= nSourceBytes,
+			sFilePath		:= strXMLBackupPathFile,
+			sXPath		:= strXPath,
+			bExecute	:= TRUE,
+			tTimeout	:= T#3s
+		);
+
+	IF fbWriteXML.bError THEN
+		test4:=TRUE;
+	END_IF
+
+		(* XML backup file write complete *)
+		IF fbWriteXML.bBusy = FALSE THEN
+
+			(* XML backupfile write completed OK *)
+			IF fbWriteXML.bError = FALSE THEN
+
+				(* cancel save request flag *)
+				bBackupReq := FALSE;
+				bBackupOK 	:= TRUE;
+				(* return to monitor state *)
+				eState := E_CX_NVXMLState.MONITOR;
+
+			(* XML backupfile write error *)
+			ELSE
+
+				bBackupReq := FALSE;
+				(* return to monitor state *)
+				eState := E_CX_NVXMLState.MONITOR;
+			END_IF
+
+			(* close off fbWriteXML *)
+			fbWriteXML(bExecute := FALSE);
+		END_IF
+
+
+	(* read failed *)
+	E_CX_NVXMLState.RETRY:
+
+		(* XML Server can take 3 seconds to start at boot-up, attempt to read XML file 5 times at startup with 1s between attempts before giving alarm *)
+
+		(* data monitoring disabled *)
+		IF bEnable = FALSE THEN
+
+			eState := E_CX_NVXMLState.IDLE;
+
+		(* 5 attempts to read file have failed *)
+		ELSIF nRetries = 5 THEN
+
+			eState := E_CX_NVXMLState.RESTORE;
+
+		(* try to read XML file again *)
+		ELSIF fbDelayTimer.Q = TRUE THEN
+
+			eState := E_CX_NVXMLState.READXML;
+		END_IF
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_CX_NVXMLState.IDLE;
+END_CASE
+
+(* re-read delay timer *)
+fbDelayTimer(
+	IN	:= eState = E_CX_NVXMLState.RETRY,
+	PT	:= T#1s
+);
+
+(* log last value of online updates, allows online download to PLC program to be detected *)
+nOnlineChangeCount :=  nAppOnlineChangeCnt;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

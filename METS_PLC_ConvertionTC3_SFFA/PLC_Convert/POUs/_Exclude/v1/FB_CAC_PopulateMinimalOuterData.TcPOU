@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_CAC_PopulateMinimalOuterData" Id="{f990ed93-2902-4101-8978-93d40ce88dda}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_CAC_PopulateMinimalOuterData
+VAR_INPUT
+	bExecute						: BOOL;
+	nNumberofOuters					: INT;
+END_VAR
+VAR_IN_OUT
+	stCACData						: ST_CAC_Data;
+END_VAR
+VAR_OUTPUT
+	bDone: BOOL;
+	bBusy: BOOL;
+	bError: BOOL;
+END_VAR
+VAR
+	fbExecute: R_TRIG;
+	iOuter: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK := bExecute);
+
+
+IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+END_IF
+
+IF bBusy THEN
+
+	FOR iOuter := 1TO nNumberofOuters DO
+		stCACData.Outer[iOuter].CodingAndTrackingMode := 0;
+		stCACData.Outer[iOuter].NumberOfPacks := 0;
+		stCACData.Outer[iOuter].AcceptanceLevel := 0;
+		stCACData.Outer[iOuter].NumberOfLinkedPacks := 0;
+	END_FOR
+
+	bDone := TRUE;
+
+END_IF
+
+IF bDone THEN
+	bBusy := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_CAC_PopulateMinimalOuterData">
+      <LineId Id="17" Count="26" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,124 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CHM_FindFile" Id="{37a25d8a-82b8-4617-b3bd-f9fc120811e0}" SpecialFunc="None">
+    <Declaration><![CDATA[(* converts strOuterBarcode to CHM filename and loads data *)
+FUNCTION_BLOCK FB_CHM_FindFile
+VAR_INPUT
+	bExecute				: BOOL;		(* set TRUE to load CHM file *)
+	strCHMFile			: T_CHM_Filename;
+	strDateFolder			:T_CodeBATCH;
+	strLocalCHMPath		: T_FolderPath;
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;		(* TRUE = find file complete *)
+	bBusy				: BOOL;		(* TRUE = find file in progress *)
+	bError				: BOOL;		(* TRUE = error occurred *)
+	nErrorID			: UDINT;	(* error code *)
+	bCHMFileFound		: BOOL;		(* TRUE = CHM file found *)
+	strCHMFileName		: T_CHM_Filename;
+END_VAR
+VAR
+	fbExecute			: R_TRIG;
+	eState				: E_CHM_State;
+	fbFindFile			: FB_EnumFindFileEntry;
+	eCmd 				: E_EnumCmdType;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_CHM_IDLE:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* initialise outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			bCHMFileFound := FALSE;
+			strCHMFileName :='';
+			eCmd := eEnumCmd_First;
+
+			eState := E_CHM_FINDFILE;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+	(* find CHM file *)
+	E_CHM_FINDFILE:
+
+		(* find file *)
+		fbFindFile(
+			sNetId		:= '',
+			sPathName	:= F_CONCAT6(strLocalCHMPath, 'Archive\', strDateFolder, '\CHM_', strCHMFile, '.xml'),
+			eCmd		:= eCmd,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* find file complete *)
+		IF fbFindFile.bBusy = FALSE THEN
+
+			(* find file completed OK *)
+			IF fbFindFile.bError = FALSE THEN
+
+				(* end of list *)
+				IF fbFindFile.bEOE = TRUE THEN
+
+					eState := E_CHM_DONE;
+				(* file found *)
+				ELSE
+					(* log filename and update eCmd for next pass *)
+					bCHMFileFound := TRUE;
+					strCHMFileName := fbFindFile.stFindFile.sFileName;
+					eCmd := eEnumCmd_Next;
+
+				END_IF
+			(* find file error *)
+			ELSE
+				bError := TRUE;
+				nErrorID := fbFindFile.nErrID;
+
+				eState := E_CHM_DONE;
+			END_IF
+			(* close off fbFindFile *)
+			fbFindFile(bExecute := FALSE);
+		END_IF
+
+	(* complete *)
+	E_CHM_DONE:
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_CHM_IDLE;
+(* unknown state *)
+ELSE
+
+	eState := E_CHM_IDLE;
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+	nErrorID := 0;
+	bCHMFileFound := FALSE;
+	strCHMFileName :='';
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

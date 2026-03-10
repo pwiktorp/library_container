@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_ByteValueToASCIIWord" Id="{2bbcfd92-af9e-41e7-868d-19a133058715}" SpecialFunc="None">
+    <Declaration><![CDATA[(* convert BYTE value to 2-char ASCII representation *)
+FUNCTION F_ByteValueToASCIIWord : WORD
+VAR_INPUT
+	nByteValue		: BYTE;		(* BYTE value to be converted to ASCII word, 153 will be converted to 16#3939 *)
+END_VAR
+VAR
+	arrValue		: ARRAY[0..15] OF BYTE :=[ 16#30, 16#31, 16#32, 16#33, 16#34, 16#35, 16#36, 16#37, 16#38, 16#39, 16#61, 16#62, 16#63, 16#64, 16#65, 16#66];
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[F_ByteValueToASCIIWord := (arrValue[nByteValue MOD 16] * 256) + arrValue[nByteValue / 16];]]></ST>
+    </Implementation>
+    <LineIds Name="F_ByteValueToASCIIWord">
+      <LineId Id="17" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

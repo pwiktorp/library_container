@@ -1,0 +1,184 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F96_CHMTester" Id="{45140844-0b4c-435b-98e2-4b4b83fe6f47}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM F96_CHMTester
+VAR
+	bError							: BOOL;					(* TRUE = XML file write error *)
+	nErrorID						: UDINT;				(* file write error code *)
+
+	bOpenExec				: BOOL;
+	bWriteExec				: BOOL;
+	bCloseExec			: BOOL;
+
+	rtrigOpen			: R_TRIG;
+	rtrigWrite				: R_TRIG;
+	rtrigClose			: R_TRIG;
+
+	ftrigOpen			: F_TRIG;
+	ftrigWrite				: F_TRIG;
+	ftrigClose			: F_TRIG;
+
+	hTarget				: UINT;
+	fbOpenFile				: FB_FileOpen;
+	fbWriteFile					: FB_FileWrite;
+	fbCloseFile				: FB_FileClose;
+
+	sWriteString			: STRING;
+	nStringLen					: INT;
+	nIndex					: INT := 1;
+	nWriteImageSize		: UDINT;
+	bOpenFile				: BOOL;
+	bCloseFile				: BOOL;
+
+	strTCPRxString			: T_LongString;
+	nMaxBytes				: INT;
+	nData1					: INT;
+	nData2					: INT;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[nMaxBytes := SIZEOF(strTCPRxString) - LEN2(ADR(strTCPRxString)) - 1;
+nData1	:= SIZEOF(strTCPRxString) ;
+nData2	:= LEN2(ADR(strTCPRxString));
+
+(*	E_CHM_FILEOPEN:*)
+	(* open file for writing in binary mode *)
+
+		rtrigOpen(CLK:= bOpenExec);
+
+		fbOpenFile(
+			sNetId		:= '',
+			sPathName	:= 'C:\METS\Templates\CHM_test.txt',
+			nMode		:= FOPEN_MODEAPPEND OR FOPEN_MODEPLUS OR FOPEN_MODEBINARY,
+			ePath		:= PATH_GENERIC,
+			bExecute	:= rtrigOpen.Q,
+			tTimeout	:= T#1s
+		);
+
+		ftrigOpen(CLK:= fbOpenFile.bBusy) ;
+
+		(* file open completed *)
+		IF ftrigOpen.Q THEN
+
+			(* file open completed OK *)
+			IF fbOpenFile.bError = FALSE THEN
+
+				(* log file handle for use by subsequent commands *)
+				hTarget := fbOpenFile.hFile;
+				bOpenFile	:= TRUE;
+
+				(*eStep := E_CHM_GENERATEHEAD;*)
+
+			(* file open error *)
+			ELSE
+
+				(* log error code and failure state *)
+				bError := TRUE;
+				nErrorID := fbOpenFile.nErrId;
+				(*eErrorState := eStep;
+
+				(* abandon attempt to read file *)
+				eStep := E_CHM_DONEGENERATOR;*)
+			END_IF
+
+			(* close off fbOpenFile *)
+			fbOpenFile(bExecute := FALSE);
+		END_IF
+
+
+(*********************************************************************************************************)
+
+	sWriteString := CONCAT('Wpis nr: ',INT_TO_STRING(nIndex));
+	sWriteString := F_LongCONCAT(sWriteString,'.$R$N');
+	(*nStringLen := LEN(sWriteString);*)
+
+		rtrigWrite(CLK:= bWriteExec);
+
+		(* write data to open file *)
+		fbWriteFile(
+			sNetId		:= '',
+			hFile		:= hTarget,
+			pWriteBuff	:= ADR(sWriteString),
+			cbWriteLen	:= LEN(sWriteString),
+			bExecute	:= rtrigWrite.Q,
+			tTimeout	:= t#0S
+		);
+		ftrigWrite(CLK:= fbWriteFile.bBusy) ;
+
+		(* file write completed *)
+		IF ftrigWrite.Q THEN
+
+			(* file write completed OK *)
+			IF fbWriteFile.bError = FALSE THEN
+
+				(* log total bytes written *)
+				nWriteImageSize := fbWriteFile.cbWrite;
+				nIndex := nIndex +1;
+				(*eState := E_XML_DONE;*)
+
+			(* file write error *)
+			ELSE
+				(* no previous error *)
+			(*	IF bError = FALSE THEN*)
+
+					(* log error code and failure state *)
+					bError := TRUE;
+					nErrorID := fbWriteFile.nErrId;
+					(*eErrorState := eState;*)
+				(*END_IF*)
+
+				(*eState := E_XML_DONE;*)
+			END_IF
+
+			(* close off fbReadFile *)
+			fbWriteFile(bExecute := FALSE);
+		END_IF
+
+
+(*********************************************************************************************************)
+
+		rtrigClose(CLK:= bCloseExec);
+
+	(* close and release file for future use *)
+		fbCloseFile(
+			sNetId		:= '',
+			hFile		:= hTarget,
+			bExecute	:= rtrigClose.Q,
+			tTimeout	:= t#2s,
+		);
+
+		ftrigClose(CLK:= fbCloseFile.bBusy) ;
+
+		(* file close completed *)
+		IF ftrigClose.Q THEN
+			(* file close completed OK *)
+			IF fbCloseFile.bError = FALSE THEN
+
+				bCloseFile	:= TRUE;
+				(*IF bSkipFLGFile OR NOT bIsValid THEN
+					eStep	:=E_CHM_DONEGENERATOR;
+				ELSE
+					eStep	:=E_CHM_GENERATEFLG;
+				END_IF*)
+			(* file close error *)
+			ELSE
+
+				(* no previous error *)
+				(*IF bError = FALSE THEN*)
+
+					(* log error code and failure state *)
+					bError := TRUE;
+					nErrorID := fbCloseFile.nErrId;
+					(*eErrorState := eStep;
+				END_IF
+
+				eStep	:=E_CHM_DONEGENERATOR;*)
+			END_IF
+
+			(* close off fbCloseFile *)
+			fbCloseFile(bExecute := FALSE);
+		END_IF
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

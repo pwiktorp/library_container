@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_FILE_CompareFileTime" Id="{52138ba5-b686-4525-ae37-0e20c8cad56f}" SpecialFunc="None">
+    <Declaration><![CDATA[(* compare file time for 2 files *)
+FUNCTION F_FILE_CompareFileTime : DINT
+VAR_INPUT
+	nFileTime1		: T_FILETIME;
+	nFileTime2		: T_FILETIME;
+END_VAR
+VAR
+	nULarge1		: T_ULARGE_INTEGER;
+	nULarge2		: T_ULARGE_INTEGER;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Moved from Sewtec_CaseTrace.lib
+
+-------------------------------------------------------------------------------------------------
+06/09/2012	1.41.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+
+F_FILE_CompareFileTime > 0		nFileTime1 > nFileTime2
+F_FILE_CompareFileTime = 0		nFileTime1 = nFileTime2
+F_FILE_CompareFileTime < 0		nFileTime1 < nFileTime2
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* convert T_FILETIME to T_ULARGE_INTEGER *)
+MEMMOVE(ADR(nULarge1), ADR(nFileTime1), SIZEOF(nULarge1));
+MEMMOVE(ADR(nULarge2), ADR(nFileTime2), SIZEOF(nULarge2));
+
+(* 64-bit compare *)
+F_FILE_CompareFileTime := UInt64Cmp64(nULarge1, nULarge2);]]></ST>
+    </Implementation>
+    <LineIds Name="F_FILE_CompareFileTime">
+      <LineId Id="25" Count="5" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

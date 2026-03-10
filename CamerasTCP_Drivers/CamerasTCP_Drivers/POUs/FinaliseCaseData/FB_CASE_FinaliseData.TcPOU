@@ -1,0 +1,131 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CASE_FinaliseData" Id="{592be638-1f72-45a9-860a-5b2c1df5a46b}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_CASE_FinaliseData
+VAR_INPUT
+	bExecute 			: BOOL;		(* set TRUE to move Outers *)
+	//stCTDateTime			: ST_SYSTEM_DateTime;
+	bDoorReject				: BOOL;
+	stDoorGuardReject		: ST_RejectItems;
+END_VAR
+VAR_IN_OUT
+	stProductInstruction	: ST_PCM_Status;
+	stCodeInfo_Outer		: ST_CodeInfo;
+	stCACData 				: ST_CAC_Data;	(* Case Queue *)
+	stCACDataHMI			: ST_HMI_CAC_Data;
+
+END_VAR
+VAR_OUTPUT
+	bDone 					: BOOL;
+	bBusy					: BOOL;
+
+	bCACValid			: BOOL;
+	bCACInvalid			: BOOL;
+
+	bCheckDuplicates		: BOOL;
+	bReadyToValidate		: BOOL;
+	
+	sRejectCode				: T_MaxString;
+	sCaseContent			: T_LongSTRING;
+END_VAR
+VAR
+	rtExecute				: R_TRIG;
+	
+	nOuterIndex				: INT;
+	nPackIndex				: INT;
+	
+	sAppendedString			: T_MaxString;
+	nCaseContentLogIndex	: INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+rtExecute(CLK:= bExecute);
+
+(* validate stCACData *)
+IF rtExecute.Q THEN
+
+	(* clear outputs *)
+	bCACValid 				:= FALSE;
+	bCACInvalid 			:= FALSE;
+
+	bCheckDuplicates		:= FALSE;
+	bReadyToValidate		:= FALSE;
+	sRejectCode 	:= '';
+
+	IF bDoorReject THEN
+
+		stCACData.CaseRejectCode 	:= stDoorGuardReject.sMetsDisplayCode;
+		stCACData.CaseRejectID 		:= stDoorGuardReject.nRejectID;
+	END_IF
+	
+(******************************************************************************************************************************************)
+	(* clear HMI data *)
+	MEMSET(ADR(stCACDataHMI), 16#00, SIZEOF(stCACDataHMI));
+
+	(*copy data to stCaseQueueHMI[1]*)
+	IF stCACData.CaseRejectCode = 'OK' THEN
+		
+		(* CAC data is valid *)
+		bCACValid := TRUE;
+		bCACInvalid := FALSE;
+		
+		stCACDataHMI.sBarcode:= F_CONCAT3(stCACData.Barcode,'(999)','1');
+	ELSE
+		(* CAC data is invalid *)
+		bCACValid := FALSE;
+		bCACInvalid := TRUE;
+		
+		stCACDataHMI.sBarcode:= F_CONCAT3(stCACData.Barcode,'(999)','0');
+	END_IF
+
+	stCACDataHMI.nNumberOfOuters 	:= stCACData.NumberOfOuters;
+	stCACDataHMI.nNumberOfPacks 	:= stCACData.Outer[1].NumberOfPacks;
+
+	FOR nOuterIndex:=1 TO MIN(stCACData.NumberOfOuters, cMAX_OUTERS_PER_CASE) DO
+		
+		IF stCACData.Outer[nOuterIndex].OuterRejectCode = 'OK' THEN
+			stCACDataHMI.aOuter[nOuterIndex].sBarcode:= F_CONCAT3(stCACData.Outer[nOuterIndex].Barcode,'(999)','1');
+		ELSE
+			stCACDataHMI.aOuter[nOuterIndex].sBarcode:= F_CONCAT3(stCACData.Outer[nOuterIndex].Barcode,'(999)','0');
+		END_IF
+
+		FOR nPackIndex:=1 TO MIN(stCACData.Outer[nOuterIndex].NumberOfPacks, cMAX_PACKS_PER_OUTER) DO
+			IF stCACData.Outer[nOuterIndex].PackRejectCode[nPackIndex] = 'OK' THEN
+				stCACDataHMI.aOuter[nOuterIndex].aPackCode[nPackIndex]:= F_CONCAT3(stCACData.Outer[nOuterIndex].PackCode[nPackIndex],'(999)','1');
+			ELSE
+				stCACDataHMI.aOuter[nOuterIndex].aPackCode[nPackIndex]:= F_CONCAT3(stCACData.Outer[nOuterIndex].PackCode[nPackIndex],'(999)','0');
+			END_IF
+		END_FOR
+	END_FOR
+
+(******************************************************************************************************************************************)
+
+	sAppendedString	:= '';
+	sCaseContent 	:= '';
+	
+	sCaseContent := F_CONCAT3(' [', INT_TO_STRING(stCACData.NumberOfOuters),']:');
+	FOR nCaseContentLogIndex := 1 TO MIN(stCACData.NumberOfOuters ,cMAX_OUTERS_PER_CASE) BY 1 DO
+		//sCaseContent :=F_LongCONCAT(sCaseContent, '   ');
+		//sCaseContent := F_LongCONCAT(sCaseContent, RIGHT(F_CODE_GetItem(stCACData.Outer[nCaseContentLogIndex].Barcode, eCodeAIType.SerialCode,  stCodeInfo_Outer),7));
+	
+		CONCAT2(ADR(sCaseContent), ADR('   '), ADR(sCaseContent), SIZEOF(sCaseContent));
+	
+		sAppendedString := RIGHT(F_CODE_GetItem(stCACData.Outer[nCaseContentLogIndex].Barcode, eCodeAIType.SerialCode,  stCodeInfo_Outer),7);
+		CONCAT2(ADR(sCaseContent), ADR(sAppendedString), ADR(sCaseContent), SIZEOF(sCaseContent));
+	END_FOR
+
+(******************************************************************************************************************************************)
+
+	sRejectCode 	:= stCACData.CaseRejectCode;
+	bDone := TRUE;
+
+(* bExecute has been reset *)
+ELSIF bExecute = FALSE THEN
+
+	bDone := FALSE;
+
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

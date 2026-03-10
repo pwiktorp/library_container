@@ -1,0 +1,682 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="Outer_IN_Case_Duplicat" Id="{88e09d72-4e5c-4dea-a230-63df1449db0e}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM Outer_IN_Case_Duplicat
+VAR
+		
+	fbFIND_OuterDuplicates			: FB_FIND_OuterDuplicates;
+	fbFIND_OuterDuplicatesPiotr		: FB_FIND_OuterDuplicatesPiotr;	
+	fbFIND_OuterDuplicatesPiotrAI	: FB_FIND_OuterDuplicatesPiotrAI;
+	
+	bHasDuplicates				: BOOL;
+	nDuplicateCount				: UINT;
+	
+	rTrigAI						: R_TRIG;
+	rTrigPiotr					: R_TRIG;
+	rTrigPiotrAI					: R_TRIG;
+	bExecuteAI					: BOOL;
+	bExecutePiotr				: BOOL;
+	
+	bExecutePiotrAI				: BOOL;
+	
+	
+	// dla petli for dla stworzenia outerow 
+	rTrigDataFill	: R_TRIG;
+	bDataFill		: BOOL;
+	
+	iOuter		: UINT;
+	iPack		: UINT;
+	
+	sPackNum	: STRING;
+	sOuterNum	: STRING;
+	sPackCode	: STRING;
+	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+//CaseDataAdd();
+//Case50outersADD();
+
+FullFilOuter();
+
+rTrigAI(CLK := bExecuteAI);
+
+IF rTrigAI.Q THEN	
+	fbFIND_OuterDuplicates(
+		stCase 			:= GVL_test.stCaseFull, 
+		bHasDuplicates 	=> bHasDuplicates, 
+		nDuplicateCount => nDuplicateCount
+	);	
+	
+END_IF
+
+	
+	fbFIND_OuterDuplicatesPiotr(
+		bExecute := bExecutePiotr,
+		stCase := GVL_test.stCaseFull		
+	);
+
+rTrigPiotrAI(CLK := bExecutePiotrAI);
+
+IF rTrigPiotrAI.Q THEN	
+	fbFIND_OuterDuplicatesPiotrAI(
+		stCase := GVL_test.stCaseFull
+	);	
+	
+END_IF
+]]></ST>
+    </Implementation>
+    <Action Name="Case50outersADD" Id="{704616ea-b9c3-4109-8ce3-3940e0eef094}">
+      <Implementation>
+        <ST><![CDATA[(* ===== OUTER 1 ===== *)
+GVL_test.stCase.aOuters[1].sOuterCode    := 'OUTER1';
+GVL_test.stCase.aOuters[1].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[1].aPacks[1].sPackCode   := 'PACK01OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[1].aPacks[2].sPackCode   := 'PACK02OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[1].aPacks[3].sPackCode   := 'PACK03OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[1].aPacks[4].sPackCode   := 'PACK04OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[1].aPacks[5].sPackCode   := 'PACK05OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[1].aPacks[6].sPackCode   := 'PACK06OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[1].aPacks[7].sPackCode   := 'PACK07OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[1].aPacks[8].sPackCode   := 'PACK08OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[1].aPacks[9].sPackCode   := 'PACK09OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[1].aPacks[10].sPackCode  := 'PACK10OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 2 ===== *)
+GVL_test.stCase.aOuters[2].sOuterCode    := 'OUTER2';
+GVL_test.stCase.aOuters[2].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[2].aPacks[1].sPackCode   := 'PACK01OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[2].aPacks[2].sPackCode   := 'PACK02OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[2].aPacks[3].sPackCode   := 'PACK03OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[2].aPacks[4].sPackCode   := 'PACK04OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[2].aPacks[5].sPackCode   := 'PACK05OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[2].aPacks[6].sPackCode   := 'PACK06OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[2].aPacks[7].sPackCode   := 'PACK07OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[2].aPacks[8].sPackCode   := 'PACK08OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[2].aPacks[9].sPackCode   := 'PACK09OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[2].aPacks[10].sPackCode  := 'PACK10OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 3 ===== *)
+GVL_test.stCase.aOuters[3].sOuterCode    := 'OUTER3';
+GVL_test.stCase.aOuters[3].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[3].aPacks[1].sPackCode   := 'PACK01OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[2].sPackCode   := 'PACK02OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[3].sPackCode   := 'PACK03OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[4].sPackCode   := 'PACK04OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[5].sPackCode   := 'PACK05OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[6].sPackCode   := 'PACK06OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[7].sPackCode   := 'PACK07OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[8].sPackCode   := 'PACK08OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[9].sPackCode   := 'PACK09OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[10].sPackCode  := 'PACK10OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 4 ===== *)
+GVL_test.stCase.aOuters[4].sOuterCode    := 'OUTER4';
+GVL_test.stCase.aOuters[4].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[4].aPacks[1].sPackCode   := 'PACK01OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[2].sPackCode   := 'PACK02OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[3].sPackCode   := 'PACK03OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[4].sPackCode   := 'PACK04OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[5].sPackCode   := 'PACK05OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[6].sPackCode   := 'PACK06OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[7].sPackCode   := 'PACK07OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[8].sPackCode   := 'PACK08OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[9].sPackCode   := 'PACK09OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[10].sPackCode  := 'PACK10OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 5 ===== *)
+GVL_test.stCase.aOuters[5].sOuterCode    := 'OUTER5';
+GVL_test.stCase.aOuters[5].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[5].aPacks[1].sPackCode   := 'PACK01OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[2].sPackCode   := 'PACK02OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[3].sPackCode   := 'PACK03OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[4].sPackCode   := 'PACK04OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[5].sPackCode   := 'PACK05OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[6].sPackCode   := 'PACK06OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[7].sPackCode   := 'PACK07OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[8].sPackCode   := 'PACK08OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[9].sPackCode   := 'PACK09OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[10].sPackCode  := 'PACK10OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 6 ===== *)
+GVL_test.stCase.aOuters[6].sOuterCode    := 'OUTER6';
+GVL_test.stCase.aOuters[6].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[6].aPacks[1].sPackCode   := 'PACK01OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[2].sPackCode   := 'PACK02OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[3].sPackCode   := 'PACK03OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[4].sPackCode   := 'PACK04OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[5].sPackCode   := 'PACK05OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[6].sPackCode   := 'PACK06OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[7].sPackCode   := 'PACK07OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[8].sPackCode   := 'PACK08OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[9].sPackCode   := 'PACK09OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[10].sPackCode  := 'PACK10OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 7 ===== *)
+GVL_test.stCase.aOuters[7].sOuterCode    := 'OUTER7';
+GVL_test.stCase.aOuters[7].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[7].aPacks[1].sPackCode   := 'PACK01OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[2].sPackCode   := 'PACK02OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[3].sPackCode   := 'PACK03OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[4].sPackCode   := 'PACK04OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[5].sPackCode   := 'PACK05OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[6].sPackCode   := 'PACK06OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[7].sPackCode   := 'PACK07OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[8].sPackCode   := 'PACK08OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[9].sPackCode   := 'PACK09OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[10].sPackCode  := 'PACK10OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 8 ===== *)
+GVL_test.stCase.aOuters[8].sOuterCode    := 'OUTER8';
+GVL_test.stCase.aOuters[8].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[8].aPacks[1].sPackCode   := 'PACK01OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[2].sPackCode   := 'PACK02OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[3].sPackCode   := 'PACK03OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[4].sPackCode   := 'PACK04OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[5].sPackCode   := 'PACK05OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[6].sPackCode   := 'PACK06OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[7].sPackCode   := 'PACK07OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[8].sPackCode   := 'PACK08OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[9].sPackCode   := 'PACK09OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[10].sPackCode  := 'PACK10OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 9 ===== *)
+GVL_test.stCase.aOuters[9].sOuterCode    := 'OUTER9';
+GVL_test.stCase.aOuters[9].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[9].aPacks[1].sPackCode   := 'PACK01OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[2].sPackCode   := 'PACK02OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[3].sPackCode   := 'PACK03OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[4].sPackCode   := 'PACK04OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[5].sPackCode   := 'PACK05OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[6].sPackCode   := 'PACK06OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[7].sPackCode   := 'PACK07OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[8].sPackCode   := 'PACK08OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[9].sPackCode   := 'PACK09OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[10].sPackCode  := 'PACK10OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 10 ===== *)
+GVL_test.stCase.aOuters[10].sOuterCode    := 'OUTER10';
+GVL_test.stCase.aOuters[10].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[10].aPacks[1].sPackCode   := 'PACK01OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[2].sPackCode   := 'PACK02OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[3].sPackCode   := 'PACK03OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[4].sPackCode   := 'PACK04OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[5].sPackCode   := 'PACK05OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[6].sPackCode   := 'PACK06OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[7].sPackCode   := 'PACK07OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[8].sPackCode   := 'PACK08OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[9].sPackCode   := 'PACK09OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[10].sPackCode  := 'PACK10OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[10].nPackStatus := 5;
+////////////////////////////////////////////////////////////////////////////////////
+(* ===== OUTER 11 ===== *)
+GVL_test.stCase.aOuters[11].sOuterCode    := 'OUTER1';
+GVL_test.stCase.aOuters[11].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[11].aPacks[1].sPackCode   := 'PACK01OUTER11';
+GVL_test.stCase.aOuters[11].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[11].aPacks[2].sPackCode   := 'PACK02OUTER11';
+GVL_test.stCase.aOuters[11].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[11].aPacks[3].sPackCode   := 'PACK03OUTER11';
+GVL_test.stCase.aOuters[11].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[11].aPacks[4].sPackCode   := 'PACK04OUTER11';
+GVL_test.stCase.aOuters[11].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[11].aPacks[5].sPackCode   := 'PACK05OUTER11';
+GVL_test.stCase.aOuters[11].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[11].aPacks[6].sPackCode   := 'PACK06OUTER11';
+GVL_test.stCase.aOuters[11].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[11].aPacks[7].sPackCode   := 'PACK07OUTER11';
+GVL_test.stCase.aOuters[11].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[11].aPacks[8].sPackCode   := 'PACK08OUTER11';
+GVL_test.stCase.aOuters[11].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[11].aPacks[9].sPackCode   := 'PACK09OUTER11';
+GVL_test.stCase.aOuters[11].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[11].aPacks[10].sPackCode  := 'PACK10OUTER11';
+GVL_test.stCase.aOuters[11].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 12 ===== *)
+GVL_test.stCase.aOuters[12].sOuterCode    := 'OUTER2';
+GVL_test.stCase.aOuters[12].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[12].aPacks[1].sPackCode   := 'PACK01OUTER12';
+GVL_test.stCase.aOuters[12].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[12].aPacks[2].sPackCode   := 'PACK02OUTER12';
+GVL_test.stCase.aOuters[12].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[12].aPacks[3].sPackCode   := 'PACK03OUTER12';
+GVL_test.stCase.aOuters[12].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[12].aPacks[4].sPackCode   := 'PACK04OUTER12';
+GVL_test.stCase.aOuters[12].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[12].aPacks[5].sPackCode   := 'PACK05OUTER12';
+GVL_test.stCase.aOuters[12].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[12].aPacks[6].sPackCode   := 'PACK06OUTER12';
+GVL_test.stCase.aOuters[12].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[12].aPacks[7].sPackCode   := 'PACK07OUTER12';
+GVL_test.stCase.aOuters[12].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[12].aPacks[8].sPackCode   := 'PACK08OUTER12';
+GVL_test.stCase.aOuters[12].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[12].aPacks[9].sPackCode   := 'PACK09OUTER12';
+GVL_test.stCase.aOuters[12].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[12].aPacks[10].sPackCode  := 'PACK10OUTER12';
+GVL_test.stCase.aOuters[12].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 3 ===== *)
+GVL_test.stCase.aOuters[3].sOuterCode    := 'OUTER3';
+GVL_test.stCase.aOuters[3].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[3].aPacks[1].sPackCode   := 'PACK01OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[2].sPackCode   := 'PACK02OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[3].sPackCode   := 'PACK03OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[4].sPackCode   := 'PACK04OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[5].sPackCode   := 'PACK05OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[6].sPackCode   := 'PACK06OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[7].sPackCode   := 'PACK07OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[8].sPackCode   := 'PACK08OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[9].sPackCode   := 'PACK09OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[3].aPacks[10].sPackCode  := 'PACK10OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 4 ===== *)
+GVL_test.stCase.aOuters[4].sOuterCode    := 'OUTER4';
+GVL_test.stCase.aOuters[4].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[4].aPacks[1].sPackCode   := 'PACK01OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[2].sPackCode   := 'PACK02OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[3].sPackCode   := 'PACK03OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[4].sPackCode   := 'PACK04OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[5].sPackCode   := 'PACK05OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[6].sPackCode   := 'PACK06OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[7].sPackCode   := 'PACK07OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[8].sPackCode   := 'PACK08OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[9].sPackCode   := 'PACK09OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[4].aPacks[10].sPackCode  := 'PACK10OUTER4';
+GVL_test.stCase.aOuters[4].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 5 ===== *)
+GVL_test.stCase.aOuters[5].sOuterCode    := 'OUTER5';
+GVL_test.stCase.aOuters[5].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[5].aPacks[1].sPackCode   := 'PACK01OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[2].sPackCode   := 'PACK02OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[3].sPackCode   := 'PACK03OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[4].sPackCode   := 'PACK04OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[5].sPackCode   := 'PACK05OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[6].sPackCode   := 'PACK06OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[7].sPackCode   := 'PACK07OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[8].sPackCode   := 'PACK08OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[9].sPackCode   := 'PACK09OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[5].aPacks[10].sPackCode  := 'PACK10OUTER5';
+GVL_test.stCase.aOuters[5].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 6 ===== *)
+GVL_test.stCase.aOuters[6].sOuterCode    := 'OUTER6';
+GVL_test.stCase.aOuters[6].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[6].aPacks[1].sPackCode   := 'PACK01OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[2].sPackCode   := 'PACK02OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[3].sPackCode   := 'PACK03OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[4].sPackCode   := 'PACK04OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[5].sPackCode   := 'PACK05OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[6].sPackCode   := 'PACK06OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[7].sPackCode   := 'PACK07OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[8].sPackCode   := 'PACK08OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[9].sPackCode   := 'PACK09OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[6].aPacks[10].sPackCode  := 'PACK10OUTER6';
+GVL_test.stCase.aOuters[6].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 7 ===== *)
+GVL_test.stCase.aOuters[7].sOuterCode    := 'OUTER7';
+GVL_test.stCase.aOuters[7].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[7].aPacks[1].sPackCode   := 'PACK01OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[2].sPackCode   := 'PACK02OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[3].sPackCode   := 'PACK03OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[4].sPackCode   := 'PACK04OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[5].sPackCode   := 'PACK05OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[6].sPackCode   := 'PACK06OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[7].sPackCode   := 'PACK07OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[8].sPackCode   := 'PACK08OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[9].sPackCode   := 'PACK09OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[7].aPacks[10].sPackCode  := 'PACK10OUTER7';
+GVL_test.stCase.aOuters[7].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 8 ===== *)
+GVL_test.stCase.aOuters[8].sOuterCode    := 'OUTER8';
+GVL_test.stCase.aOuters[8].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[8].aPacks[1].sPackCode   := 'PACK01OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[2].sPackCode   := 'PACK02OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[3].sPackCode   := 'PACK03OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[4].sPackCode   := 'PACK04OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[5].sPackCode   := 'PACK05OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[6].sPackCode   := 'PACK06OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[7].sPackCode   := 'PACK07OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[8].sPackCode   := 'PACK08OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[9].sPackCode   := 'PACK09OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[8].aPacks[10].sPackCode  := 'PACK10OUTER8';
+GVL_test.stCase.aOuters[8].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 9 ===== *)
+GVL_test.stCase.aOuters[9].sOuterCode    := 'OUTER9';
+GVL_test.stCase.aOuters[9].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[9].aPacks[1].sPackCode   := 'PACK01OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[2].sPackCode   := 'PACK02OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[3].sPackCode   := 'PACK03OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[4].sPackCode   := 'PACK04OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[5].sPackCode   := 'PACK05OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[6].sPackCode   := 'PACK06OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[7].sPackCode   := 'PACK07OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[8].sPackCode   := 'PACK08OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[9].sPackCode   := 'PACK09OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[9].aPacks[10].sPackCode  := 'PACK10OUTER9';
+GVL_test.stCase.aOuters[9].aPacks[10].nPackStatus := 5;
+
+(* ===== OUTER 10 ===== *)
+GVL_test.stCase.aOuters[10].sOuterCode    := 'OUTER10';
+GVL_test.stCase.aOuters[10].nOutersStatus := 5;
+// packs 1..10
+GVL_test.stCase.aOuters[10].aPacks[1].sPackCode   := 'PACK01OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[1].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[2].sPackCode   := 'PACK02OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[2].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[3].sPackCode   := 'PACK03OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[3].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[4].sPackCode   := 'PACK04OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[4].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[5].sPackCode   := 'PACK05OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[5].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[6].sPackCode   := 'PACK06OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[6].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[7].sPackCode   := 'PACK07OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[7].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[8].sPackCode   := 'PACK08OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[8].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[9].sPackCode   := 'PACK09OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[9].nPackStatus := 5;
+GVL_test.stCase.aOuters[10].aPacks[10].sPackCode  := 'PACK10OUTER10';
+GVL_test.stCase.aOuters[10].aPacks[10].nPackStatus := 5;
+]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="CaseDataAdd" Id="{94b866f2-fd59-4193-adbd-e54560636a75}">
+      <Implementation>
+        <ST><![CDATA[(*     outer 1 data     *)
+GVL_test.stCase.aOuters[1].sOuterCode 	:= 'OUTER1';
+GVL_test.stCase.aOuters[1].nOutersStatus	:= 5;
+// packs 1..10
+GVL_test.stCase.aOuters[1].aPacks[1].sPackCode 		:= 'PACK01OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[1].nPackStatus 	:= 5;
+GVL_test.stCase.aOuters[1].aPacks[2].sPackCode 		:= 'PACK02OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[2].nPackStatus 	:= 5;
+GVL_test.stCase.aOuters[1].aPacks[3].sPackCode 		:= 'PACK03OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[3].nPackStatus 	:= 5;
+GVL_test.stCase.aOuters[1].aPacks[4].sPackCode 		:= 'PACK04OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[4].nPackStatus 	:= 5;
+GVL_test.stCase.aOuters[1].aPacks[5].sPackCode 		:= 'PACK05OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[5].nPackStatus 	:= 5;
+GVL_test.stCase.aOuters[1].aPacks[6].sPackCode 		:= 'PACK06OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[6].nPackStatus 	:= 5;
+GVL_test.stCase.aOuters[1].aPacks[7].sPackCode 		:= 'PACK07OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[7].nPackStatus 	:= 5;
+GVL_test.stCase.aOuters[1].aPacks[8].sPackCode 		:= 'PACK08OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[8].nPackStatus 	:= 5;
+GVL_test.stCase.aOuters[1].aPacks[9].sPackCode 		:= 'PACK09OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[9].nPackStatus 	:= 5;
+GVL_test.stCase.aOuters[1].aPacks[10].sPackCode 	:= 'PACK10OUTER1';
+GVL_test.stCase.aOuters[1].aPacks[10].nPackStatus 	:= 5;
+
+
+
+(*     outer 1 data     *)
+GVL_test.stCase.aOuters[2].sOuterCode 	:= 'OUTER1';
+GVL_test.stCase.aOuters[2].nOutersStatus	:= 5;
+// packs 1 data
+GVL_test.stCase.aOuters[2].aPacks[1].sPackCode 	:= 'PACK01OUTER1';
+GVL_test.stCase.aOuters[2].aPacks[1].nPackStatus := 5;
+// packs 2 data
+GVL_test.stCase.aOuters[2].aPacks[2].sPackCode 	:= 'PACK02OUTER1';
+GVL_test.stCase.aOuters[2].aPacks[2].nPackStatus := 5;
+// packs 3 data
+GVL_test.stCase.aOuters[2].aPacks[3].sPackCode 	:= 'PACK03OUTER1';
+GVL_test.stCase.aOuters[2].aPacks[3].nPackStatus := 5;
+
+(*     outer 2 data     *)
+GVL_test.stCase.aOuters[2].sOuterCode 	:= 'OUTER2';
+GVL_test.stCase.aOuters[2].nOutersStatus	:= 5;
+// packs 1 data
+GVL_test.stCase.aOuters[2].aPacks[1].sPackCode 	:= 'PACK01OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[1].nPackStatus := 5;
+// packs 2 data
+GVL_test.stCase.aOuters[2].aPacks[2].sPackCode 	:= 'PACK02OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[2].nPackStatus := 5;
+// packs 3 data
+GVL_test.stCase.aOuters[2].aPacks[3].sPackCode 	:= 'PACK03OUTER2';
+GVL_test.stCase.aOuters[2].aPacks[3].nPackStatus := 5;
+
+
+(*     outer 3 data     *)
+GVL_test.stCase.aOuters[3].sOuterCode 	:= 'OUTER3';
+GVL_test.stCase.aOuters[3].nOutersStatus	:= 5;
+// packs 1 data
+GVL_test.stCase.aOuters[3].aPacks[1].sPackCode 	:= 'PACK01OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[1].nPackStatus := 5;
+// packs 2 data
+GVL_test.stCase.aOuters[3].aPacks[2].sPackCode 	:= 'PACK02OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[2].nPackStatus := 5;
+// packs 3 data
+GVL_test.stCase.aOuters[3].aPacks[3].sPackCode 	:= 'PACK03OUTER3';
+GVL_test.stCase.aOuters[3].aPacks[3].nPackStatus := 5;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="FullFilOuter" Id="{c662fc31-18d1-4555-8ef9-6a4256bcc23a}">
+      <Implementation>
+        <ST><![CDATA[
+rTrigDataFill(CLK := bDataFill);
+
+IF rTrigDataFill.Q THEN
+	
+	FOR iOuter := 1 TO 50 DO
+		(* Ustaw outer *)
+		GVL_test.stCaseFull.aOuters[iOuter].sOuterCode    := CONCAT('OUTER', INT_TO_STRING(iOuter));
+		GVL_test.stCaseFull.aOuters[iOuter].nOutersStatus := 5;
+		
+		FOR iPack := 1 TO 10 DO
+			(* Pack number z zerami *)
+			sPackNum := CONCAT('0', INT_TO_STRING(iPack));  (* dla 1-9: '01'-'09' *)
+			IF iPack = 10 THEN
+				sPackNum := '10';
+			END_IF;
+			
+			(* Outer number z zerami dla 1-9 *)
+			sOuterNum := CONCAT('0', INT_TO_STRING(iOuter));
+			IF iOuter >= 10 THEN
+				sOuterNum := INT_TO_STRING(iOuter);
+			END_IF;
+			
+			(* Sklej pack code *)
+			sPackCode := CONCAT(CONCAT('PACK', sPackNum), CONCAT('OUTER', sOuterNum));
+			
+			(* Przypisz *)
+			GVL_test.stCaseFull.aOuters[iOuter].aPacks[iPack].sPackCode   := sPackCode;
+			GVL_test.stCaseFull.aOuters[iOuter].aPacks[iPack].nPackStatus := 5;
+		END_FOR;
+	END_FOR;
+	
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+  </POU>
+</TcPlcObject>

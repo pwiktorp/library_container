@@ -1,0 +1,59 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_LongShortPress" Id="{899479c3-6cde-4f36-8fd6-255b2f2e3f63}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_LongShortPress
+(*
+Version history:
+Date		|	Version/Author 		|	Remark
+----------------------------------------------------------------------------------------------------
+04.07.12	|	2.000.001	PSA		|	Original Version
+									|	Sets the outputs depending on the length of time the input is pressed
+*)
+VAR_INPUT
+	bInput							: BOOL; 				(* input for ths block *)
+	tSwitchTime						: TIME; 				(* time the input needs to be high before it is classed as a long press *)
+END_VAR
+VAR_OUTPUT
+	bOutput							: BOOL;					(* Mirrors the input *)
+	bShortPress						: BOOL; 				(* we have seen a short press *)
+	bLongPress		 				: BOOL; 				(* we are seeing a long press *)
+	bLongPressPulse	 				: BOOL; 				(* Pulse output for the long press *)
+END_VAR
+VAR
+	bTimerRunOnce					: BOOL;
+	fbTimer							: TON;
+	fbStartTrig						: R_TRIG;
+	fbFTrig							: F_TRIG;
+	fbRTrig							: R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbStartTrig(CLK := bInput);
+IF fbStartTrig.Q THEN
+	bTimerRunOnce := FALSE;
+END_IF
+
+fbTimer(IN := bInput, PT := tSwitchTime);
+fbFTrig(CLK := bInput);
+IF fbFTrig.Q AND NOT bTimerRunOnce THEN
+	bShortPress := TRUE;
+ELSE
+	bShortPress := FALSE;
+END_IF
+
+bLongPress := fbTimer.Q;
+
+fbRTrig(CLK := fbTimer.Q);
+bLongPressPulse :=  fbRTrig.Q;
+
+
+IF fbTimer.Q THEN
+	bTimerRunOnce := TRUE;
+END_IF
+
+ bOutput:= binput;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_LongShortPress">
+      <LineId Id="25" Count="23" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

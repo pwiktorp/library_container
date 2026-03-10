@@ -1,0 +1,81 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_OUTER_GetRejectReasonFSS" Id="{dc4f1178-fd77-4dc4-bf81-968f553b3761}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_OUTER_GetRejectReasonFSS : T_FSS_RejecCode
+VAR_INPUT
+	sRejectReasonME			:	STRING(255);
+	stOuterRejectReasons	: ST_RejectReasonsForOuter;
+END_VAR
+VAR
+	sRejectReasonFSS:	T_FSS_RejecCode;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF sRejectReasonME = 'OK' THEN
+	sRejectReasonFSS := '';
+
+ELSIF sRejectReasonME = '' THEN
+	sRejectReasonFSS := stOuterRejectReasons.stUnknownOuterReject.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterBarcodeGtinError.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterBarcodeGtinError.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterBarcodeRskuError.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterBarcodeRskuError.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterCodeSerialError.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterCodeSerialError.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterBarcodeInvalidLength.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterBarcodeInvalidLength.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterBarcodeNotRead.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterBarcodeNotRead.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterBarcodeDuplicate.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterBarcodeDuplicate.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME,stOuterRejectReasons.stOuterDataNotFound.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterDataNotFound.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterGeneralCodeError.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterGeneralCodeError.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterTimeOutValidation.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterTimeOutValidation.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterDuplicatedPackCodesFound.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterDuplicatedPackCodesFound.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterPackCodeDataNotFound.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterPackCodeDataNotFound.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterConfirmCodeNotRead.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterConfirmCodeNotRead.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterPackCodeInvalid.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterPackCodeInvalid.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterPackCodeNotRead.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterPackCodeNotRead.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterQAReject.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterQAReject.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterPackCodeDBError.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterPackCodeDBError.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterBarcodeDBError.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterBarcodeDBError.sFssSendCode;
+
+ELSIF FIND(sRejectReasonME, stOuterRejectReasons.stOuterCodesBrandSpecError.sMetsSearchCode) > 0 THEN
+	sRejectReasonFSS := stOuterRejectReasons.stOuterCodesBrandSpecError.sFssSendCode;
+
+ELSE
+	sRejectReasonFSS := stOuterRejectReasons.stUnknownOuterReject.sFssSendCode;
+END_IF
+
+F_OUTER_GetRejectReasonFSS := sRejectReasonFSS;
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

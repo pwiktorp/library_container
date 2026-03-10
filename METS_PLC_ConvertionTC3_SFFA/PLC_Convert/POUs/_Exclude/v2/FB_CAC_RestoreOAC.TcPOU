@@ -1,0 +1,400 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_CAC_RestoreOAC" Id="{719463bf-0ee4-4960-b585-b79f3d3d54bf}" SpecialFunc="None">
+    <Declaration><![CDATA[(* reads CAC files from CAC folder and archives OAC file *)
+FUNCTION_BLOCK FB_CAC_RestoreOAC
+VAR_INPUT
+	bExecute					: BOOL;		(* set TRUE to check for CAC files to be restored *)
+	ePackAggregationMode	: E_SYSTEM_PackAggregationMode ;
+	sLocalOCVPath				: STRING(255);	(* TEMP folder path *)
+	sLocalOACPath				: STRING(255);	(* path to OAC folder *)
+	sLocalCACPath				: STRING(255);	(* path to CAC Watch folder *)
+	nPacksPerOuter			: INT;
+	nPackPos1					: INT 	:=1;
+	nPackPos2					: INT	:=2;
+	bUseInterimCodeForValidation	 : BOOL;
+END_VAR
+VAR_IN_OUT
+	stCodeInfo_Pack			: ST_CodeInfo;
+	stCodeInfo_Intermediate		: ST_CodeInfo;
+	stCodeInfo_Case			: ST_CodeInfo;
+END_VAR
+VAR_OUTPUT
+	bDone 					: BOOL;		(* TRUE = OAC restore complete *)
+	bBusy 					: BOOL;		(* TRUE = OAC restore active *)
+	bError 					: BOOL;		(* TRUE = OAC restore error *)
+	nErrorID					: UDINT;	(* error code *)
+	sCACRestored				: STRING;
+	nOCVFilesRestored			: UDINT;
+	nOACFilesRestored			: UDINT;
+	nCACFilesRestored			: UDINT;
+END_VAR
+VAR
+	fbExecute					: R_TRIG;
+	eState					: E_CAC_State;
+	eErrorState				: E_CAC_State;
+	stOCVPackStatus			: ST_OUTER_Status;
+	stCACData					: ST_CAC_Data;
+	fbFindCACFile				: FB_EnumFindFileEntry;
+	eCmdType				: E_EnumCmdType;
+	strOACFile				: T_OAC_Filename;
+	strCACFile				: T_CAC_Filename;
+	fbReadCACData			: FB_XmlSrvRead;
+	nOuterIndex				: INT;
+	fbWriteOACFile			: FB_OAC_WriteFile;
+	nOCVindex				: INT;
+	fbWriteOCVFile			: FB_OCV_WriteFile;
+	fbCopyFile				: FB_FILE_CopyByByte;
+	fbDeleteFile				: FB_FileDelete;
+
+	aOCVFileCodeName			: ARRAY[1..2] OF T_MaxString;
+
+	bAggregationCodes1Valid			: BOOL;
+	bAggregationCodes2Valid			: BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* monitor bExecute for rising edge *)
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_CAC_IDLE:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			nOuterIndex	:=0;
+			nOCVindex	:=0;
+
+			(* clear outputs *)
+			nOCVFilesRestored :=0;
+			nOACFilesRestored := 0;
+			nCACFilesRestored := 0;
+
+			(* initiliase vars *)
+			eCmdType := eEnumCmd_First;
+			eErrorState := eState;
+			sCACRestored	:= '';
+			MEMSET(ADR(strCACFile), 16#00, SIZEOF(strCACFile));
+			MEMSET(ADR(aOCVFileCodeName), 16#00, SIZEOF(aOCVFileCodeName));
+
+			eState := E_CAC_FINDFILE;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* clear outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* build list of CAC files to be restored *)
+	E_CAC_FINDFILE:
+
+		(* build list *)
+		fbFindCACFile(
+			sNetId		:= '',
+			sPathName	:= F_CONCAT3(sLocalCACPath, 'Restore\', 'CAC_*.xml'),
+			eCmd		:= eCmdType,
+			bExecute	:= TRUE,
+			tTimeout	:= T#5s
+		);
+
+		(* find CAC file complete *)
+		IF fbFindCACFile.bBusy = FALSE THEN
+
+			(* find CAC file completed OK *)
+			IF fbFindCACFile.bError = FALSE THEN
+
+				(* end of CAC file list *)
+				IF fbFindCACFile.bEOE = TRUE OR eCmdType = eEnumCmd_Abort THEN
+
+					eState := E_CAC_DONE;
+
+				(* next CAC file *)
+				ELSE
+
+					(* next CAC file *)
+					strCACFile := fbFindCACFile.stFindFile.sFileName;
+					sCACRestored := MID(strCACFile,  stCodeInfo_Case.stSerialCode.nCodeLength,stCodeInfo_Case.stSerialCode.nCodeStartPos + LEN('CAC_'));
+					eCmdType := eEnumCmd_Next;
+					MEMSET(ADR(stCACData), 16#00, SIZEOF(stCACData));
+
+					eState := E_CAC_READDATA;
+				END_IF
+
+			(* find CAC file error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbFindCACFile.nErrID;
+				eErrorState := eState;
+
+				eState := E_CAC_DONE;
+			END_IF
+
+			(* close off fbFindCACFile *)
+			fbFindCACFile(bExecute := FALSE);
+		END_IF
+
+
+	(* load CAC file *)
+	E_CAC_READDATA:
+
+		(* load CAC data *)
+		fbReadCACData(
+			sNetId		:= '',
+			ePath		:= PATH_GENERIC,
+			nMode		:= XMLSRV_SKIPMISSING,
+			pSymAddr	:= ADR(stCACData),
+			cbSymSize	:= SIZEOF(stCACData),
+			sFilePath	:= F_CONCAT3(sLocalCACPath, 'Restore\', strCACFile),
+			sXPath		:= '/Case',
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* load CAC data complete *)
+		IF fbReadCACData.bBusy = FALSE THEN
+
+			(* load CAC data completed OK *)
+			IF fbReadCACData.bError = FALSE THEN
+
+				(* first Outer *)
+				nOuterIndex := 1;
+
+				eState := E_CAC_WRITEDATA;
+
+			(* load CAC data error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbReadCACData.nErrId;
+				eErrorState := eState;
+
+				eState := E_CAC_FINDFILE;
+			END_IF
+
+			(* close off fbReadCACData *)
+			fbReadCACData(bExecute := FALSE);
+		END_IF
+
+
+	(* create OAC files *)
+	E_CAC_WRITEDATA:
+
+		FOR nOCVindex :=1 TO stCACData.Outer[nOuterIndex].NumberOfPacks DO
+			stCACData.Outer[nOuterIndex].PackCodeStatus[nOCVindex].8 := TRUE;
+		END_FOR
+
+		fbWriteOACFile(
+			bExecute			:= TRUE,
+			sLocalOACPath	:= sLocalOACPath,
+			stOACData			:= stCACData.Outer[nOuterIndex],
+			sOACFile		=> strOACFile
+		);
+
+		(* create folder complete *)
+		IF fbWriteOACFile.bDone = TRUE THEN
+
+			(* write OAC file completed OK *)
+			IF fbWriteOACFile.bError = FALSE THEN
+
+				(* total OAC files restored *)
+				nOACFilesRestored := nOACFilesRestored + 1;
+			END_IF
+
+			eState := E_CAC_CREATEOCVDATA;
+
+			(* close off fbWriteOACFile *)
+			fbWriteOACFile(bExecute := FALSE);
+		END_IF
+(* write OCVC file *)
+	E_CAC_CREATEOCVDATA:
+
+			bAggregationCodes1Valid := FALSE;
+			bAggregationCodes2Valid := FALSE;
+
+			stOCVPackStatus.stOACData := stCACData.Outer[nOuterIndex];
+			stOCVPackStatus.nTriggerID :=9999;
+
+			FOR nOCVindex :=1 TO stOCVPackStatus.stOACData.NumberOfPacks DO
+
+				IF	stOCVPackStatus.stOACData.PackCode[nOCVindex] <> '' THEN
+					(*stOCVPackStatus.stOACData.PackRejectCode[nOCVindex] := 'OK';
+					stOCVPackStatus.stOACData.PackRejectID[nOCVindex] := 0;
+					stOCVPackStatus.aPackSUPIResult[nOCVindex]:= nSUPIIdentyfication;*)
+					stOCVPackStatus.aOACPackStatus[nOCVindex] :=5;
+				ELSE
+					(*stOCVPackStatus.stOACData.PackRejectCode[nOCVindex] := 'Pack code(s)  no read';
+					stOCVPackStatus.stOACData.PackRejectID[nOCVindex] := 101;*)
+					stOCVPackStatus.aOACPackStatus[nOCVindex] :=0;
+					(*stOCVPackStatus.aPackSUPIResult[nOCVindex]:= -2;*)
+				END_IF
+
+				stOCVPackStatus.aPackCodeFilledIn[nOCVindex] := E_PACK_CODERESTOREDCAC;
+				stOCVPackStatus.aPackCodes[nOCVindex].sBuffer[1].strCode := stOCVPackStatus.stOACData.PackCode[nOCVindex];
+				stOCVPackStatus.aPackCodes[nOCVindex].sBuffer[1].nStatus := stOCVPackStatus.aOACPackStatus[nOCVindex];
+				stOCVPackStatus.aPackCodes[nOCVindex].sBuffer[1].nStringSize := LEN(stOCVPackStatus.stOACData.PackCode[nOCVindex]);
+				stOCVPackStatus.aPackCodes[nOCVindex].sBuffer[2].strCode := stOCVPackStatus.stOACData.PackCode[nOCVindex];
+				stOCVPackStatus.aPackCodes[nOCVindex].sBuffer[2].nStatus := stOCVPackStatus.aOACPackStatus[nOCVindex];
+				stOCVPackStatus.aPackCodes[nOCVindex].sBuffer[2].nStringSize := LEN(stOCVPackStatus.stOACData.PackCode[nOCVindex]);
+			END_FOR
+
+		eState := E_CAC_WRITEOCVDATA;
+
+	E_CAC_WRITEOCVDATA:
+
+		aOCVFileCodeName[1]	:=	F_CodeToHex(F_CODE_GetItem(stOCVPackStatus.stOACData.AggregationCodes[1] , eCodeAIType.SerialCode,
+																				SEL(bUseInterimCodeForValidation, stCodeInfo_Pack, stCodeInfo_Intermediate)));
+		aOCVFileCodeName[2]	:=	F_CodeToHex(F_CODE_GetItem(stOCVPackStatus.stOACData.AggregationCodes[2] , eCodeAIType.SerialCode,   stCodeInfo_Pack)); (*no reason to have 2 diffrent intermediate codes*)
+
+		IF F_InvalidateASCIIChar(aOCVFileCodeName[1]) =	0 	THEN bAggregationCodes1Valid := nPackPos1 <> 0 OR  bUseInterimCodeForValidation;  	END_IF
+		IF F_InvalidateASCIIChar(aOCVFileCodeName[2]) =	0 	THEN bAggregationCodes2Valid := nPackPos2 <> 0; 		END_IF
+
+		(* write OCV file *)
+		fbWriteOCVFile(
+			bExecute					:= TRUE,
+			sTargetPath				:= sLocalOCVPath,
+			ePackAggregationMode	:= ePackAggregationMode,
+			nPacksPerOuter			:= nPacksPerOuter,
+			aOCVFileCodeName		:= aOCVFileCodeName,  (*strAggregationCodes is a table*)
+			bSkipWriteFile1			:= NOT bAggregationCodes1Valid,
+			bSkipWriteFile2			:= NOT bAggregationCodes2Valid,
+			stOCVPackStatus			:= stOCVPackStatus
+			);
+
+
+		(*IF F_PACK_ValidateCodeASCII(F_CODE_GetItem(stOCVPackStatus.stOACData.PackCode[nPackPos1], eCodeAIType.SerialCode, stMachineConfig.stCodeInfo_Pack)) =
+						stMachineConfig.stCodeInfo_Pack.stSerialCode.nCodeLength 	 THEN bPackCode1Valid := TRUE;  	END_IF
+
+		IF	F_PACK_ValidateCodeASCII(F_CODE_GetItem(stOCVPackStatus.stOACData.PackCode[nPackPos2], eCodeAIType.SerialCode, stMachineConfig.stCodeInfo_Pack)) =
+						stMachineConfig.stCodeInfo_Pack.stSerialCode.nCodeLength 	THEN bPackCode2Valid := TRUE; 	END_IF
+
+		(* write OCV file *)
+		fbWriteOCVFile(
+			bExecute				:= TRUE,
+			strTargetPath			:= sLocalOCVPath,
+			nPacksPerOuter		:= nPacksPerOuter,
+			nPackPos1			:= nPackPos1,
+			bSkipWriteFile1		:= NOT bPackCode1Valid,
+			nPackPos2			:= nPackPos2,
+			bSkipWriteFile2		:= NOT bPackCode2Valid,
+			stOCVPackStatus		:= stOCVPackStatus
+			);*)
+
+		(* write OCV file complete *)
+		IF fbWriteOCVFile.bDone = TRUE THEN
+
+			(* write OCV file completed OK *)
+			IF fbWriteOCVFile.bError = FALSE THEN
+
+				nOCVFilesRestored	:= nOCVFilesRestored +2;
+
+			END_IF
+
+			nOuterIndex := nOuterIndex + 1;
+			(* last Outer *)
+			IF nOuterIndex > stCACData.NumberOfOuters THEN
+
+				(* total CAC files restored *)
+				nCACFilesRestored := nCACFilesRestored + 1;
+
+				eState := E_CAC_COPYFILE;
+			(* not last Outer *)
+			ELSE
+
+			eState := E_CAC_WRITEDATA;
+			END_IF
+
+			(* close off fbWriteOCVFile*)
+			fbWriteOCVFile(bExecute := FALSE);
+		END_IF
+	(* copy CAC file to archive folder *)
+	E_CAC_COPYFILE:
+
+		(* copy CAC file *)
+		fbCopyFile(
+			bExecute		:= TRUE,
+			strPathSource	:= F_CONCAT3(sLocalCACPath, 'Restore\', strCACFile),
+			strPathTarget	:= F_CONCAT3(sLocalCACPath, 'Restore\Archive\', strCACFile),
+			strFileName		:= '',
+			tTimeout		:= T#1s
+		);
+
+		(* copy file complete *)
+		IF fbCopyFile.bBusy = FALSE THEN
+
+			(* copy file completed OK or CAC file not found *)
+			IF fbCopyFile.bError = FALSE THEN
+
+				eState := E_CAC_DELETEFILE;
+
+			(* copy command error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbCopyFile.nErrorId;
+				eErrorState := eState;
+
+				eState := E_CAC_DELETEFILE;
+			END_IF
+
+			(* close off fbCopyFile *)
+			fbCopyFile(bExecute := FALSE);
+		END_IF
+
+	(* delete CAC file *)
+	E_CAC_DELETEFILE:
+
+		(* delete file *)
+		fbDeleteFile(
+			sNetId		:= '',
+			sPathName	:= F_CONCAT3(sLocalCACPath, 'Restore\', strCACFile),
+			ePath		:= PATH_GENERIC,
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* delete file complete *)
+		IF fbDeleteFile.bBusy = FALSE THEN
+
+			eState := E_CAC_FINDFILE;
+
+			(* close off fbDeleteFile *)
+			fbDeleteFile(bExecute  := FALSE);
+		END_IF
+
+
+	(* complete *)
+	E_CAC_DONE:
+
+		(* update outputs *)
+		bBusy := FALSE;
+		bDone := TRUE;
+
+		eState := E_CAC_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_CAC_IDLE;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_CAC_RestoreOAC">
+      <LineId Id="52" Count="337" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="IO_logic" Id="{8aa503b4-d171-493d-9427-1ae9c1741943}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM IO_logic
+VAR
+	rtrigCameraTrigger			: R_TRIG;
+	tTimerCameraTrigger			: TOF;
+	tTrigerTime					: time := T#5ms;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+rtrigCameraTrigger(CLK := gvl.bTriggerButton);
+
+tTimerCameraTrigger(IN:= rtrigCameraTrigger.Q, PT:= tTrigerTime);
+GVL.bTriggerOutput := tTimerCameraTrigger.Q;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

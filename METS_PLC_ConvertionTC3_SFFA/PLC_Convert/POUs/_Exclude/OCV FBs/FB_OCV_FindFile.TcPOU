@@ -1,0 +1,151 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_OCV_FindFile" Id="{78ff03c5-0b4c-48b9-8226-25a4e038d556}" SpecialFunc="None">
+    <Declaration><![CDATA[(* converts strOuterBarcode to OCV filename and loads data *)
+FUNCTION_BLOCK FB_OCV_FindFile
+VAR_INPUT
+	bExecute				: BOOL;		(* set TRUE to load OCV file *)
+	strPackBarcode			: T_PACK_Barcode;	(* Outer barcode *)
+	strLocalOCVPath		: STRING(50);	(* local OCV path *)
+	stPCMStatus			: ST_PCM_Status;
+	bUseInterimCodeForValidation	: BOOL;
+END_VAR
+VAR_IN_OUT
+	stCodeInfo_Pack			: ST_CodeInfo;
+	stCodeInfo_Intermediate		: ST_CodeInfo;
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;		(* TRUE = find file complete *)
+	bBusy				: BOOL;		(* TRUE = find file in progress *)
+	bError				: BOOL;		(* TRUE = error occurred *)
+	nErrorID				: UDINT;		(* error code *)
+	bOCVFileFound		: BOOL;		(* TRUE = OCV file found *)
+	bOCVFileValid		: BOOL;		(* TRUE - OCV file valide*)
+	strLastCode			: T_PACK_Barcode;
+	strLastOCVFile			: T_OCV_Filename;	(* OCV filename *)
+END_VAR
+VAR
+	fbExecute				: R_TRIG;
+	eState				: E_OCV_State;
+	eCodeAIType			: E_CodeAIType;
+	fbReadFile			: FB_XmlSrvRead;
+	sOCVFound			: ST_OUTER_Status;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_OCV_IDLE:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* initialise outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			(* convert strOuterBarcode to OAC filename *)
+			bOCVFileFound := FALSE;
+			bOCVFileValid := FALSE;
+			MEMSET(ADR(strLastCode), 16#00, SIZEOF(strLastCode));
+			strLastCode := strPackBarcode;
+
+			strLastOCVFile := F_CONCAT3('OCV_', F_CodeToHex(F_CODE_GetItem(strPackBarcode , eCodeAIType.SerialCode,
+																SEL(bUseInterimCodeForValidation, stCodeInfo_Pack, stCodeInfo_Intermediate))), '.xml');
+
+			eState := E_OCV_READFILE;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			(*bOCVFileFound := FALSE;*)
+			(*bOCVFileValide := FALSE;*)
+		END_IF
+
+
+	(* read OCV file *)
+	E_OCV_READFILE:
+
+		(* read OCV file *)
+		fbReadFile(
+			sNetId		:= '',
+			ePath		:= PATH_GENERIC,
+			nMode		:= XMLSRV_SKIPMISSING,
+			pSymAddr	:= ADR(sOCVFound),
+			cbSymSize	:= SIZEOF(sOCVFound),
+			sFilePath		:= CONCAT(strLocalOCVPath, strLastOCVFile),
+			sXPath		:= '/OCVPack',
+			bExecute		:= TRUE,
+			tTimeout		:= T#1s
+		);
+
+		(* read file complete *)
+		IF fbReadFile.bBusy = FALSE THEN
+
+			(* read file completed OK *)
+			IF fbReadFile.bError = FALSE THEN
+
+				(* OCV file exists *)
+				bOCVFileFound := TRUE;
+
+				IF sOCVFound.stOACData.NumberOfLinkedPacks >= stPCMStatus.nAcceptanceLevel THEN
+					bOCVFileValid := TRUE;
+				END_IF
+
+			(* read file failed *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbReadFile.nErrId;
+
+			END_IF
+
+			eState := E_OCV_DONE;
+
+			(* close off fbReadFile *)
+			fbReadFile(bExecute := FALSE);
+		END_IF
+
+
+	(* complete *)
+	E_OCV_DONE:
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_OCV_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	eState := E_OCV_IDLE;
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+	nErrorID := 0;
+	strLastOCVFile := '';
+	bOCVFileFound := FALSE;
+	bOCVFileValid := FALSE;
+	strLastCode := '';
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_OCV_FindFile">
+      <LineId Id="30" Count="110" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

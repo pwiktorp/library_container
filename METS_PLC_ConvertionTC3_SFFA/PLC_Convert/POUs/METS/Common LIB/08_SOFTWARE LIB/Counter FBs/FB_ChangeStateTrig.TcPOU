@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_ChangeStateTrig" Id="{8ee4f765-1d6e-45d6-b945-566757b6795e}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ChangeStateTrig
+(*
+Version history:
+DATE		|	Version/Author 		|	Remark
+----------------------------------------------------------------------------------------------------
+16.03.12	|	2.000.001	PSA		|	Original Version.
+									|	Monitors a boolean and gives a trigger on change of state
+*)
+VAR_INPUT
+	bInput							: BOOL;			(* Variable to monitor *)
+END_VAR
+VAR_OUTPUT
+	Q								: BOOL;			(* Output trigger *)
+END_VAR
+VAR
+	bLastState						: BOOL;			(* Last known state of the variable *)
+	fbTrig							: R_TRIG;		(* Trigger *)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbTrig(CLK := bInput <> bLastState, Q => Q);
+bLastState := bInput;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_ChangeStateTrig">
+      <LineId Id="18" Count="1" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

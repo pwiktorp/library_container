@@ -1,0 +1,65 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_MulMod" Id="{3c1c1325-4b0d-4b3a-8507-0c1d6c082b82}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_MulMod : T_ULARGE_INTEGER
+(*F_mulmod = a*b MOD m  allows multiplication OF huge numbers without overflow!*)
+VAR_INPUT
+	al:	T_ULARGE_INTEGER;
+	bl:	T_ULARGE_INTEGER;
+	ml:	T_ULARGE_INTEGER;
+END_VAR
+VAR
+	res: T_ULARGE_INTEGER;
+	a:	T_ULARGE_INTEGER;
+	b:	T_ULARGE_INTEGER;
+	c:	T_ULARGE_INTEGER;
+	m:	T_ULARGE_INTEGER;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[a := al;
+b := bl;
+m := ml;
+
+IF UInt64Cmp64(a,m) = 1 THEN
+	a := UInt64Mod64(a,m);
+END_IF
+IF UInt64Cmp64(b,m) = 1 THEN
+	b := UInt64Mod64(b,m);
+END_IF
+
+res:= STRING_TO_UINT64('0');
+IF UInt64Cmp64(a, b) = -1 THEN
+	c := a;
+	a := b;
+	b := c;
+END_IF
+
+WHILE b.dwHighPart <> 0 OR b.dwLowPart <> 0 DO
+
+	WHILE UInt64Cmp64(a, m) = -1 DO
+
+		IF b.dwLowPart.0 THEN
+			res := UInt64Add64(res, a);
+		END_IF
+		a := UInt64Shl(a, 1);
+		b := UInt64Shr(b, 1);
+	END_WHILE
+	a := UInt64Sub64(a, m);
+	WHILE (UInt64Cmp64(res, m) = 0) OR (UInt64Cmp64(res, m) = 1) DO
+		res := UInt64Sub64(res, m);
+	END_WHILE
+	IF UInt64Cmp64(a, b) = -1 THEN
+		c := a;
+		a := b;
+		b := c;
+	END_IF
+END_WHILE
+
+F_mulmod := res;]]></ST>
+    </Implementation>
+    <LineIds Name="F_MulMod">
+      <LineId Id="15" Count="39" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_3CAM_SelectCameraMap" Id="{c971fba7-7d5e-46d4-bcf8-3bb907c10b41}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_3CAM_SelectCameraMap
+VAR_INPUT
+
+	bMap2x5:					BOOL;
+	bMap4x3:					BOOL;
+	bMap3x4:					BOOL;
+
+
+	stPackCamera1Map2x5		: ST_SCANNER_CameraMap;
+	stPackCamera2Map2x5		: ST_SCANNER_CameraMap;
+	stPackCamera3Map2x5		: ST_SCANNER_CameraMap;
+	stPackCamera1Map4x3		: ST_SCANNER_CameraMap;
+	stPackCamera2Map4x3		: ST_SCANNER_CameraMap;
+	stPackCamera3Map4x3		: ST_SCANNER_CameraMap;
+	stPackCamera1Map3x4		: ST_SCANNER_CameraMap;
+	stPackCamera2Map3x4		: ST_SCANNER_CameraMap;
+	stPackCamera3Map3x4		: ST_SCANNER_CameraMap;
+END_VAR
+VAR_OUTPUT
+	stPackCamera1Map		: ST_SCANNER_CameraMap;
+	stPackCamera2Map		: ST_SCANNER_CameraMap;
+	stPackCamera3Map		: ST_SCANNER_CameraMap;
+END_VAR
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF bMap2x5 THEN
+	stPackCamera1Map := stPackCamera1Map2x5;
+	stPackCamera2Map := stPackCamera2Map2x5;
+	stPackCamera3Map := stPackCamera3Map2x5;
+ELSIF bMap4x3 THEN
+	stPackCamera1Map := stPackCamera1Map4x3;
+	stPackCamera2Map := stPackCamera2Map4x3;
+	stPackCamera3Map := stPackCamera3Map4x3;
+ELSIF bMap3x4 THEN
+	stPackCamera1Map := stPackCamera1Map3x4;
+	stPackCamera2Map := stPackCamera2Map3x4;
+	stPackCamera3Map := stPackCamera3Map3x4;
+END_IF
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_3CAM_SelectCameraMap">
+      <LineId Id="25" Count="13" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

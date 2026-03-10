@@ -1,0 +1,98 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_CASE_MoveVerifiedCAC" Id="{331c383e-99ef-4b2a-9063-a79b978cf5e6}" SpecialFunc="None">
+    <Declaration><![CDATA[(* move verified CaC data into table structure *)
+FUNCTION_BLOCK FB_CASE_MoveVerifiedCAC
+VAR_INPUT
+	bExecute 						: BOOL;
+	stPrintCACData				: ST_CAC_Data;
+	stCTDateTime					: ST_SYSTEM_DateTime;
+	(*stCodeInfo_Case				: ST_CodeInfo;*)
+END_VAR
+VAR_IN_OUT
+	aVerifiedCACData				: ARRAY[1..cMAX_VERIFIED_CASE_QUEUE] OF ST_CAC_Data; 	(* array of verified CAC data *)
+	aVerifiedCACDataHMI			: ARRAY[1..cMAX_VERIFIED_CASE_QUEUE] OF ST_HMI_CAC_Data; 	(* array of verified CAC data *)
+	stQaseQueueDataHMI			: ST_HMI_CAC_Data;
+END_VAR
+VAR_OUTPUT
+	bDone: BOOL;
+END_VAR
+VAR
+	fbExecute						: R_TRIG;
+	nIndexOuter					:INT;
+	nIndexPack					:INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+(* move CaseData *)
+IF fbExecute.Q = TRUE THEN
+
+	(*shift data*)
+	MEMMOVE(ADR(aVerifiedCACData[2]), ADR(aVerifiedCACData[1]), SIZEOF(aVerifiedCACData) - SIZEOF(aVerifiedCACData[1]));
+	(* clear data *)
+	MEMSET(ADR(aVerifiedCACData[1]), 16#00, SIZEOF(aVerifiedCACData[1]));
+
+	IF stPrintCACData.ProductionTime ='' THEN
+		stPrintCACData.ProductionDate := F_StringWildcard('#YYYYMMDD#', stCTDateTime.sSystemTime);
+		stPrintCACData.ProductionTime := F_StringWildcard('#hhmmss#', stCTDateTime.sSystemTime);
+		stPrintCACData.ProductionTimeOffset := F_SYSTEM_SystemTimeOffsetToHHMM(stCTDateTime.nSystemTimeOffset);
+	END_IF
+
+	MEMMOVE(ADR(aVerifiedCACData[1]), ADR(stPrintCACData), SIZEOF(aVerifiedCACData[1]));
+
+	(*shift HMI Data*)
+	MEMMOVE(ADR(aVerifiedCACDataHMI[2]), ADR(aVerifiedCACDataHMI[1]), SIZEOF(aVerifiedCACDataHMI) - SIZEOF(aVerifiedCACDataHMI[1]));
+	(* clear data *)
+	MEMSET(ADR(aVerifiedCACDataHMI[1]), 16#00, SIZEOF(aVerifiedCACDataHMI[1]));
+
+	IF aVerifiedCACData[1].CaseRejectCode = 'OK' THEN
+		aVerifiedCACDataHMI[1].sBarcode:= F_CONCAT3(aVerifiedCACData[1].Barcode,'(999)','1');
+	ELSE
+		aVerifiedCACDataHMI[1].sBarcode:= F_CONCAT3(aVerifiedCACData[1].Barcode,'(999)','0');
+	END_IF
+
+	(*aVerifiedCACDataHMI[1].sCaseIDCode		:= RIGHT( F_CODE_GetItem(aVerifiedCACData[1].Barcode, eCodeAIType.SerialCode, stCodeInfo_Case), 7);
+	aVerifiedCACDataHMI[1].sProductionDate 	:= aVerifiedCACData[1].ProductionDate;
+	aVerifiedCACDataHMI[1].sProductionTime 	:= aVerifiedCACData[1].ProductionTime;
+	aVerifiedCACDataHMI[1].sCaseRejectCode 	:= aVerifiedCACData[1].CaseRejectCode;*)
+	aVerifiedCACDataHMI[1].nNumberOfOuters 	:= aVerifiedCACData[1].NumberOfOuters;
+	aVerifiedCACDataHMI[1].nNumberOfPacks 	:= aVerifiedCACData[1].Outer[1].NumberOfPacks;
+
+
+
+	FOR nIndexOuter:=1 TO MIN(aVerifiedCACData[1].NumberOfOuters,cMAX_OUTERS_PER_CASE) DO
+		IF aVerifiedCACData[1].Outer[nIndexOuter].OuterRejectCode = 'OK' THEN
+			aVerifiedCACDataHMI[1].aOuter[nIndexOuter].sBarcode:= F_CONCAT3(aVerifiedCACData[1].Outer[nIndexOuter].Barcode,'(999)','1');
+		ELSE
+			aVerifiedCACDataHMI[1].aOuter[nIndexOuter].sBarcode:= F_CONCAT3(aVerifiedCACData[1].Outer[nIndexOuter].Barcode,'(999)','0');
+		END_IF
+
+		FOR nIndexPack:=1 TO MIN(aVerifiedCACData[1].Outer[nIndexOuter].NumberOfPacks, cMAX_PACKS_PER_OUTER) DO
+			IF aVerifiedCACData[1].Outer[nIndexOuter].PackRejectCode[nIndexPack] = 'OK' THEN
+				aVerifiedCACDataHMI[1].aOuter[nIndexOuter].aPackCode[nIndexPack]:= F_CONCAT3(aVerifiedCACData[1].Outer[nIndexOuter].PackCode[nIndexPack],'(999)','1');
+			ELSE
+				aVerifiedCACDataHMI[1].aOuter[nIndexOuter].aPackCode[nIndexPack]:= F_CONCAT3(aVerifiedCACData[1].Outer[nIndexOuter].PackCode[nIndexPack],'(999)','0');
+			END_IF
+
+		END_FOR
+	END_FOR
+
+	MEMSET(ADR(stQaseQueueDataHMI), 16#00, SIZEOF(stQaseQueueDataHMI));
+
+	(*End of New HMI Part*)
+
+	bDone := TRUE;
+
+(* bExecute has been reset *)
+ELSIF bExecute = FALSE THEN
+	bDone := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_CASE_MoveVerifiedCAC">
+      <LineId Id="22" Count="65" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

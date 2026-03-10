@@ -1,0 +1,198 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_FSS2_BuildXMLData" Id="{85a3353a-8f7d-4190-a265-3f686349b200}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_FSS2_BuildXMLData
+VAR_INPUT
+	bExecute		: BOOL;
+	nCartonsPerMasterCase	:UINT	:=50;
+END_VAR
+VAR_IN_OUT
+	stAgregationData	 			: ST_CHM_Data;		(* case data to be written to XML *)
+END_VAR
+VAR_OUTPUT
+	bDone			: BOOL;
+	nImageByte		: INT;		(* total bytes for OAC template *)
+	arrXMLImage		: ARRAY[0..4096] OF BYTE;
+END_VAR
+VAR
+	fbExecute		: R_TRIG;
+	nOuterIndex		: INT;		(* Outer index when building for CAC file *)
+
+	strString		: STRING(255);
+	(*nStringLen		: INT;*)
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+(* rising edge of bExecute *)
+IF fbExecute.Q = TRUE THEN
+
+	(* update outputs *)
+	bDone := FALSE;
+
+	(* clear output array and reset byte counter *)
+	MEMSET(ADR(arrXMLImage), 16#00, SIZEOF(arrXMLImage));
+	nImageByte := 0;
+
+
+(********************XML FILE BIULD SEQTION****************************)
+(* XML file version *)
+strString := '<?xml version="1.0" encoding="utf-8"?>$R$N';
+MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+nImageByte := nImageByte + LEN(strString);
+
+(* XPath leading tag *)
+strString := '<GenericHierarchyList xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="TNTGenericHierarchy.xsd"> $R$N';
+MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+nImageByte := nImageByte + LEN(strString);
+
+	(* RequestID *)
+	strString := F_CONCAT3('$T<RequestID>','' , '</RequestID>$R$N');
+	MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+	nImageByte := nImageByte + LEN(strString);
+
+	(* Sender *)
+	strString := F_CONCAT3('$T<Sender>', 'TNTLS' , '</Sender>$R$N');
+	MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+	nImageByte := nImageByte + LEN(strString);
+
+	(* GenericHierarchy *)
+	strString := '$T<GenericHierarchy>$R$N';
+	MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+	nImageByte := nImageByte + LEN(strString);
+
+		(* User *)
+		strString := F_CONCAT3('$T$T<User>','TNTLS', '</User>$R$N');
+		MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+		nImageByte := nImageByte + LEN(strString);
+
+		(* Timestamp *)
+		strString := F_CONCAT3('$T$T<Timestamp>', stAgregationData.MessageHeader.CreationTimeLocalUTC, '</Timestamp>$R$N');
+		MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+		nImageByte := nImageByte + LEN(strString);
+
+		(* PackLevel *)
+		strString := F_CONCAT3('$T$T<PackLevel>','MASTERCASE', '</PackLevel>$R$N');
+		MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+		nImageByte := nImageByte + LEN(strString);
+
+		(* Parent *)
+		strString := '$T$T<Parent>$R$N';
+		MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+		nImageByte := nImageByte + LEN(strString);
+	
+			(* ID *)
+			strString := F_CONCAT3('$T$T$T<ID>',stAgregationData.GenericHierarchy.CaseItem.Identity.ID, '</ID>$R$N');
+			MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+			nImageByte := nImageByte + LEN(strString);
+	
+			(* GTIN *)
+			strString := F_CONCAT3('$T$T$T<GTIN>', stAgregationData.GenericHierarchy.CaseItem.Identity.GTIN, '</GTIN>$R$N');
+			MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+			nImageByte := nImageByte + LEN(strString);
+
+		(*/Parent *)
+		strString := '$T$T</Parent>$R$N';
+		MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+		nImageByte := nImageByte + LEN(strString);
+
+		(*Childs *)
+		strString := '$T$T<Childs>$R$N';
+		MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+		nImageByte := nImageByte + LEN(strString);
+
+			(* ChildDefaults *)
+			strString := '$T$T$T<ChildDefaults>$R$N';
+			MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+			nImageByte := nImageByte + LEN(strString);
+		
+				(* ProductNo *)
+				strString := F_CONCAT3('$T$T$T$T<ProductNo>',stAgregationData.GenericHierarchy.CaseItem.Content.DefaultIdentity.SKU, '</ProductNo>$R$N');
+				MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+				nImageByte := nImageByte + LEN(strString);
+		
+				(* GTIN *)
+				strString := F_CONCAT3('$T$T$T$T<GTIN>', stAgregationData.GenericHierarchy.CaseItem.Content.DefaultIdentity.GTIN, '</GTIN>$R$N');
+				MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+				nImageByte := nImageByte + LEN(strString);
+	
+			(*/ChildDefaults *)
+			strString := '$T$T$T</ChildDefaults>$R$N';
+			MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+			nImageByte := nImageByte + LEN(strString);
+
+		(* for each case Child*)
+		FOR nOuterIndex := 1 TO nCartonsPerMasterCase DO
+
+			(* <Child  index="xx"> field *)
+			strString := '$T$T$T<Child>$R$N';
+			MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+			nImageByte := nImageByte + LEN(strString);
+		
+				(* ID *)
+				strString := F_CONCAT3('$T$T$T$T<ID>',stAgregationData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Identity.ID, '</ID>$R$N');
+				MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+				nImageByte := nImageByte + LEN(strString);
+
+			(*/Child *)
+			strString := '$T$T$T</Child>$R$N';
+			MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+			nImageByte := nImageByte + LEN(strString);
+
+		END_FOR
+
+		(*/Childs *)
+		strString := '$T$T</Childs>$R$N';
+		MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+		nImageByte := nImageByte + LEN(strString);
+
+		(* Location *)
+		strString := '$T$T<Location>$R$N';
+		MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+		nImageByte := nImageByte + LEN(strString);
+	
+			(* ID *)
+			strString := F_CONCAT3('$T$T$T<ID>',stAgregationData.GenericHierarchy.CaseItem.Content.DefaultIdentity.ProductionLine, '</ID>$R$N');
+			MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+			nImageByte := nImageByte + LEN(strString);
+
+		(*/Location *)
+		strString := '$T$T</Location>$R$N';
+		MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+		nImageByte := nImageByte + LEN(strString);
+
+		(* CartonsPerMasterCase *)
+		strString := F_CONCAT3('$T$T<CartonsPerMasterCase>',stAgregationData.GenericHierarchy.CaseItem.Content.ExpectedItemCount, '</CartonsPerMasterCase>$R$N');
+		MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+		nImageByte := nImageByte + LEN(strString);
+
+	(* /GenericHierarchy *)
+	strString := '$T</GenericHierarchy>$R$N';
+	MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+	nImageByte := nImageByte + LEN(strString);
+
+(* /GenericHierarchyList *)
+strString := '$T</GenericHierarchyList>$R$N';
+MEMMOVE(ADR(arrXMLImage[nImageByte]), ADR(strString), LEN(strString));
+nImageByte := nImageByte + LEN(strString);
+
+(*****************************************************************************)
+
+
+	(* update outputs *)
+	bDone := TRUE;
+
+(* unknown state *)
+ELSIF bExecute = FALSE THEN
+
+	(* clear outputs *)
+	bDone := FALSE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_FSS2_BuildXMLData">
+      <LineId Id="21" Count="166" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

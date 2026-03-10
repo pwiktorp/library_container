@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_DriveAnalog" Id="{62508261-f5d0-4541-af8c-a0e28e2015d0}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_DriveAnalog
+VAR_INPUT
+	bEnableDrive:BOOL;
+	bStopDrive:BOOL;
+	nDriveSpeed:INT;
+END_VAR
+VAR_OUTPUT
+	bDriveRun:BOOL;
+	nDriveAnalog:INT;
+END_VAR
+VAR
+	nSetDriveSpeed:INT;
+	nSetDriveSpeedPerc:LREAL;
+	tonDelayedStart:TON;
+
+
+END_VAR
+
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Input *************************************************************************************)
+	tonDelayedStart(IN:=bEnableDrive, PT:=t#1s);
+
+(* Set speed ********************************************************************************)
+	nSetDriveSpeedPerc:=LIMIT(0, nDriveSpeed, 100);
+
+	nSetDriveSpeed:=LREAL_TO_INT((nSetDriveSpeedPerc/100)*32767);
+
+(* Output ***********************************************************************************)
+	bDriveRun:=bEnableDrive;
+	nDriveAnalog:=SEL(bStopDrive OR NOT tonDelayedStart.Q, nSetDriveSpeed, 0);]]></ST>
+    </Implementation>
+    <LineIds Name="FB_DriveAnalog">
+      <LineId Id="20" Count="10" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

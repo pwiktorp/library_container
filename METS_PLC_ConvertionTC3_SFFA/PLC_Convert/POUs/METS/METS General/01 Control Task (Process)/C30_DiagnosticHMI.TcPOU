@@ -1,0 +1,969 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="C30_DiagnosticHMI" Id="{846640b5-9475-426b-b764-2cbaa13f2cfc}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM C30_DiagnosticHMI
+VAR
+	bDummyInput			: BOOL;
+	bDummyOutput		: BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CASE gDevice.eAutomationMode OF
+
+E_SYSTEM_LARS:
+
+		OCS();
+
+E_SYSTEM_SIDEFLEX:
+
+	SFLX();
+
+E_SYSTEM_CML:	(* NON CLEAR WRAP FOCKE CML HYBRID - VALIDATION AS CONFIRMATION  *)
+	CML();
+ELSE
+	OCS();
+END_CASE
+
+]]></ST>
+    </Implementation>
+    <Action Name="CML" Id="{778ce452-5135-4381-88b8-0c1a206b0431}">
+      <Implementation>
+        <ST><![CDATA[(****************************** Inputs status ****************************************)
+;(*
+(* Page 01 --> Column 01*)
+	aInputsStatusHMI[1].bState		:= 	ib60KF1_1_AirPressureOK;
+	aInputsStatusHMI[1].sVarName	:= 	'ib60KF1_1_AirPressureOK';
+
+	aInputsStatusHMI[2].bState		:= 	ib60KF1_2_PSRIsResetSignal;
+	aInputsStatusHMI[2].sVarName	:= 	'ib60KF1_2_PSRIsResetSignal';
+
+	aInputsStatusHMI[3].bState		:= 	ib60KF1_6_PSRIsOkaySignal;
+	aInputsStatusHMI[3].sVarName	:= 	'ib60KF1_6_PSRIsOkaySignal';
+
+	aInputsStatusHMI[4].bState		:= 	ib60KF1_3_EmergancyStopSignal;
+	aInputsStatusHMI[4].sVarName	:= 	'ib60KF1_3_EmergancyStopSignal';
+
+	aInputsStatusHMI[5].bState		:= 	ib60KF1_7_EmergancyCircuitSignal;
+	aInputsStatusHMI[5].sVarName	:= 	'ib60KF1_7_EmergancyCircuitSignal';
+
+	aInputsStatusHMI[6].bState		:= 	ib460KF1_1_Guard1UpperSideAccessDoor;
+	aInputsStatusHMI[6].sVarName	:= 	'ib460KF1_1_Guard1UpperSideAccessDoor';
+
+	aInputsStatusHMI[7].bState		:= 	ib460KF1_5_Guard2UpperDoorLabellerSide;
+	aInputsStatusHMI[7].sVarName	:= 	'ib460KF1_5_Guard2UpperDoorLabellerSide';
+
+	aInputsStatusHMI[8].bState		:= 	ib460KF1_2_Guard3OutfeedTunnel;
+	aInputsStatusHMI[8].sVarName	:= 	'ib460KF1_2_Guard3OutfeedTunnel';
+
+(* Page 01 --> Column 02*)
+	aInputsStatusHMI[9].bState		:= 	ib460KF1_6_Guard4ElectricalBoxInPosition;
+	aInputsStatusHMI[9].sVarName	:= 	'ib460KF1_6_Guard4ElectricalBoxInPosition';
+
+	aInputsStatusHMI[10].bState		:= 	ib460KF1_3_Guard5RejectBinLHSide;
+	aInputsStatusHMI[10].sVarName	:= 	'ib460KF1_3_Guard5RejectBinLHSide';
+
+	aInputsStatusHMI[11].bState		:= 	ib460KF1_7_Guard6RejectBinRHSide;
+	aInputsStatusHMI[11].sVarName	:= 	'ib460KF1_7_Guard6RejectBinRHSide';
+
+	aInputsStatusHMI[12].bState		:= 	ib461KF1_1_Guard8Labeller1InPosition;
+	aInputsStatusHMI[12].sVarName	:= 	'ib461KF1_1_Guard8Labeller1InPosition';
+
+	aInputsStatusHMI[13].bState		:= 	ib461KF1_5_Guard9Labeller2InPosition;
+	aInputsStatusHMI[13].sVarName	:= 	'ib461KF1_5_Guard9Labeller2InPosition';
+
+	aInputsStatusHMI[14].bState		:= 	ib461KF1_2_Guard10FrontUpperDoor;
+	aInputsStatusHMI[14].sVarName	:= 	'ib461KF1_2_Guard10FrontUpperDoor';
+
+	aInputsStatusHMI[15].bState		:= 	ib461KF1_6_Guard11GuardLowerLabellerSide;
+	aInputsStatusHMI[15].sVarName	:= 	'ib461KF1_6_Guard11GuardLowerLabellerSide';
+
+	aInputsStatusHMI[16].bState		:= 	ib462KF1_8_Labeller1OuterAtLabeller;
+	aInputsStatusHMI[16].sVarName	:= 	'ib462KF1_8_Labeller1OuterAtLabeller';
+
+(* Page 01 --> Column 03*)
+	aInputsStatusHMI[17].bState		:= 	ib464KF1_1_RotaryTransferPackAtStopPlate;
+	aInputsStatusHMI[17].sVarName	:= 	'ib464KF1_1_RotaryTransferPackAtStopPlate';
+
+	aInputsStatusHMI[18].bState		:= 	ib464KF1_2_RotaryTransferDelayStop1;
+	aInputsStatusHMI[18].sVarName	:= 	'ib464KF1_2_RotaryTransferDelayStop1';
+
+	aInputsStatusHMI[19].bState		:= 	ib464KF1_6_RotaryTransferDelayStop2;
+	aInputsStatusHMI[19].sVarName	:= 	'ib464KF1_6_RotaryTransferDelayStop2';
+
+	aInputsStatusHMI[20].bState		:= 	ib465KF1_1_OuterAtReject;
+	aInputsStatusHMI[20].sVarName	:= 	'ib465KF1_1_OuterAtReject';
+
+	aInputsStatusHMI[21].bState		:= 	ib465KF1_5_CMLExitBlock;
+	aInputsStatusHMI[21].sVarName	:= 	'ib465KF1_5_CMLExitBlock';
+
+	aInputsStatusHMI[22].bState		:= 	ib465KF1_6_LoweratorGuideRHLowerInPosition;
+	aInputsStatusHMI[22].sVarName	:= 	'ib465KF1_6_LoweratorGuideRHLowerInPosition';
+
+	aInputsStatusHMI[23].bState		:= 	ib465KF1_3_LoweratorGuideLHLowerInPosition;
+	aInputsStatusHMI[23].sVarName	:= 	'ib465KF1_3_LoweratorGuideLHLowerInPosition';
+
+	aInputsStatusHMI[24].bState		:= 	ib463KF1_8_Labeller2OuterAtLabeller;
+	aInputsStatusHMI[24].sVarName	:= 	'ib463KF1_8_Labeller2OuterAtLabeller';
+
+(* Page 01 --> Column 04*)
+	aInputsStatusHMI[25].bState		:= 	ib661KF1_1_DoorOpenZone1;
+	aInputsStatusHMI[25].sVarName	:= 	'ib661KF1_1_DoorOpenZone1';
+
+	aInputsStatusHMI[26].bState		:= 	ib661KF1_5_DoorOpenZone2;
+	aInputsStatusHMI[26].sVarName	:= 	'ib661KF1_5_DoorOpenZone2';
+
+	aInputsStatusHMI[27].bState		:= 	ib661KF1_6_CaseRejectet_SFCP;
+	aInputsStatusHMI[27].sVarName	:= 	'ib661KF1_6_CaseRejectet_SFCP';
+
+	aInputsStatusHMI[28].bState		:= 	ib468KF1_7_PackBuildBackPreMachineCutout;
+	aInputsStatusHMI[28].sVarName	:= 	'ib468KF1_7_PackBuildBackPreMachineCutout';
+
+	aInputsStatusHMI[29].bState		:= 	ib560KF1_3_PreMachineBuildBack;
+	aInputsStatusHMI[29].sVarName	:= 	'ib560KF1_3_PreMachineBuildBack';
+
+	aInputsStatusHMI[30].bState		:= 	ib560KF1_7_TPDExitBlock;
+	aInputsStatusHMI[30].sVarName	:= 	'ib560KF1_7_TPDExitBlock';
+
+	aInputsStatusHMI[31].bState		:= 	ib560KF1_8_PackIsolatorDrive;
+	aInputsStatusHMI[31].sVarName	:= 	'ib560KF1_8_PackIsolatorDrive';
+
+	aInputsStatusHMI[32].bState		:= 	FALSE;
+	aInputsStatusHMI[32].sVarName	:= 	'Spare';
+
+(* Page 02 --> Column 01*)
+	aInputsStatusHMI[33].bState		:= 	ib467KF1_3_PreMachineAutorun;
+	aInputsStatusHMI[33].sVarName	:= 	'ib467KF1_3_PreMachineAutorun';
+
+	aInputsStatusHMI[34].bState		:= 	ib467KF1_7_PostMachineAutorun;
+	aInputsStatusHMI[34].sVarName	:= 	'ib467KF1_7_PostMachineAutorun';
+
+	aInputsStatusHMI[35].bState		:= 	ib660KF1_5_RowCompleteSensor;
+	aInputsStatusHMI[35].sVarName	:= 	'ib660KF1_5_RowCompleteSensor';
+
+	aInputsStatusHMI[36].bState		:= 	ib660KF1_2_LayerCompleteSensor;
+	aInputsStatusHMI[36].sVarName	:= 	'ib660KF1_2_LayerCompleteSensor';
+
+	aInputsStatusHMI[37].bState		:= 	ib660KF1_1_IntermediatePushSensor;
+	aInputsStatusHMI[37].sVarName	:= 	'ib660KF1_1_IntermediatePushSensor';
+
+	aInputsStatusHMI[38].bState		:= 	ib660KF1_6_CaseCompleteSensor;
+	aInputsStatusHMI[38].sVarName	:= 	'ib660KF1_6_CaseCompleteSensor';
+
+	aInputsStatusHMI[39].bState		:= 	ib660KF1_3_CaseDischargedSensor;
+	aInputsStatusHMI[39].sVarName	:= 	'ib660KF1_3_CaseDischargedSensor';
+
+	aInputsStatusHMI[40].bState		:= 	ib660KF1_4_CaseLabelValidationTrigSensor;
+	aInputsStatusHMI[40].sVarName	:= 	'ib660KF1_4_CaseLabelValidationTrigSensor';
+
+(* Page 02 --> Column 02*)
+	aInputsStatusHMI[41].bState		:= 	ib662KF1_7_AdditionalPreMachineAutorun;
+	aInputsStatusHMI[41].sVarName	:= 	'ib662KF1_7_AdditionalPreMachineAutorun';
+
+	aInputsStatusHMI[42].bState		:= 	ib661KF1_2_CasePackerAutoRun_SFCP;
+	aInputsStatusHMI[42].sVarName	:= 	'ib661KF1_2_CasePackerAutoRun_SFCP';
+
+	aInputsStatusHMI[43].bState		:= 	ib661KF1_3_RowComplete_SFCP;
+	aInputsStatusHMI[43].sVarName	:= 	'ib661KF1_3_RowComplete_SFCP';
+
+	aInputsStatusHMI[44].bState		:= 	ib661KF1_7_LayerComplete_SFCP;
+	aInputsStatusHMI[44].sVarName	:= 	'ib661KF1_7_LayerComplete_SFCP';
+
+	aInputsStatusHMI[45].bState		:= 	ib662KF1_3_IntermediatePush_SFCP;
+	aInputsStatusHMI[45].sVarName	:= 	'ib662KF1_3_IntermediatePush_SFCP';
+
+	aInputsStatusHMI[46].bState		:= 	ib661KF1_4_CaseComplete_SFCP;
+	aInputsStatusHMI[46].sVarName	:= 	'ib661KF1_4_CaseComplete_SFCP';
+
+	aInputsStatusHMI[47].bState		:= 	ib661KF1_8_CaseDischarged_SFCP;
+	aInputsStatusHMI[47].sVarName	:= 	'ib661KF1_8_CaseDischarged_SFCP';
+
+	aInputsStatusHMI[48].bState		:= 	ib660KF1_8_CaseLabelValidationTrig_SFCP;
+	aInputsStatusHMI[48].sVarName	:= 	'ib660KF1_8_CaseLabelValidationTrig_SFCP';
+
+(* Page 02 --> Column 03*)
+	aInputsStatusHMI[49].bState		:= 	ib763KF1_1_MasterListCameraTrigSensor;
+	aInputsStatusHMI[49].sVarName	:= 	'ib763KF1_1_MasterListCameraTrigSensor';
+
+	aInputsStatusHMI[50].bState		:= 	ib763KF1_2_AggregationCameraTrigSensor;
+	aInputsStatusHMI[50].sVarName	:= 	'ib763KF1_2_AggregationCameraTrigSensor';
+
+	aInputsStatusHMI[51].bState		:= 	ib763KF1_7_PackQueueIndex;
+	aInputsStatusHMI[51].sVarName	:= 	'ib763KF1_7_PackQueueIndex';
+
+	aInputsStatusHMI[52].bState		:= 	ib763KF1_4_StackQueueIndex;
+	aInputsStatusHMI[52].sVarName	:= 	'ib763KF1_4_StackQueueIndex';
+
+	aInputsStatusHMI[53].bState		:= 	ib764KF1_1_OuterIndexComplete;
+	aInputsStatusHMI[53].sVarName	:= 	'ib764KF1_1_OuterIndexComplete';
+
+	aInputsStatusHMI[54].bState		:= 	FALSE;
+	aInputsStatusHMI[54].sVarName	:= 	'Spare';
+
+	aInputsStatusHMI[55].bState		:= 	FALSE;
+	aInputsStatusHMI[55].sVarName	:= 	'Spare';
+
+	aInputsStatusHMI[56].bState		:= 	FALSE;
+	aInputsStatusHMI[56].sVarName	:= 	'Spare';
+
+(* Page 02 --> Column 04*)
+	aInputsStatusHMI[57].bState		:= 	ib764KF1_2_Guard1;
+	aInputsStatusHMI[57].sVarName	:= 	'ib764KF1_2_Guard1';
+
+	aInputsStatusHMI[58].bState		:= 	ib764KF1_6_Guard2;
+	aInputsStatusHMI[58].sVarName	:= 	'ib764KF1_6_Guard2';
+
+	aInputsStatusHMI[59].bState		:= 	ib764KF1_3_Guard3;
+	aInputsStatusHMI[59].sVarName	:= 	'ib764KF1_3_Guard3';
+
+	aInputsStatusHMI[60].bState		:= 	ib764KF1_7_Guard4;
+	aInputsStatusHMI[60].sVarName	:= 	'ib764KF1_7_Guard4';
+
+	aInputsStatusHMI[61].bState		:= 	ib764KF1_4_OuterBrushOpen;
+	aInputsStatusHMI[61].sVarName	:= 	'ib764KF1_4_OuterBrushOpen';
+
+	aInputsStatusHMI[62].bState		:= 	ib764KF1_8_RejectTowerActive;
+	aInputsStatusHMI[62].sVarName	:= 	'ib764KF1_8_RejectTowerActive';
+
+	aInputsStatusHMI[63].bState		:= 	ib765KF1_2_IntermediateCamera1TrigSesnor;
+	aInputsStatusHMI[63].sVarName	:= 	'ib765KF1_2_IntermediateCamera1TrigSesnor';
+
+	aInputsStatusHMI[64].bState		:= 	FALSE;
+	aInputsStatusHMI[64].sVarName	:= 	'Spare';
+
+
+(****************************** Outputs status ****************************************)
+(* Column 01*)
+	aOutputsStatusHMI[1].bState		:= 	qb483KF1_4_PreMachineCutoutSignalRelay;
+	aOutputsStatusHMI[1].sVarName	:= 	'qb483KF1_4_PreMachineCutoutSignalRelay';
+
+	aOutputsStatusHMI[2].bState		:= 	qb483KF1_8_MachineRunSignalRelay;
+	aOutputsStatusHMI[2].sVarName	:= 	'qb483KF1_8_MachineRunSignalRelay';
+
+	aOutputsStatusHMI[3].bState		:= 	qb681KF1_1_Cutout_STCP;
+	aOutputsStatusHMI[3].sVarName	:= 	'qb681KF1_1_Cutout_STCP';
+
+	aOutputsStatusHMI[4].bState		:= 	qb483KF1_7_AdditionalPreMachineCutoutBeltInMotion;
+	aOutputsStatusHMI[4].sVarName	:= 	'qb483KF1_7_AdditionalPreMachineCutoutBeltInMotion';
+
+	aOutputsStatusHMI[5].bState		:= 	qb681KF1_2_OuterValidationOK_STCP;
+	aOutputsStatusHMI[5].sVarName	:= 	'qb681KF1_2_OuterValidationOK_STCP';
+
+	aOutputsStatusHMI[6].bState		:= 	qb681KF1_6_CaseContentOK_STCP;
+	aOutputsStatusHMI[6].sVarName	:= 	'qb681KF1_6_CaseContentOK_STCP';
+
+	aOutputsStatusHMI[7].bState		:= 	qb681KF1_5_CaseValidationOK_STCP;
+	aOutputsStatusHMI[7].sVarName	:= 	'qb681KF1_5_CaseValidationOK_STCP';
+
+	aOutputsStatusHMI[8].bState		:= 	qb681KF1_8_CMLConvoyerRun;
+	aOutputsStatusHMI[8].sVarName	:= 	'qb681KF1_8_CMLConvoyerRun';
+
+(* Column 02*)
+	aOutputsStatusHMI[9].bState		:= 	qb784KF1_1_MasterListCameraTrigger;
+	aOutputsStatusHMI[9].sVarName	:= 	'qb784KF1_1_MasterListCameraTrigger';
+
+	aOutputsStatusHMI[10].bState		:= 	FALSE;
+	aOutputsStatusHMI[10].sVarName	:= 	'Spare';
+
+	aOutputsStatusHMI[11].bState		:= 	qb784KF1_2_AggregationCameraTrigger;
+	aOutputsStatusHMI[11].sVarName	:= 	'qb784KF1_2_AggregationCameraTrigger';
+
+	aOutputsStatusHMI[12].bState		:= 	qb783KF1_8_PLCControlledPackAggCamLightning;
+	aOutputsStatusHMI[12].sVarName	:= 	'qb783KF1_8_PLCControlledPackAggCamLightning';
+
+	aOutputsStatusHMI[13].bState		:= 	qb784KF1_7_ConfirmationCamera1Trigger;
+	aOutputsStatusHMI[13].sVarName	:= 	'qb784KF1_7_ConfirmationCamera1Trigger';
+
+	aOutputsStatusHMI[14].bState		:= 	qb784KF1_8_PLCControlledPackConfirmCamLightning;
+	aOutputsStatusHMI[14].sVarName	:= 	'qb784KF1_8_PLCControlledPackConfirmCamLightning';
+
+	aOutputsStatusHMI[15].bState		:= 	qb785KF1_1_IntermediateCamera1Trigger;
+	aOutputsStatusHMI[15].sVarName	:= 	'qb785KF1_1_IntermediateCamera1Trigger';
+
+	aOutputsStatusHMI[16].bState		:= 	FALSE;
+	aOutputsStatusHMI[16].sVarName	:= 	'Spare';
+
+(* Column 03*)
+	aOutputsStatusHMI[17].bState		:= 	qb682KF1_3_PLCControlledOuterValidCamLightning;
+	aOutputsStatusHMI[17].sVarName	:= 	'qb682KF1_3_PLCControlledOuterValidCamLightning';
+
+	aOutputsStatusHMI[18].bState		:= 	qb682KF1_7_PLCControlledOuterAggCamLightning;
+	aOutputsStatusHMI[18].sVarName	:= 	'qb682KF1_7_PLCControlledOuterAggCamLightning';
+
+	aOutputsStatusHMI[19].bState		:= 	qb682KF1_4_PLCControlledCaseContentCamLightning;
+	aOutputsStatusHMI[19].sVarName	:= 	'qb682KF1_4_PLCControlledCaseContentCamLightning';
+
+	aOutputsStatusHMI[20].bState		:= 	qb480KF1_8_PackSeparationMotorBrake;
+	aOutputsStatusHMI[20].sVarName	:= 	'qb480KF1_8_PackSeparationMotorBrake';
+
+	aOutputsStatusHMI[21].bState		:= 	qb483KF1_3_ResetPB;
+	aOutputsStatusHMI[21].sVarName	:= 	'qb483KF1_3_ResetPB';
+
+	aOutputsStatusHMI[22].bState		:= 	stMachineDevices.aDriveInterfaces[1].Q.xReadyForSwitchingOn;
+	aOutputsStatusHMI[22].sVarName	:= 	'stMachineDevices.aDriveInterfaces[1].Q.xReadyForSwitchingOn';
+
+	aOutputsStatusHMI[23].bState		:= 	stMachineDevices.aDriveInterfaces[2].Q.xReadyForSwitchingOn;
+	aOutputsStatusHMI[23].sVarName	:= 	'stMachineDevices.aDriveInterfaces[2].Q.xReadyForSwitchingOn';
+
+	aOutputsStatusHMI[24].bState		:= 	stMachineDevices.aDriveInterfaces[3].Q.xReadyForSwitchingOn;
+	aOutputsStatusHMI[24].sVarName	:= 	'stMachineDevices.aDriveInterfaces[3].Q.xReadyForSwitchingOn';
+
+(* Column 04*)
+	aOutputsStatusHMI[25].bState		:= 	stMachineDevices.aDriveInterfaces[4].Q.xReadyForSwitchingOn;
+	aOutputsStatusHMI[25].sVarName	:= 	'stMachineDevices.aDriveInterfaces[4].Q.xReadyForSwitchingOn';
+
+	aOutputsStatusHMI[26].bState		:= 	stMachineDevices.aDriveInterfaces[5].Q.xReadyForSwitchingOn;
+	aOutputsStatusHMI[26].sVarName	:= 	'stMachineDevices.aDriveInterfaces[5].Q.xReadyForSwitchingOn';
+
+	aOutputsStatusHMI[27].bState		:= 	FALSE;
+	aOutputsStatusHMI[27].sVarName	:= 	'Spare';
+
+	aOutputsStatusHMI[28].bState		:= 	FALSE;
+	aOutputsStatusHMI[28].sVarName	:= 	'Spare';
+
+	aOutputsStatusHMI[29].bState		:= 	FALSE;
+	aOutputsStatusHMI[29].sVarName	:= 	'Spare';
+
+	aOutputsStatusHMI[30].bState		:= 	FALSE;
+	aOutputsStatusHMI[30].sVarName	:= 	'Spare';
+
+	aOutputsStatusHMI[31].bState		:= 	FALSE;
+	aOutputsStatusHMI[31].sVarName	:= 	'Spare';
+
+	aOutputsStatusHMI[32].bState		:= 	FALSE;
+	aOutputsStatusHMI[32].sVarName	:= 	'Spare';
+*)]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="OCS" Id="{0905420a-77c7-421a-938a-e80495f8358a}">
+      <Implementation>
+        <ST><![CDATA[(****************************** Inputs status ****************************************)
+;(*
+	aInputsStatusHMI[1].bState		:= 	ib66KF1_5_PreMachineInAutorun;
+	aInputsStatusHMI[1].sVarName	:= 	'ib66KF1_5_PreMachineInAutorun';
+
+	aInputsStatusHMI[2].bState		:= 	ib61KF1_2_CasePackerAutoRun_SFCP ;
+	aInputsStatusHMI[2].sVarName	:= 	'ib61KF1_2_CasePackerAutoRun_SFCP ';
+
+	aInputsStatusHMI[3].bState		:= 	ib61KF1_3_RowComplete_SFCP ;
+	aInputsStatusHMI[3].sVarName	:= 	'ib61KF1_3_RowComplete_SFCP ';
+
+	aInputsStatusHMI[4].bState		:= 	ib61KF1_7_LayerComplete_SFCP;
+	aInputsStatusHMI[4].sVarName	:= 	'ib61KF1_7_LayerComplete_SFCP';
+
+	aInputsStatusHMI[5].bState		:= 	ib61KF1_4_CaseComplete_SFCP;
+	aInputsStatusHMI[5].sVarName	:= 	'ib61KF1_4_CaseComplete_SFCP';
+
+	aInputsStatusHMI[6].bState		:= 	ib61KF1_8_CaseDischarged_SFCP;
+	aInputsStatusHMI[6].sVarName	:= 	'ib61KF1_8_CaseDischarged_SFCP';
+
+	aInputsStatusHMI[7].bState		:= 	ib63KF1_2_CaseLabelValidationTrig_SFCP;
+	aInputsStatusHMI[7].sVarName	:= 	'ib63KF1_2_CaseLabelValidationTrig_SFCP';
+
+	aInputsStatusHMI[8].bState		:= 	ib65KF1_6_EmergencyCircuitFromPSR;
+	aInputsStatusHMI[8].sVarName	:= 	'ib65KF1_6_EmergencyCircuitFromPSR';
+
+
+
+	aInputsStatusHMI[9].bState		:= 	ib65KF1_1_PSRisReset;
+	aInputsStatusHMI[9].sVarName	:= 	'ib65KF1_1_PSRisReset';
+
+	aInputsStatusHMI[10].bState		:= 	ib65KF1_5_PSRisOK;
+	aInputsStatusHMI[10].sVarName	:= 	'ib65KF1_5_PSRisOK';
+
+	aInputsStatusHMI[11].bState		:= 	ib363KF1_3_RowCompleteSensor;
+	aInputsStatusHMI[11].sVarName	:= 	'ib363KF1_3_RowCompleteSensor';
+
+	aInputsStatusHMI[12].bState		:= 	ib363KF1_7_LayerCompleteSensor;
+	aInputsStatusHMI[12].sVarName	:= 	'ib363KF1_7_LayerCompleteSensor';
+
+	aInputsStatusHMI[13].bState		:= 	ib363KF1_4_CaseCompleteSensor;
+	aInputsStatusHMI[13].sVarName	:= 	'ib363KF1_4_CaseCompleteSensor';
+
+	aInputsStatusHMI[14].bState		:= 	ib363KF1_8_CaseDischargedSensor;
+	aInputsStatusHMI[14].sVarName	:= 	'ib363KF1_8_CaseDischargedSensor';
+
+	aInputsStatusHMI[15].bState		:= 	ib363KF1_2_CaseLabelValidationCameraTrigSensor;
+	aInputsStatusHMI[15].sVarName	:= 	'ib363KF1_2_CaseLabelValidationCameraTrigSensor';
+
+	aInputsStatusHMI[16].bState		:= 	ib65KF1_2_EmergencyStopFromPSR;
+	aInputsStatusHMI[16].sVarName	:= 	'ib65KF1_2_EmergencyStopFromPSR';
+
+
+
+	aInputsStatusHMI[17].bState		:= 	ib66KF1_1_AirSupplyOK;
+	aInputsStatusHMI[17].sVarName	:= 	'ib66KF1_1_AirSupplyOK';
+
+	aInputsStatusHMI[18].bState		:= 	ib366KF1_8_RemoteAirSupplyOK;
+	aInputsStatusHMI[18].sVarName	:= 	'ib366KF1_8_RemoteAirSupplyOK ';
+
+	aInputsStatusHMI[19].bState		:= 	ib70KF1_1_MainsSupplyHealthy;
+	aInputsStatusHMI[19].sVarName	:= 	'ib70KF1_1_MainsSupplyHealthy';
+
+	aInputsStatusHMI[20].bState		:= 	ib70KF1_5_UPSHealthy;
+	aInputsStatusHMI[20].sVarName	:= 	'ib70KF1_5_UPSHealthy';
+
+	aInputsStatusHMI[21].bState		:= 	ib70KF1_2_UPSBatteryMode;
+	aInputsStatusHMI[21].sVarName	:= 	'ib70KF1_2_UPSBatteryMode';
+
+	aInputsStatusHMI[22].bState		:= 	ib70KF1_6_UPSBatteryCharging;
+	aInputsStatusHMI[22].sVarName	:= 	'ib70KF1_6_UPSBatteryCharging';
+
+	aInputsStatusHMI[23].bState		:= 	ib366KF1_1_OuterAtAdditionalConveyor02;
+	aInputsStatusHMI[23].sVarName	:= 	'ib366KF1_1_OuterAtAdditionalConveyor02';
+
+	aInputsStatusHMI[24].bState		:= 	ib64KF1_6_AdditionalConveyorPlugConnected;
+	aInputsStatusHMI[24].sVarName	:= 	'ib64KF1_6_AdditionalConveyorPlugConnected';
+
+
+
+	aInputsStatusHMI[25].bState		:= 	ib763KF1_1_MasterListCameraTrigSensor;
+	aInputsStatusHMI[25].sVarName	:= 	'ib763KF1_1_MasterListCameraTrigSensor';
+
+	aInputsStatusHMI[26].bState		:= 	ib763KF1_2_AggregationCameraTrigSensor;
+	aInputsStatusHMI[26].sVarName	:= 	'ib763KF1_2_AggregationCameraTrigSensor';
+
+	aInputsStatusHMI[27].bState		:= 	ib764KF1_1_OuterIndexComplete;
+	aInputsStatusHMI[27].sVarName	:= 	'ib764KF1_1_OuterIndexComplete';
+
+	aInputsStatusHMI[28].bState		:= 	ib764KF1_4_OuterBrushOpen;
+	aInputsStatusHMI[28].sVarName	:= 	'ib764KF1_4_OuterBrushOpen';
+
+	aInputsStatusHMI[29].bState		:= 	ib765KF1_2_IntermediateCamera1TrigSesnor;
+	aInputsStatusHMI[29].sVarName	:= 	'ib765KF1_2_IntermediateCamera1TrigSesnor';
+
+	aInputsStatusHMI[30].bState		:= 	ib61KF1_6_CaseRejected_SFCP;
+	aInputsStatusHMI[30].sVarName	:= 	'ib61KF1_6_CaseRejected_SFCP';
+
+	aInputsStatusHMI[31].bState		:= 	ib61KF1_1_DoorOpenZone1_SFCP;
+	aInputsStatusHMI[31].sVarName	:= 	'ib61KF1_1_DoorOpenZone1_SFCP';
+
+	aInputsStatusHMI[32].bState		:= 	ib61KF1_5_DoorOpenZone2_SFCP;
+	aInputsStatusHMI[32].sVarName	:= 	'ib61KF1_5_DoorOpenZone2_SFCP';
+
+
+
+	aInputsStatusHMI[33].bState		:= 	ib360KF1_1_OuterAtInfeed;
+	aInputsStatusHMI[33].sVarName	:= 	'ib360KF1_1_OuterAtInfeed';
+
+	aInputsStatusHMI[34].bState		:= 	ib360KF1_5_OuterInfeedBlocked;
+	aInputsStatusHMI[34].sVarName	:= 	'ib360KF1_5_OuterInfeedBlocked';
+
+	aInputsStatusHMI[35].bState		:= 	ib360KF1_2_OuterAtLabeller;
+	aInputsStatusHMI[35].sVarName	:= 	'ib360KF1_2_OuterAtLabeller (Outer at Gate)';
+
+	aInputsStatusHMI[36].bState		:= 	ib360KF1_3_OuterValidationCameraTrigSensor ;
+	aInputsStatusHMI[36].sVarName	:= 	'ib360KF1_3_OuterValidationCameraTrigSensor ';
+
+	aInputsStatusHMI[37].bState		:= 	ib363KF1_1_QAButtonRejectOuter;
+	aInputsStatusHMI[37].sVarName	:= 	'ib363KF1_1_QAButtonRejectOuter';
+
+	aInputsStatusHMI[38].bState		:= 	ib360KF1_7_OuterAtReject;
+	aInputsStatusHMI[38].sVarName	:= 	'ib360KF1_7_OuterAtReject';
+
+	aInputsStatusHMI[39].bState		:= 	ib360KF1_4_RejectConfirmation;
+	aInputsStatusHMI[39].sVarName	:= 	'ib360KF1_4_RejectConfirmation';
+
+	aInputsStatusHMI[40].bState		:= 	ib360KF1_8_RejectBinFull;
+	aInputsStatusHMI[40].sVarName	:= 	'ib360KF1_8_RejectBinFull';
+
+
+
+	aInputsStatusHMI[41].bState		:= 	ib361KF1_1_OuterClampExtended;
+	aInputsStatusHMI[41].sVarName	:= 	'ib361KF1_1_OuterClampExtended';
+
+	aInputsStatusHMI[42].bState		:= 	ib361KF1_3_RejectCylinderExtended;
+	aInputsStatusHMI[42].sVarName	:= 	'ib361KF1_3_RejectCylinderExtended';
+
+	aInputsStatusHMI[43].bState		:= 	ib361KF1_7_RejectCylinderRetracted;
+	aInputsStatusHMI[43].sVarName	:= 	'ib361KF1_7_RejectCylinderRetracted';
+
+	aInputsStatusHMI[44].bState		:= 	ib361KF1_4_EUCAExitBlocked;
+	aInputsStatusHMI[44].sVarName	:= 	'ib361KF1_4_EUCAExitBlocked';
+
+	aInputsStatusHMI[45].bState		:= 	ib361KF1_8_EUCABuildBack;
+	aInputsStatusHMI[45].sVarName	:= 	'ib361KF1_8_EUCABuildBack';
+
+	aInputsStatusHMI[46].bState		:= 	ib765KF1_6_HeatTunelPackReject;
+	aInputsStatusHMI[46].sVarName	:= 	'ib765KF1_6_HeatTunelPackReject';
+
+	aInputsStatusHMI[47].bState		:= 	ib765KF1_1_FilmInPosition ;
+	aInputsStatusHMI[47].sVarName	:= 	'ib765KF1_1_FilmInPosition ';
+
+	aInputsStatusHMI[48].bState		:= 	FALSE;
+	aInputsStatusHMI[48].sVarName	:= 	'SPARE';
+
+
+	aInputsStatusHMI[49].bState		:= 	ib764KF1_2_Guard1;
+	aInputsStatusHMI[49].sVarName	:= 	'ib764KF1_2_Guard1 (FOCKE/GD MASETRLIST 1)';
+
+	aInputsStatusHMI[50].bState		:= 	ib764KF1_6_Guard2;
+	aInputsStatusHMI[50].sVarName	:= 	'ib764KF1_6_Guard2 (FOCKE/GD MASETRLIST 2)';
+
+	aInputsStatusHMI[51].bState		:= 	ib766KF1_7_Spare;
+	aInputsStatusHMI[51].sVarName	:= 	'ib766KF1_7_Guard5 (GD MASETRLIST 3)';
+
+	aInputsStatusHMI[52].bState		:= 	ib764KF1_3_Guard3;
+	aInputsStatusHMI[52].sVarName	:= 	'ib764KF1_3_Guard3 (FOCKE/GD PACK AGG 1)';
+
+	aInputsStatusHMI[53].bState		:= 	ib764KF1_7_Guard4;
+	aInputsStatusHMI[53].sVarName	:= 	'ib764KF1_7_Guard4 (FOCKE/GD PACK AGG 1)';
+
+	aInputsStatusHMI[54].bState		:= 	ib766KF1_4_Spare;
+	aInputsStatusHMI[54].sVarName	:= 	'ib766KF1_4_Guard6 (GD OUTER WRAPPER1)';
+
+	aInputsStatusHMI[55].bState		:= 	ib766KF1_8_Spare;
+	aInputsStatusHMI[55].sVarName	:= 	'ib766KF1_8_Guard7 (GD OUTER WRAPPER2)';
+
+	aInputsStatusHMI[56].bState		:= 	ib764KF1_8_RejectTowerActive;
+	aInputsStatusHMI[56].sVarName	:= 	'ib764KF1_8_RejectTowerActive';
+
+
+	aInputsStatusHMI[57].bState		:= 	FALSE;
+	aInputsStatusHMI[57].sVarName	:= 	'SPARE';
+
+	aInputsStatusHMI[58].bState		:= 	FALSE;
+	aInputsStatusHMI[58].sVarName	:= 	'SPARE';
+
+	aInputsStatusHMI[59].bState		:= 	FALSE;
+	aInputsStatusHMI[59].sVarName	:= 	'SPARE';
+
+	aInputsStatusHMI[60].bState		:= 	FALSE;
+	aInputsStatusHMI[60].sVarName	:= 	'SPARE';
+
+	aInputsStatusHMI[61].bState		:= 	FALSE;
+	aInputsStatusHMI[61].sVarName	:= 	'SPARE';
+
+	aInputsStatusHMI[62].bState		:= 	FALSE;
+	aInputsStatusHMI[62].sVarName	:= 	'SPARE';
+
+	aInputsStatusHMI[63].bState		:= 	FALSE;
+	aInputsStatusHMI[63].sVarName	:= 	'SPARE';
+
+	aInputsStatusHMI[64].bState		:= 	FALSE;
+	aInputsStatusHMI[64].sVarName	:= 	'SPARE';
+
+
+(****************************** Outputs status ****************************************)
+
+	aOutputsStatusHMI[1].bState		:= 	qb81KF1_1_SafetyReset;
+	aOutputsStatusHMI[1].sVarName	:= 	'qb81KF1_1_SafetyReset';
+
+	aOutputsStatusHMI[2].bState		:= 	qb81KF1_4_PreMachineCutOut;
+	aOutputsStatusHMI[2].sVarName	:= 	'qb81KF1_4_PreMachineCutOut (METS Run to Wrapper)';
+
+	aOutputsStatusHMI[3].bState		:= 	qb82KF1_1_PostMachineCutOut_STCP;
+	aOutputsStatusHMI[3].sVarName	:= 	'qb82KF1_1_PostMachineCutOut_STCP (METS Run to CP)';
+
+	aOutputsStatusHMI[4].bState		:= 	qb82KF1_5_CaseValidationOK_STCP	;
+	aOutputsStatusHMI[4].sVarName	:= 	'qb82KF1_5_CaseValidationOK_STCP	';
+
+	aOutputsStatusHMI[5].bState		:= 	qb82KF1_2_OuterValidationOK_STCP;
+	aOutputsStatusHMI[5].sVarName	:= 	'qb82KF1_2_OuterValidationOK_STCP';
+
+	aOutputsStatusHMI[6].bState		:= 	FALSE;
+	aOutputsStatusHMI[6].sVarName	:= 	'SPARE';
+
+	aOutputsStatusHMI[7].bState		:= 	FALSE;
+	aOutputsStatusHMI[7].sVarName	:= 	'SPARE';
+
+	aOutputsStatusHMI[8].bState		:= 	FALSE;
+	aOutputsStatusHMI[8].sVarName	:= 	'SPARE';
+
+
+
+	aOutputsStatusHMI[9].bState		:= 	qb783KF1_1_MasterListCameraPower;
+	aOutputsStatusHMI[9].sVarName	:= 	'qb783KF1_1_MasterListCameraPower';
+
+	aOutputsStatusHMI[10].bState		:= 	qb783KF1_6_AggregationCamera1Power;
+	aOutputsStatusHMI[10].sVarName	:= 	'qb783KF1_6_AggregationCamera1(2)Power';
+
+	aOutputsStatusHMI[11].bState		:= 	qb783KF1_7_ConfirmationCamera1Power;
+	aOutputsStatusHMI[11].sVarName	:= 	'qb783KF1_7_ConfirmationCamera1Power';
+
+	aOutputsStatusHMI[12].bState		:= 	qb785KF1_5_IntermediateCamera1Power;
+	aOutputsStatusHMI[12].sVarName	:= 	'qb785KF1_5_IntermediateCamera1Power';
+
+	aOutputsStatusHMI[13].bState		:= 	qb381KF1_7_OuterValidationCameraPower;
+	aOutputsStatusHMI[13].sVarName	:= 	'qb381KF1_7_OuterValidationCameraPower';
+
+	aOutputsStatusHMI[14].bState		:= 	qb381KF1_8_OuterAggregationCameraPower;
+	aOutputsStatusHMI[14].sVarName	:= 	'qb381KF1_8_OuterAggregationCameraPower';
+
+	aOutputsStatusHMI[15].bState		:= 	qb382KF1_5_CaseContentValidationCameraPower;
+	aOutputsStatusHMI[15].sVarName	:= 	'qb382KF1_5_CaseContentValidationCameraPower';
+
+	aOutputsStatusHMI[16].bState		:= 	qb382KF1_6_CaseLabelValidationCameraPower;
+	aOutputsStatusHMI[16].sVarName	:= 	'qb382KF1_6_CaseLabelValidationCameraPower';
+
+
+
+	aOutputsStatusHMI[17].bState		:= 	qb784KF1_1_MasterListCameraTrigger;
+	aOutputsStatusHMI[17].sVarName	:= 	'qb784KF1_1_MasterListCameraTrigger';
+
+	aOutputsStatusHMI[18].bState		:= 	qb784KF1_2_AggregationCameraTrigger;
+	aOutputsStatusHMI[18].sVarName	:= 	'qb784KF1_2_AggregationCameraTrigger';
+
+	aOutputsStatusHMI[19].bState		:= 	qb784KF1_7_ConfirmationCamera1Trigger;
+	aOutputsStatusHMI[19].sVarName	:= 	'qb784KF1_7_ConfirmationCamera1Trigger';
+
+	aOutputsStatusHMI[20].bState		:= 	qb785KF1_1_IntermediateCamera1Trigger;
+	aOutputsStatusHMI[20].sVarName	:= 	'qb785KF1_1_IntermediateCamera1Trigger';
+
+	aOutputsStatusHMI[21].bState		:= 	qb381KF1_3_OuterValidationCameraTrig;
+	aOutputsStatusHMI[21].sVarName	:= 	'qb381KF1_3_OuterValidationCameraTrig';
+
+	aOutputsStatusHMI[22].bState		:= 	qb381KF1_4_OuterAggregationCameraTrig;
+	aOutputsStatusHMI[22].sVarName	:= 	'qb381KF1_4_OuterAggregationCameraTrig';
+
+	aOutputsStatusHMI[23].bState		:= 	FALSE;
+	aOutputsStatusHMI[23].sVarName	:= 	'SPARE';
+
+	aOutputsStatusHMI[24].bState		:= 	qb380KF1_1_ClampCylinderExtend;
+	aOutputsStatusHMI[24].sVarName	:= 	'qb380KF1_1_ClampCylinderExtend';
+
+
+
+	aOutputsStatusHMI[25].bState		:= 	qb380KF1_3_RejectCylinderExtend;
+	aOutputsStatusHMI[25].sVarName	:= 	'qb380KF1_3_RejectCylinderExtend';
+
+	aOutputsStatusHMI[26].bState		:= 	qb380KF1_7_RejectCylinderRetract;
+	aOutputsStatusHMI[26].sVarName	:= 	'qb380KF1_7_RejectCylinderRetract';
+
+	aOutputsStatusHMI[27].bState		:= 	qb786KF1_8_PLCControlledMLCamerasLightning;
+	aOutputsStatusHMI[27].sVarName	:= 	'qb786KF1_8_PLCControlledMLCamerasLightning';
+
+	aOutputsStatusHMI[28].bState		:= 	qb783KF1_8_PLCControlledAggCamerasLightning;
+	aOutputsStatusHMI[28].sVarName	:= 	'qb783KF1_8_PLCControlledPackAggCamerasLightning';
+
+	aOutputsStatusHMI[29].bState		:= 	qb784KF1_8_PLCControlledConfCameraLightning;
+	aOutputsStatusHMI[29].sVarName	:= 	'qb784KF1_8_PLCControlledConfCameraLightning';
+
+	aOutputsStatusHMI[30].bState		:= 	qb382KF1_3_OuterValidationCameraLightning;
+	aOutputsStatusHMI[30].sVarName	:= 	'qb382KF1_3_OuterValidationCameraLightning';
+
+	aOutputsStatusHMI[31].bState		:= 	qb382KF1_7_OuterAggregationCameraLightning;
+	aOutputsStatusHMI[31].sVarName	:= 	'qb382KF1_7_OuterAggregationCameraLightning';
+
+	aOutputsStatusHMI[32].bState		:= 	qb382KF1_4_CaseContentValidationCameraLightning;
+	aOutputsStatusHMI[32].sVarName	:= 	'qb382KF1_4_CaseContentValidationCameraLightning';
+	*)]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="SFLX" Id="{03bcd517-e7c9-469c-bcba-e323a5a464d7}">
+      <Implementation>
+        <ST><![CDATA[(****************************** Inputs status ****************************************)
+;(*
+	aInputsStatusHMI[1].bState		:= 	ib66KF1_5_PreMachineInAutorun;
+	aInputsStatusHMI[1].sVarName	:= 	'ib66KF1_5_PreMachineInAutorun';
+
+	aInputsStatusHMI[2].bState		:= 	ib61KF1_2_CasePackerAutoRun_SFCP ;
+	aInputsStatusHMI[2].sVarName	:= 	'ib61KF1_2_CasePackerAutoRun_SFCP ';
+
+	aInputsStatusHMI[3].bState		:= 	ib61KF1_3_RowComplete_SFCP ;
+	aInputsStatusHMI[3].sVarName	:= 	'ib61KF1_3_RowComplete_SFCP ';
+
+	aInputsStatusHMI[4].bState		:= 	ib61KF1_7_LayerComplete_SFCP;
+	aInputsStatusHMI[4].sVarName	:= 	'ib61KF1_7_LayerComplete_SFCP';
+
+	aInputsStatusHMI[5].bState		:= 	ib61KF1_4_CaseComplete_SFCP;
+	aInputsStatusHMI[5].sVarName	:= 	'ib61KF1_4_CaseComplete_SFCP';
+
+	aInputsStatusHMI[6].bState		:= 	ib61KF1_8_CaseDischarged_SFCP;
+	aInputsStatusHMI[6].sVarName	:= 	'ib61KF1_8_CaseDischarged_SFCP';
+
+	aInputsStatusHMI[7].bState		:= 	ib63KF1_2_CaseLabelValidationTrig_SFCP;
+	aInputsStatusHMI[7].sVarName	:= 	'ib63KF1_2_CaseLabelValidationTrig_SFCP';
+
+	aInputsStatusHMI[8].bState		:= 	ib65KF1_6_EmergencyCircuitFromPSR;
+	aInputsStatusHMI[8].sVarName	:= 	'ib65KF1_6_EmergencyCircuitFromPSR';
+
+
+
+	aInputsStatusHMI[9].bState		:= 	ib65KF1_1_PSRisReset;
+	aInputsStatusHMI[9].sVarName	:= 	'ib65KF1_1_PSRisReset';
+
+	aInputsStatusHMI[10].bState		:= 	ib65KF1_5_PSRisOK;
+	aInputsStatusHMI[10].sVarName	:= 	'ib65KF1_5_PSRisOK';
+
+	aInputsStatusHMI[11].bState		:= 	ib363KF1_3_RowCompleteSensor;
+	aInputsStatusHMI[11].sVarName	:= 	'ib363KF1_3_RowCompleteSensor';
+
+	aInputsStatusHMI[12].bState		:= 	ib363KF1_7_LayerCompleteSensor;
+	aInputsStatusHMI[12].sVarName	:= 	'ib363KF1_7_LayerCompleteSensor';
+
+	aInputsStatusHMI[13].bState		:= 	ib363KF1_4_CaseCompleteSensor;
+	aInputsStatusHMI[13].sVarName	:= 	'ib363KF1_4_CaseCompleteSensor';
+
+	aInputsStatusHMI[14].bState		:= 	ib363KF1_8_CaseDischargedSensor;
+	aInputsStatusHMI[14].sVarName	:= 	'ib363KF1_8_CaseDischargedSensor';
+
+	aInputsStatusHMI[15].bState		:= 	ib363KF1_2_CaseLabelValidationCameraTrigSensor;
+	aInputsStatusHMI[15].sVarName	:= 	'ib363KF1_2_CaseLabelValidationCameraTrigSensor';
+
+	aInputsStatusHMI[16].bState		:= 	ib65KF1_2_EmergencyStopFromPSR;
+	aInputsStatusHMI[16].sVarName	:= 	'ib65KF1_2_EmergencyStopFromPSR';
+
+
+
+	aInputsStatusHMI[17].bState		:= 	ib362KF1_4_AirPressureOK;
+	aInputsStatusHMI[17].sVarName	:= 	'ib362KF1_4_AirPressureOK';
+
+	aInputsStatusHMI[18].bState		:= 	ib64KF1_1_MainsSupplyHealthy;
+	aInputsStatusHMI[18].sVarName	:= 	'ib64KF1_1_MainsSupplyHealthy ';
+
+	aInputsStatusHMI[19].bState		:= 	ib64KF1_5_UPSHealthy;
+	aInputsStatusHMI[19].sVarName	:= 	'ib64KF1_5_UPSHealthy';
+
+	aInputsStatusHMI[20].bState		:= 	ib64KF1_2_UPSBatteryMode;
+	aInputsStatusHMI[20].sVarName	:= 	'ib64KF1_2_UPSBatteryMode';
+
+	aInputsStatusHMI[21].bState		:= 	ib64KF1_6_UPSBatteryCharging;
+	aInputsStatusHMI[21].sVarName	:= 	'ib64KF1_6_UPSBatteryCharging';
+
+	aInputsStatusHMI[22].bState		:= 	ib64KF1_3_TransferConveyorPlugConnected;
+	aInputsStatusHMI[22].sVarName	:= 	'ib64KF1_3_TransferConveyorPlugConnected';
+
+	aInputsStatusHMI[23].bState		:= 	ib64KF1_7_OutfeedConveyorPlugConnected;
+	aInputsStatusHMI[23].sVarName	:= 	'ib64KF1_7_OutfeedConveyorPlugConnected';
+
+	aInputsStatusHMI[24].bState		:= 	ib68KF1_4_AdditionalConveyorPlugConnected;
+	aInputsStatusHMI[24].sVarName	:= 	'ib68KF1_4_AdditionalConveyorPlugConnected';
+
+
+
+	aInputsStatusHMI[25].bState		:= 	ib61KF1_6_CaseRejected_SFCP;
+	aInputsStatusHMI[25].sVarName	:= 	'ib61KF1_6_CaseRejected_SFCP';
+
+	aInputsStatusHMI[26].bState		:= 	ib64KF1_8_Guard2;
+	aInputsStatusHMI[26].sVarName	:= 	'ib64KF1_8_PinchGuard';
+
+	aInputsStatusHMI[27].bState		:= 	ib65KF1_7_Guard3;
+	aInputsStatusHMI[27].sVarName	:= 	'ib362KF1_5_FlexRHDoor';
+
+	aInputsStatusHMI[28].bState		:= 	ib65KF1_4_Guard4;
+	aInputsStatusHMI[28].sVarName	:= 	'ib362KF1_2_FlexPrinterDoor';
+
+	aInputsStatusHMI[29].bState		:= 	ib65KF1_8_Guard5;
+	aInputsStatusHMI[29].sVarName	:= 	'ib362KF1_6_FlexLHDoor';
+
+	aInputsStatusHMI[30].bState		:= 	ib65KF1_3_Guard6;
+	aInputsStatusHMI[30].sVarName	:= 	'ib65KF1_3_FlexInfeedDoor';
+
+	aInputsStatusHMI[31].bState		:= 	ib61KF1_1_DoorOpenZone1_SFCP;
+	aInputsStatusHMI[31].sVarName	:= 	'ib61KF1_1_DoorOpenZone1_SFCP';
+
+	aInputsStatusHMI[32].bState		:= 	ib61KF1_5_DoorOpenZone2_SFCP;
+	aInputsStatusHMI[32].sVarName	:= 	'ib61KF1_5_DoorOpenZone2_SFCP';
+
+
+
+	aInputsStatusHMI[33].bState		:= 	ib663KF1_1_MasterListCameraTrigSensor;
+	aInputsStatusHMI[33].sVarName	:= 	'ib663KF1_1_MasterListCameraTrigSensor';
+
+	aInputsStatusHMI[34].bState		:= 	ib663KF1_2_AggregationCameraTrigSensor;
+	aInputsStatusHMI[34].sVarName	:= 	'ib663KF1_2_AggregationCameraTrigSensor';
+
+	aInputsStatusHMI[35].bState		:= 	ib664KF1_1_OuterIndexComplete;
+	aInputsStatusHMI[35].sVarName	:= 	'ib664KF1_1_OuterIndexComplete';
+
+	aInputsStatusHMI[36].bState		:= 	ib664KF1_5_IntermediateCameraTrigSensor;
+	aInputsStatusHMI[36].sVarName	:= 	'ib664KF1_5_IntermediateCameraTrigSensor';
+
+	aInputsStatusHMI[37].bState		:= 	ib664KF1_2_Guard1;
+	aInputsStatusHMI[37].sVarName	:= 	'ib664KF1_2_Guard (MasterList1)';
+
+	aInputsStatusHMI[38].bState		:= 	ib664KF1_6_Guard2;
+	aInputsStatusHMI[38].sVarName	:= 	'ib664KF1_6_Guard2 (MasterList2)';
+
+	aInputsStatusHMI[39].bState		:= 	ib664KF1_3_Guard3;
+	aInputsStatusHMI[39].sVarName	:= 	'ib664KF1_3_Guard3 (MasterList3)';
+
+	aInputsStatusHMI[40].bState		:= 	ib664KF1_7_Guard4;
+	aInputsStatusHMI[40].sVarName	:= 	'ib664KF1_7_Guard4 (Wrapper Door 1)';
+
+
+
+	aInputsStatusHMI[41].bState		:= 	ib664KF1_4_OuterBrushOpen;
+	aInputsStatusHMI[41].sVarName	:= 	'ib664KF1_4_OuterBrushOpen';
+
+	aInputsStatusHMI[42].bState		:= 	ib664KF1_8_RejectTowerActive;
+	aInputsStatusHMI[42].sVarName	:= 	'ib664KF1_8_RejectTowerActive';
+
+	aInputsStatusHMI[43].bState		:= 	ib364KF1_4_EUCAExitBlocked;
+	aInputsStatusHMI[43].sVarName	:= 	'ib364KF1_4_EUCAExitBlocked';
+
+	aInputsStatusHMI[44].bState		:= 	ib364KF1_8_EUCABuildBack;
+	aInputsStatusHMI[44].sVarName	:= 	'ib364KF1_8_EUCABuildBack';
+
+	aInputsStatusHMI[45].bState		:= 	ib360KF1_3_OuterMasterListTrigSensor;
+	aInputsStatusHMI[45].sVarName	:= 	'ib360KF1_3_OuterMasterListTrigSensor';
+
+	aInputsStatusHMI[46].bState		:= 	ib365KF1_6_OuterReadingConfirmation;
+	aInputsStatusHMI[46].sVarName	:= 	'ib365KF1_6_OuterReadingConfirmation';
+
+	aInputsStatusHMI[47].bState		:= 	ib365KF1_5_RejectConfirmationNCW;
+	aInputsStatusHMI[47].sVarName	:= 	'ib365KF1_5_RejectConfirmationNCW';
+
+	aInputsStatusHMI[48].bState		:= 	ib365KF1_2_RejectBinFullNCW;
+	aInputsStatusHMI[48].sVarName	:= 	'ib365KF1_2_RejectBinFullNCW';
+
+
+
+	aInputsStatusHMI[49].bState		:= 	ib360KF1_1_OuterAtInfeed;
+	aInputsStatusHMI[49].sVarName	:= 	'ib360KF1_1_OuterAtInfeed';
+
+	aInputsStatusHMI[50].bState		:= 	ib364KF1_2_OuterInfeedJam;
+	aInputsStatusHMI[50].sVarName	:= 	'ib364KF1_2_OuterInfeedJam';
+
+	aInputsStatusHMI[51].bState		:= 	ib360KF1_7_OuterAtReject;
+	aInputsStatusHMI[51].sVarName	:= 	'ib360KF1_7_OuterAtReject';
+
+	aInputsStatusHMI[52].bState		:= 	ib363KF1_1_QAButtonRejectOuter;
+	aInputsStatusHMI[52].sVarName	:= 	'ib363KF1_1_QAButtonRejectOuter';
+
+	aInputsStatusHMI[53].bState		:= 	ib364KF1_7_OuterTransferConfirmation;
+	aInputsStatusHMI[53].sVarName	:=  'ib364KF1_7_OuterTransferConfirmation';
+
+	aInputsStatusHMI[54].bState		:= 	ib365KF1_3_OuterAtTransferReject;
+	aInputsStatusHMI[54].sVarName	:= 	'ib365KF1_3_OuterAtTransferReject';
+
+	aInputsStatusHMI[55].bState		:= 	ib364KF1_3_OuterAtSideFlexExit;
+	aInputsStatusHMI[55].sVarName	:= 	'ib364KF1_3_OuterAtSideFlexExit';
+
+	aInputsStatusHMI[56].bState		:= 	ib365KF1_1_OuterAtPostMachineInfeed;
+	aInputsStatusHMI[56].sVarName	:= 	'ib365KF1_1_OuterAtPostMachineInfeed';
+
+
+
+	aInputsStatusHMI[57].bState		:= 	ib361KF1_2_FirstPusherExtended;
+	aInputsStatusHMI[57].sVarName	:= 	'ib361KF1_2_FirstPusherExtended';
+
+	aInputsStatusHMI[58].bState		:= 	ib361KF1_6_FirstPusherRetracted;
+	aInputsStatusHMI[58].sVarName	:= 	'ib361KF1_6_FirstPusherRetracted';
+
+	aInputsStatusHMI[59].bState		:= 	ib361KF1_4_SecondPusherExtended;
+	aInputsStatusHMI[59].sVarName	:= 	'ib361KF1_4_SecondPusherExtended';
+
+	aInputsStatusHMI[60].bState		:= 	ib361KF1_8_SecondPusherRetracted;
+	aInputsStatusHMI[60].sVarName	:= 	'ib361KF1_8_SecondPusherRetracted';
+
+	aInputsStatusHMI[61].bState		:= 	ib361KF1_3_RejectCylinderExtended;
+	aInputsStatusHMI[61].sVarName	:= 	'ib361KF1_3_RejectCylinderExtended';
+
+	aInputsStatusHMI[62].bState		:= 	ib361KF1_7_RejectCylinderRetracted;
+	aInputsStatusHMI[62].sVarName	:= 	'ib361KF1_7_RejectCylinderRetracted';
+
+	aInputsStatusHMI[63].bState		:= 	ib364KF1_1_AdditionalRejectCylExtended;
+	aInputsStatusHMI[63].sVarName	:= 	'ib364KF1_1_AdditionalRejectCylExtended';
+
+	aInputsStatusHMI[64].bState		:= 	ib364KF1_5_AdditionalRejectCylRetracted;
+	aInputsStatusHMI[64].sVarName	:= 	'ib364KF1_5_AdditionalRejectCylRetracted';
+
+
+(****************************** Outputs status ****************************************)
+
+	aOutputsStatusHMI[1].bState		:= 	qb81KF1_1_SafetyReset;
+	aOutputsStatusHMI[1].sVarName	:= 	'qb81KF1_1_SafetyReset';
+
+	aOutputsStatusHMI[2].bState		:= 	qb81KF1_4_PreMachineCutOut;
+	aOutputsStatusHMI[2].sVarName	:= 	'qb81KF1_4_PreMachineCutOut (METS Run to Wrapper)';
+
+	aOutputsStatusHMI[3].bState		:= 	qb82KF1_1_CutOut_STCP;
+	aOutputsStatusHMI[3].sVarName	:= 	'qb82KF1_1_CutOut_STCP (METS Run to CP)';
+
+	aOutputsStatusHMI[4].bState		:= 	qb82KF1_5_CaseValidationOK_STCP	;
+	aOutputsStatusHMI[4].sVarName	:= 	'qb82KF1_5_CaseValidationOK_STCP	';
+
+	aOutputsStatusHMI[5].bState		:= 	qb82KF1_2_OuterValidationOK_STCP;
+	aOutputsStatusHMI[5].sVarName	:= 	'qb82KF1_2_OuterValidationOK_STCP';
+
+	aOutputsStatusHMI[6].bState		:= 	qb383KF1_4_RejectActiveNCW;
+	aOutputsStatusHMI[6].sVarName	:= 	'qb383KF1_4_RejectActiveNCW';
+
+	aOutputsStatusHMI[7].bState		:= 	FALSE;
+	aOutputsStatusHMI[7].sVarName	:= 	'SPARE';
+
+	aOutputsStatusHMI[8].bState		:= 	FALSE;
+	aOutputsStatusHMI[8].sVarName	:= 	'SPARE';
+
+
+
+	aOutputsStatusHMI[9].bState		:= 	qb683KF1_1_MasterListCameraPower;
+	aOutputsStatusHMI[9].sVarName	:= 	'qb683KF1_1_MasterListCameraPower';
+
+	aOutputsStatusHMI[10].bState		:= 	qb683KF1_6_AggregationCamera1Power;
+	aOutputsStatusHMI[10].sVarName	:= 	'qb683KF1_6_AggregationCamera1(2)Power';
+
+	aOutputsStatusHMI[11].bState		:= 	qb685KF1_5_IntermediateCameraPower;
+	aOutputsStatusHMI[11].sVarName	:= 	'qb685KF1_5_IntermediateCameraPower';
+
+	aOutputsStatusHMI[12].bState		:= 	qb383KF1_7_OuterContentValidationCameraPower;
+	aOutputsStatusHMI[12].sVarName	:= 	'qb383KF1_7_OuterContentValidationCameraPower';
+
+	aOutputsStatusHMI[13].bState		:= 	qb381KF1_7_OuterValidationCameraPower;
+	aOutputsStatusHMI[13].sVarName	:= 	'qb381KF1_7_OuterValidationCameraPower';
+
+	aOutputsStatusHMI[14].bState		:= 	qb381KF1_8_OuterAggregationCameraPower;
+	aOutputsStatusHMI[14].sVarName	:= 	'qb381KF1_8_OuterAggregationCameraPower';
+
+	aOutputsStatusHMI[15].bState		:= 	qb382KF1_5_CaseContentValidationCameraPower;
+	aOutputsStatusHMI[15].sVarName	:= 	'qb382KF1_5_CaseContentValidationCameraPower';
+
+	aOutputsStatusHMI[16].bState		:= 	qb382KF1_6_CaseLabelValidationCameraPower;
+	aOutputsStatusHMI[16].sVarName	:= 	'qb382KF1_6_CaseLabelValidationCameraPower';
+
+
+
+	aOutputsStatusHMI[17].bState		:= 	qb684KF1_1_MasterListCameraTrigger;
+	aOutputsStatusHMI[17].sVarName	:= 	'qb684KF1_1_MasterListCameraTrigger';
+
+	aOutputsStatusHMI[18].bState		:= 	qb684KF1_2_AggregationCameraTrigger;
+	aOutputsStatusHMI[18].sVarName	:= 	'qb684KF1_2_AggregationCamera1(2)Trigger';
+
+	aOutputsStatusHMI[19].bState		:= 	qb685KF1_1_IntermediateCameraTrigger;
+	aOutputsStatusHMI[19].sVarName	:= 	'qb685KF1_1_IntermediateCameraTrigger';
+
+	aOutputsStatusHMI[20].bState		:= 	qb383KF1_3_OuterContentValidationCameraTrig;
+	aOutputsStatusHMI[20].sVarName	:= 	'qb383KF1_3_OuterContentValidationCameraTrig';
+
+	aOutputsStatusHMI[21].bState		:= 	qb381KF1_3_OuterValidationCameraTrig;
+	aOutputsStatusHMI[21].sVarName	:= 	'qb381KF1_3_OuterValidationCameraTrig';
+
+	aOutputsStatusHMI[22].bState		:= 	qb381KF1_4_OuterAggregationCameraTrig;
+	aOutputsStatusHMI[22].sVarName	:= 	'qb381KF1_4_OuterAggregationCameraTrig';
+
+	aOutputsStatusHMI[23].bState		:= 	qb683KF1_8_PLCControlledPackAggCamLightning;
+	aOutputsStatusHMI[23].sVarName	:= 	'qb683KF1_8_PLCControlledPackAggCamLightning';
+
+	aOutputsStatusHMI[24].bState		:= 	qb384KF1_3_PLCControlledOuterValidCamLightning;
+	aOutputsStatusHMI[24].sVarName	:= 	'qb384KF1_3_PLCControlledOuterValidCamLightning';
+
+
+
+	aOutputsStatusHMI[25].bState		:= 	qb380KF1_1_FirstPusherCylinderExtend;
+	aOutputsStatusHMI[25].sVarName	:= 	'qb380KF1_1_FirstPusherCylinderExtend';
+
+	aOutputsStatusHMI[26].bState		:= 	qb380KF1_4_FirstPusherCylinderRetract;
+	aOutputsStatusHMI[26].sVarName	:= 	'qb380KF1_4_FirstPusherCylinderRetract';
+
+	aOutputsStatusHMI[27].bState		:= 	qb380KF1_5_SecondPusherCylinderExtend;
+	aOutputsStatusHMI[27].sVarName	:= 	'qb380KF1_5_SecondPusherCylinderExtend';
+
+	aOutputsStatusHMI[28].bState		:= 	qb380KF1_8_SecondPusherCylinderRetract;
+	aOutputsStatusHMI[28].sVarName	:= 	'qb380KF1_8_SecondPusherCylinderRetract';
+
+	aOutputsStatusHMI[29].bState		:= 	qb380KF1_3_RejectCylinderExtend;
+	aOutputsStatusHMI[29].sVarName	:= 	'qb380KF1_3_RejectCylinderExtend';
+
+	aOutputsStatusHMI[30].bState		:= 	qb380KF1_7_RejectCylinderRetract;
+	aOutputsStatusHMI[30].sVarName	:= 	'qb380KF1_7_RejectCylinderRetract';
+
+	aOutputsStatusHMI[31].bState		:= 	qb384KF1_7_PLCControlledOuterAggCamLightning;
+	aOutputsStatusHMI[31].sVarName	:= 	'qb384KF1_7_PLCControlledOuterAggCamLightning';
+
+	aOutputsStatusHMI[32].bState		:= 	qb384KF1_4_PLCControlledCaseContentCamLightning;
+	aOutputsStatusHMI[32].sVarName	:= 	'qb384KF1_4_PLCControlledCaseContentCamLightning';
+*)]]></ST>
+      </Implementation>
+    </Action>
+  </POU>
+</TcPlcObject>

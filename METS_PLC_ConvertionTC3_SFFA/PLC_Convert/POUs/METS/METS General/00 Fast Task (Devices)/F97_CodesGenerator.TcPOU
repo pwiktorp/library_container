@@ -1,0 +1,63 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F97_CodesGenerator" Id="{1aea3918-5581-44a7-8fd8-990233fba9f4}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM F97_CodesGenerator
+VAR
+	bStart:BOOL;
+	bPackReset:BOOL;
+	bPackDone:BOOL;
+	fbPackCodeAggregator:C91_FB_PackCodeAggregator;
+	fbOuterCodeAggregator:C91_FB_OuterCodeAggregator;
+
+	sState:STRING(22);
+	tonNextPack:TON;
+	rtrigPackDone:R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF NOT bStart THEN
+	RETURN;
+ELSE
+
+	IF tonNextPack.Q THEN
+		bPackReset:=TRUE;
+	ELSE
+		bPackReset:=FALSE;
+	END_IF
+
+
+	fbPackCodeAggregator	(
+							bStart:=stMetsStatus.bSettingsValid,
+							bReset:=bPackReset,
+							stCodeInfo_Pack:=stMachineConfig.stCodeInfo_Pack,
+							aOCVPackStatus:=aOCVPackStatus,
+							sState=>,
+							bDone=>bPackDone
+						);
+
+	tonNextPack(IN:=bStart AND bPackDone, PT:=t#1s, Q=>);
+
+	fbOuterCodeAggregator	(
+							bStart:=stMetsStatus.bSettingsValid,
+							bReset:=fbOuterCodeAggregator.bDone,
+							stCodeInfo_Outer:=stMachineConfig.stCodeInfo_Outer,
+							stPCMStatus:=stMetsStatus.stPCMStatus,
+							aOCVPackStatus:=aOCVPackStatus,
+							aOuterStatus:=aOuterStatus,
+							sState=>,
+							bDone=>
+						);
+
+END_IF
+
+
+
+
+
+
+]]></ST>
+    </Implementation>
+    <LineIds Name="F97_CodesGenerator">
+      <LineId Id="12" Count="40" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

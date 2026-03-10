@@ -1,0 +1,159 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_OCV_FindDB" Id="{dce301cc-11f4-495e-915a-5e603c2c5743}" SpecialFunc="None">
+    <Declaration><![CDATA[(* converts strOuterBarcode to OCV filename and loads data *)
+FUNCTION_BLOCK FB_OCV_FindDB
+VAR_INPUT
+	bExecute				: BOOL;		(* set TRUE to load OCV file *)
+	sPackBarcode			: T_PACK_Barcode;	(* Outer barcode *)
+	nAcceptanceLevel			: INT;
+	bUseInterimCodeForValidation	: BOOL;
+END_VAR
+VAR_IN_OUT
+	stOCVDataDB							: ST_DB_OCVDataCtrl;
+	stCodeInfo_Pack				: ST_CodeInfo;
+	stCodeInfo_Intermediate		: ST_CodeInfo;
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;		(* TRUE = find file complete *)
+	bBusy				: BOOL;		(* TRUE = find file in progress *)
+	bError				: BOOL;		(* TRUE = error occurred *)
+	nErrorID				: UDINT;		(* error code *)
+	bOCVDataFound		: BOOL;		(* TRUE = OCV file found *)
+	bOCVDataValid		: BOOL;		(* TRUE - OCV file valide*)
+	aOCVRecordDBName			 : ARRAY[1..2] OF T_MaxString;
+END_VAR
+VAR
+	fbExecute				: R_TRIG;
+	eState				: E_OCV_State;
+	eErrorState				: E_OCV_State;
+	eCodeAIType				: E_CodeAIType;
+
+
+	tonTimeOut				: TON;
+	rtTimeOutExec				: R_TRIG;
+
+	stOCVData			: ST_OUTER_Status;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(***************************************TimeOut *******************************************)
+(* monitor Busy timeout *)
+tonTimeOut( IN:=eState=E_OCV_DBREQUEST, PT:=cTHREE_SECONDS, Q=>);
+(*	cTHREE_SECONDS						: TIME := T#3s;
+	cFIVE_SECONDS						: TIME := t#5s;
+	cTEN_SECONDS						: TIME := t#10s;*)
+
+rtTimeOutExec(CLK:= tonTimeOut.Q);
+
+IF rtTimeOutExec.Q THEN
+
+	bError := TRUE;
+	nErrorID := 100;
+	eErrorState := eState;
+
+	MEMSET(ADR(stOCVDataDB), 16#00, SIZEOF(stOCVDataDB));
+
+	eState := E_OCV_DONE;
+END_IF
+
+(***************************************Execution*******************************************)
+
+fbExecute(CLK := bExecute);
+
+CASE eState OF
+
+	(* idle *)
+	E_OCV_IDLE:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* initialise outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			MEMSET(ADR(aOCVRecordDBName), 16#00, SIZEOF(aOCVRecordDBName));
+			(* convert strOuterBarcode to OAC filename *)
+			bOCVDataFound := FALSE;
+			bOCVDataValid := FALSE;
+			MEMSET(ADR(stOCVData), 16#00, SIZEOF(stOCVData));
+
+			eState := E_OCV_DBREQUEST;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			(*nErrorID := 0;*)
+
+			(*bOCVFileFound := FALSE;*)
+			(*bOCVFileValide := FALSE;*)
+		END_IF
+
+	E_OCV_DBREQUEST:
+
+		stOCVDataDB.bReadDataReq		:=TRUE;
+
+		IF F_InvalidateASCIIChar(F_CODE_GetItem(sPackBarcode , eCodeAIType.SerialCode,
+													SEL(bUseInterimCodeForValidation  , stCodeInfo_Pack, stCodeInfo_Intermediate))) =	0 	THEN
+
+			stOCVDataDB.sFileCodeName1	:= F_CodeToHex(F_CODE_GetItem(sPackBarcode , eCodeAIType.SerialCode,
+													SEL(bUseInterimCodeForValidation  , stCodeInfo_Pack, stCodeInfo_Intermediate)));
+		END_IF
+
+(*place for HectorDB block*)
+
+		IF stOCVDataDB.bDone THEN
+			IF NOT stOCVDataDB.bError THEN		(* f.ex not found, or DB transaction faild??*)
+
+				stOCVData := stOCVDataDB.stOCVStatusDB;
+				aOCVRecordDBName[1] := stOCVDataDB.stOCVStatusDB.stOACData.AggregationCodes[1];
+				aOCVRecordDBName[2] := stOCVDataDB.stOCVStatusDB.stOACData.AggregationCodes[2];
+				(* OCV record exists *)
+				bOCVDataFound := TRUE;
+
+				IF stOCVData.stOACData.NumberOfLinkedPacks >= nAcceptanceLevel THEN
+					bOCVDataValid := TRUE;
+				END_IF
+			ELSE
+				bError := TRUE;
+				nErrorID := stOCVDataDB.nErrorID;
+
+				eErrorState := eState;
+			END_IF
+
+			MEMSET(ADR(stOCVDataDB), 16#00, SIZEOF(stOCVDataDB));
+
+			eState := E_OCV_DONE;
+		END_IF
+
+
+	(* complete *)
+	E_OCV_DONE:
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_OCV_IDLE;
+
+(* unknown state *)
+ELSE
+
+	eState := E_OCV_IDLE;
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+	(*nErrorID := 0;*)
+
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

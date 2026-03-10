@@ -1,0 +1,52 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_PRINTER_Outer5Fields" Id="{78ace500-c972-468f-b27c-93e8a26bdbf2}" SpecialFunc="None">
+    <Declaration><![CDATA[(* generate dynamic field data for Outer label template with 10 fields *)
+FUNCTION F_PRINTER_Outer5Fields : INT
+VAR_INPUT
+	sFullCode			: T_OUTER_Barcode;
+	stCodeInfo		: ST_CodeInfo;
+	stSystemTime		: TIMESTRUCT;
+END_VAR
+
+VAR
+	sFNC1 	: STRING(3) :='¦';		(*Depend typ of printer - we need to define foramt for FNC1*)
+END_VAR
+(*All VAR_IN_OUT variables have been moved to the end of the declaration due to compatibility reasons*)
+VAR_IN_OUT
+	aFieldData		: ARRAY[1..5] OF T_MaxString;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* clear previous field data *)
+MEMSET(ADR(aFieldData), 16#00, SIZEOF(aFieldData));
+
+
+aFieldData[1] :=  F_SCANNER_RemoveAIBrackets(sFullCode);
+aFieldData[2] :=  CONCAT ('(01) ', F_CODE_GetItem(sFullCode, eCodeAIType.GTIN, stCodeInfo));
+aFieldData[3] :=  CONCAT ('(21) ', F_ReplaceSingleChar (F_CODE_GetItem (sFullCode, eCodeAIType.SerialCode, stCodeInfo), sFNC1, ''));
+aFieldData[4] :=  CONCAT ('(240) ', F_CODE_GetItem(sFullCode, eCodeAIType.RSKU, stCodeInfo));
+aFieldData[5] :=  '' (*F_CONCAT3(F_StringWildcard('#YMDD#', stSystemTime), ' ', F_StringWildcard('#hhmm#', stSystemTime))*);
+
+F_PRINTER_Outer5Fields := 5;
+
+(*
+(* Outer template has 10 dynamic fields *)  
+arrFieldData[1] := F_StringAddPrefix(sOPIData.BarcodeOuter, 14, '0');
+arrFieldData[2] := strSerialCode;
+arrFieldData[3] := sOPIData.RetailSKU;
+arrFieldData[4] := F_CONCAT3(F_StringWildcard('#YMDD#', sSystemTime), sOPIData.ProductCode5678, F_StringWildcard('#hhmm#', sSystemTime));
+arrFieldData[5] := sOPIData.Area03Line01;
+arrFieldData[6] := sOPIData.Area03Line02;
+arrFieldData[7] := sOPIData.Area03Line04;
+arrFieldData[8] := sOPIData.Area03Line05;
+arrFieldData[9] := sOPIData.UserDefinedField01;
+arrFieldData[10] := sOPIData.UserDefinedField02;
+()
+(* output number of data fields used *)
+(*F_PRINTER_Outer5Fields := 10;*)*)]]></ST>
+    </Implementation>
+    <LineIds Name="F_PRINTER_Outer5Fields">
+      <LineId Id="15" Count="26" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

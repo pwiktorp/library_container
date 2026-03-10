@@ -1,0 +1,69 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_CASE_LastRowPoisitionBuffer_v2" Id="{cc85584f-485e-481e-b3c8-15cccd0de7a0}" SpecialFunc="None">
+    <Declaration><![CDATA[(* shift  Image Data from fbScaner  *)
+FUNCTION_BLOCK FB_CASE_LastRowPoisitionBuffer_v2
+VAR_INPUT
+	bExecute					: BOOL;
+	bReadError				: BOOL;
+	nValideIndex				: INT;
+	bResetBuffer				: BOOL;
+END_VAR
+VAR_IN_OUT
+	stNewImageData			: ST_SCANNER_ImageData;
+END_VAR
+VAR_OUTPUT
+	bDone					: BOOL;			(* TRUE = complete *)
+	stCurrentImageData			: ST_SCANNER_ImageData;
+	sCurrentBarcode			: T_OUTER_Barcode;
+	sLastOuterBarcode			: T_OUTER_Barcode;				(* last good received barcode *)
+END_VAR
+VAR
+	fbExecute					: R_TRIG;
+	aBufforImageData			: ARRAY[0..4] OF ST_SCANNER_ImageData;		(* image data structure *)
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+nValideIndex := LIMIT(0, nValideIndex, 4);
+
+IF bResetBuffer	THEN
+
+(* clear source buffer data *)
+	MEMSET(ADR(aBufforImageData), 16#00, SIZEOF(aBufforImageData));
+END_IF
+
+IF fbExecute.Q = TRUE THEN
+
+	(* shift Image Data one position  *)
+	MEMMOVE(ADR(aBufforImageData[1]), ADR(aBufforImageData[0]), SIZEOF(aBufforImageData)-SIZEOF(aBufforImageData[0]));
+
+	IF bReadError THEN
+		MEMSET(ADR(aBufforImageData[0]), 16#00 , SIZEOF(aBufforImageData[0]));
+	ELSE
+		(* copy Image Data to first position *)
+		MEMCPY(ADR(aBufforImageData[0]), ADR(stNewImageData), SIZEOF(aBufforImageData[0]));
+	END_IF
+
+	sLastOuterBarcode := sCurrentBarcode;
+
+	(* update output *)
+	bDone := TRUE;
+
+(* bExecute has been reset *)
+ELSIF bExecute = FALSE THEN
+
+	(* clear output *)
+	bDone := FALSE;
+END_IF
+
+stCurrentImageData := aBufforImageData[nValideIndex];
+sCurrentBarcode :=	aBufforImageData[nValideIndex].aCodeData[1].strDataString;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_CASE_LastRowPoisitionBuffer_v2">
+      <LineId Id="22" Count="36" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

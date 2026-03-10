@@ -1,0 +1,91 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_CASE_AddAIBrackets" Id="{c8cee57d-8cd3-4158-bd72-618875e25f15}" SpecialFunc="None">
+    <Declaration><![CDATA[(* adds brackets around Application Identifiers (AI) in 1D barcode *)
+FUNCTION F_CASE_AddAIBrackets : T_CASE_Barcode
+VAR_INPUT
+	strCaseBarcode		: T_CASE_Barcode;
+END_VAR
+VAR_IN_OUT
+	stCodeInfo_Case		: ST_CodeInfo;
+END_VAR
+VAR
+	strAI01				: T_MaxString;
+	strAI10				: T_MaxString;
+	strAI21				: T_MaxString;
+	strAI91				: T_MaxString;
+	strAI240				: T_MaxString;
+	nNextPos: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* barcode does not contain any brackets *)
+IF FIND(strCaseBarcode, '(') = 0 AND FIND(strCaseBarcode, ')') = 0 THEN
+
+
+	(* break barcode into constituent parts *)
+	IF	stCodeInfo_Case.stGTIN.nCodeLength <> 0 THEN
+		strAI01 := LEFT(strCaseBarcode,  stCodeInfo_Case.stGTIN.nCodeLength + 2);
+	END_IF
+
+	IF	stCodeInfo_Case.stBatchID.nCodeLength  <> 0 THEN
+		strAI10 := MID(strCaseBarcode, stCodeInfo_Case.stBatchID.nCodeLength + 2 , LEN(strAI01) + 1);
+	END_IF
+
+	IF	stCodeInfo_Case.stSerialCode.nCodeLength <> 0  THEN
+		strAI21 := MID(strCaseBarcode, stCodeInfo_Case.stSerialCode.nCodeLength + 2 , LEN(strAI01) +  LEN(strAI10) + 1);
+	END_IF
+
+	nNextPos := LEN(strAI01)+ LEN(strAI10) + LEN(strAI21)+1;
+
+	(* replace AI with AI in brackets *)
+	IF	strAI01 <> '' THEN
+		strAI01 := REPLACE(strAI01, '(01)', 2, 1);
+	END_IF
+
+	IF	strAI10 <> '' THEN
+		strAI10 := REPLACE(strAI10, '(10)', 2, 1);
+	END_IF
+
+	IF	strAI21 <> ''  THEN
+		strAI21 := REPLACE(strAI21, '(21)', 2, 1);
+	END_IF
+
+	(* 01MMMMMMMMMMMMMM240RRRRRRRR10SSSLLLDDDDHHMMSS *)
+	IF MID(strCaseBarcode, 3, nNextPos) = '240' THEN
+		IF	stCodeInfo_Case.stRSKU.nCodeLength  <> 0 THEN
+			strAI240 := MID(strCaseBarcode, stCodeInfo_Case.stRSKU.nCodeLength + 3, nNextPos);
+			nNextPos :=  nNextPos + LEN(strAI240);
+			strAI240 := REPLACE(strAI240, '(240)', 3, 1);
+		END_IF
+
+		IF	stCodeInfo_Case.stProductionOrder.nCodeLength <> 0 THEN
+			strAI91 := MID(strCaseBarcode, stCodeInfo_Case.stProductionOrder.nCodeLength + 2, nNextPos);
+			strAI91 := REPLACE(strAI91, '(91)', 2, 1);
+		END_IF
+
+		F_CASE_AddAIBrackets := F_CONCAT5(strAI01, strAI10, strAI21, strAI240, strAI91);
+
+	(* 01MMMMMMMMMMMMMM91RRRRRRRR10SSSLLLDDDDHHMMSS *)
+	ELSE
+		IF	stCodeInfo_Case.stProductionOrder.nCodeLength <> 0 THEN
+			strAI91 := MID(strCaseBarcode, stCodeInfo_Case.stProductionOrder.nCodeLength + 2, nNextPos);
+			nNextPos :=  nNextPos + LEN(strAI91);
+			strAI91 := REPLACE(strAI91, '(91)', 2, 1);
+		END_IF
+
+		IF	stCodeInfo_Case.stRSKU.nCodeLength  <> 0 THEN
+			strAI240 := MID(strCaseBarcode, stCodeInfo_Case.stRSKU.nCodeLength + 3, nNextPos);
+			strAI240 := REPLACE(strAI240, '(240)', 3, 1);
+		END_IF
+
+		F_CASE_AddAIBrackets := F_CONCAT5(strAI01, strAI10, strAI21, strAI91, strAI240);
+	END_IF
+
+(* brackets already in barcode *)
+ELSE
+
+	F_CASE_AddAIBrackets := strCaseBarcode;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

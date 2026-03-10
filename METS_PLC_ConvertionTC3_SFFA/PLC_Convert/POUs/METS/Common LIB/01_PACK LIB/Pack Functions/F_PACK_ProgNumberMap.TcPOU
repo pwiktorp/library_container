@@ -1,0 +1,53 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_PACK_ProgNumberMap" Id="{81e965d5-3bc6-49c3-b3fd-13f0bfc034fa}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_PACK_ProgNumberMap : BOOL
+
+VAR
+	nPackIndex			: INT;
+END_VAR
+(*All VAR_IN_OUT variables have been moved to the end of the declaration due to compatibility reasons*)
+VAR_IN_OUT
+	stImageData				: ST_SCANNER_ImageData;	(* scanner response data *)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*Function used only for old type of camera porgram without ProgramNumber. Used only in clasic PAOL before Mx project.
+All newer instalation should base on Progrmanumber for Code mapping*)
+
+FOR nPackIndex := 1 TO LIMIT(1, stImageData.nCodesRead, cMAX_CAMERA_PROG_NUMBER)  DO
+
+	IF stImageData.aCodeData[nPackIndex].nProgramNo = 0 THEN
+
+		(* code is in upper left quadrant of image *)
+		IF stImageData.aCodeData[nPackIndex].fXPos < 0 AND stImageData.aCodeData[nPackIndex].fYPos >= 0 THEN
+
+			(* get pack position within Outer *)
+			stImageData.aCodeData[nPackIndex].nProgramNo := 1;
+
+		(* code is in lower left quadrant of image *)
+		ELSIF stImageData.aCodeData[nPackIndex].fXPos < 0 AND stImageData.aCodeData[nPackIndex].fYPos < 0 THEN
+
+			(* get pack position within Outer *)
+			stImageData.aCodeData[nPackIndex].nProgramNo := 2;
+
+		(* code is in upper right quadrant of image *)
+		ELSIF stImageData.aCodeData[nPackIndex].fXPos >= 0 AND stImageData.aCodeData[nPackIndex].fYPos >= 0 THEN
+
+			(* get pack position within Outer *)
+			stImageData.aCodeData[nPackIndex].nProgramNo := 3;
+
+		(* code is in lower right quadrant of image *)
+		ELSIF stImageData.aCodeData[nPackIndex].fXPos >= 0 AND stImageData.aCodeData[nPackIndex].fYPos < 0 THEN
+
+			(* get pack position within Outer *)
+			stImageData.aCodeData[nPackIndex].nProgramNo := 4;
+		END_IF
+	END_IF
+END_FOR
+]]></ST>
+    </Implementation>
+    <LineIds Name="F_PACK_ProgNumberMap">
+      <LineId Id="9" Count="33" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

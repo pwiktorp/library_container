@@ -1,0 +1,233 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_MC2_AX5000Status" Id="{c932106e-350b-40b5-a58e-569b03abf1bd}" SpecialFunc="None">
+    <Declaration><![CDATA[(* read StatusWord, AmplifierTemp and DCLinkVolts from AX5000 *)
+FUNCTION_BLOCK FB_MC2_AX5000Status
+VAR_INPUT
+	bExecute		: BOOL;		(* set TRUE to read AX5000 status info *)
+	bClearData		: BOOL;		(* set TRUE to reset status info *)
+END_VAR
+VAR_IN_OUT
+	stAxis			: AXIS_REF;	(* axis ref *)
+END_VAR
+VAR_OUTPUT
+	bDone			: BOOL;		(* TRUE = complete *)
+	bBusy			: BOOL;		(* TRUE = in progress *)
+	bError			: BOOL;		(* TRUE = error *)
+	nErrorID		: UDINT;	(* error code *)
+	bValid 			: BOOL;
+	nStatusDWord	: DWORD;	(* drive status code *)
+	fAmplifierTemp	: LREAL;	(* Amplifier temperature (degrees) *)
+	fDCLinkVolts	: LREAL;	(* DC link voltage (volts) *)
+END_VAR
+VAR
+	fbExecute		: R_TRIG;
+	nState			: INT;
+	nErrorState		: INT;
+	fbReadParam		: FB_SoERead;
+	nAmplfierTemp	: WORD;
+	nDCLinkVolts	: WORD;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* update status on rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+CASE nState OF
+
+	(* idle *)
+	0:
+
+		(* rising edge of bExecute *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			nState := 1;
+
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+		END_IF
+
+
+	(* read StatusWord *)
+	1:
+
+		(* EtherCAT SoE read *)
+		fbReadParam(
+			NetId	:= '',
+			Idn		:= 390,
+			Element	:= 16#40,
+			pDstBuf	:= ADR(nStatusDWord),
+			BufLen	:= SIZEOF(nStatusDWord),
+			Execute	:= TRUE,
+			Timeout	:= T#1s,
+			Axis	:= stAxis
+		);
+
+		(* read parameter complete *)
+		IF fbReadParam.Busy = FALSE THEN
+
+			(* read parameter completed OK *)
+			IF fbReadParam.Error = FALSE THEN
+
+				nState := 2;
+
+			(* read parameter error *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbReadParam.AdsErrId;
+				nErrorState := nState;
+
+				nState := 20;
+			END_IF
+
+			(* close off fbReadParam *)
+			fbReadParam(
+				Execute := FALSE,
+				Axis	:= stAxis
+			);
+		END_IF
+
+
+	(* read AmplifierTemp *)
+	2:
+
+		(* EtherCAT SoE read *)
+		fbReadParam(
+			NetId	:= '',
+			Idn		:= 384,
+			Element	:= 16#40,
+			pDstBuf	:= ADR(nAmplfierTemp),
+			BufLen	:= SIZEOF(nAmplfierTemp),
+			Execute	:= TRUE,
+			Timeout	:= T#1s,
+			Axis	:= stAxis
+		);
+
+		(* read parameter complete *)
+		IF fbReadParam.Busy = FALSE THEN
+
+			(* read parameter completed OK *)
+			IF fbReadParam.Error = FALSE THEN
+
+				(* convert amplifier temperature to degrees *)
+				fAmplifierTemp := WORD_TO_LREAL(nAmplfierTemp) / 10.0;
+
+				nState := 3;
+
+			(* read parameter error *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbReadParam.AdsErrId;
+				nErrorState := nState;
+
+				nState := 20;
+			END_IF
+
+			(* close off fbReadParam *)
+			fbReadParam(
+				Execute := FALSE,
+				Axis	:= stAxis
+			);
+		END_IF
+
+
+	(* read DCLinkVolts *)
+	3:
+
+		(* EtherCAT SoE read *)
+		fbReadParam(
+			NetId	:= '',
+			Idn		:= 380,
+			Element	:= 16#40,
+			pDstBuf	:= ADR(nDCLinkVolts),
+			BufLen	:= SIZEOF(nDCLinkVolts),
+			Execute	:= TRUE,
+			Timeout	:= T#1s,
+			Axis	:= stAxis
+		);
+
+		(* read parameter complete *)
+		IF fbReadParam.Busy = FALSE THEN
+
+			(* read parameter completed OK *)
+			IF fbReadParam.Error = FALSE THEN
+
+				(* convert DC Link Voltage to volts *)
+				fDCLinkVolts := WORD_TO_LREAL(nDCLinkVolts) / 10.0;
+				bValid := TRUE;
+
+				nState := 20;
+
+			(* read parameter error *)
+			ELSE
+
+				(* update outputs *)
+				bError := TRUE;
+				nErrorID := fbReadParam.AdsErrId;
+				nErrorState := nState;
+
+				nState := 20;
+			END_IF
+
+			(* close off fbReadParam *)
+			fbReadParam(
+				Execute := FALSE,
+				Axis	:= stAxis
+			);
+		END_IF
+
+
+	(* done *)
+	20:
+
+		(* update outputs *)
+		bBusy := FALSE;
+		bDone := TRUE;
+
+		nState := 0;
+
+
+(* unknown state *)
+ELSE
+
+	nState := 0;
+END_CASE
+
+(* clear status info *)
+IF bClearData = TRUE THEN
+
+	(* clear outputs *)
+	bValid := FALSE;
+	nStatusDWord := 0;
+	fAmplifierTemp := 0.0;
+	fDCLinkVolts := 0.0;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_MC2_AX5000Status">
+      <LineId Id="35" Count="187" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

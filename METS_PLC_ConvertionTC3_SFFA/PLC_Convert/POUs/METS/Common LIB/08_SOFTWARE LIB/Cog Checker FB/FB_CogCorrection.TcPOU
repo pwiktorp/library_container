@@ -1,0 +1,100 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CogCorrection" Id="{db37df2a-df58-4001-9d23-5e1952d2a035}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_CogCorrection
+VAR_INPUT
+	bStart:		BOOL;
+	bBailAfterFirstFound: BOOL;
+	sSUPI:			STRING[12];
+	nCorrectCogID:	INT;
+END_VAR
+VAR_OUTPUT
+	bDone:			BOOL;
+	sCorrectSUPI:	ARRAY[1..10] OF STRING[12];
+END_VAR
+VAR
+	sModSUPI:	STRING[12];
+	rtrigStart: R_TRIG;
+	nChar: INT;
+	nPos: INT;
+	nStep: INT;
+	sChar: STRING[1];
+	DIGITS:				STRING[34] :=	'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
+	nCogResult: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[rtrigStart(CLK:= bStart);
+IF rtrigStart.Q THEN
+	nStep := 1;
+END_IF
+
+CASE nStep OF
+
+	1:
+		bDone := FALSE;
+		MEMSET(ADR(sCorrectSUPI), 0, SIZEOF(sCorrectSUPI));
+
+		sModSUPI := sSUPI;
+		nChar := 1;
+		nPos := 1;
+		nStep := 2;
+
+	2:
+		FOR nChar := 1 TO 11 DO
+						CheckResult();
+			IF bDone THEN
+				EXIT;
+			END_IF
+		END_FOR
+		IF NOT(bDone) THEN
+			nStep := 3;
+		END_IF
+
+	3:
+		FOR nChar := 12 TO 23 DO
+						CheckResult();
+			IF bDone THEN
+				EXIT;
+			END_IF
+		END_FOR
+		IF NOT(bDone) THEN
+			nStep := 4;
+		END_IF
+
+
+	4:
+		FOR nChar := 24 TO 34 DO
+						CheckResult();
+			IF bDone THEN
+				EXIT;
+			END_IF
+		END_FOR
+
+		IF nPos < 12 THEN
+			sModSUPI := sSUPI;
+			nPos := nPos+1;
+			nStep := 2;
+		ELSE
+			bDone := TRUE;
+			nStep := 0;
+		END_IF
+
+END_CASE]]></ST>
+    </Implementation>
+    <Action Name="CheckResult" Id="{7422247d-ab97-48f3-ab1a-f52f8250d1db}">
+      <Implementation>
+        <ST><![CDATA[sChar := MID(DIGITS, 1, nChar);
+sModSUPI := REPLACE(sModSUPI, sChar, 1, nPos);
+nCogResult := F_COG_Checker(sModSUPI);
+IF nCogResult = nCorrectCogID THEN
+	MEMMOVE(ADR(sCorrectSUPI[2]), ADR(sCorrectSUPI[1]), SIZEOF(sCorrectSUPI) - SIZEOF(sCorrectSUPI[1]));
+	sCorrectSUPI[1] := sModSUPI;
+	IF bBailAfterFirstFound THEN
+		bDone := TRUE;
+		nStep := 0;
+	END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,52 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_FiltredSetBitState16" Id="{208f9751-80cc-4709-ae4b-aeaca71e8be8}" SpecialFunc="None">
+    <Declaration><![CDATA[(* updates state of specified bit in nWord value *)
+FUNCTION F_FiltredSetBitState16 : WORD
+VAR_INPUT
+	bEnable		: BOOL;		(* set TRUE to update state of target bit in nValue *)
+	sFiltrType		: STRING(5);
+	nTargetBit		: INT;		(* bit number of bit to be updated (0-15) *)
+	nSetState		: BOOL;		(* state to which nTargetBit should be set *)
+	nValue			: WORD;	(* value in which target bit should be updated *)
+END_VAR
+VAR
+	nMaskValue	: WORD;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* bit update is enabled *)
+IF bEnable = TRUE THEN
+
+	IF sFiltrType = 'LOW' THEN
+		nValue :=  nValue AND 16#FF00;
+	ELSIF sFiltrType = 'HIGH' THEN
+		nValue :=  nValue AND 16#00FF;
+	ELSIF sFiltrType = 'ALL' THEN
+		nValue :=  nValue AND 16#0000;
+	END_IF
+
+	(* target bit must be 0-15 *)
+	IF nTargetBit <= 15 THEN
+
+		(* calculate mask value from specified target bit *)
+		nMaskValue := LREAL_TO_WORD(EXPT(2, nTargetBit));
+
+		nValue := (nValue AND NOT nMaskValue) + (BOOL_TO_WORD(nSetState) * nMaskValue);
+
+	(* target bit out of range *)
+	ELSE
+
+		nValue := nValue;
+	END_IF
+
+(* bit update disabled *)
+ELSE
+
+	nValue :=  nValue AND 16#0000;
+END_IF
+
+F_FiltredSetBitState16 := nValue;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

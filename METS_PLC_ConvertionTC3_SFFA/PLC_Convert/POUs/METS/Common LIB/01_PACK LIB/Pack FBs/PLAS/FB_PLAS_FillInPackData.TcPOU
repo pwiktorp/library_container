@@ -1,0 +1,132 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_PLAS_FillInPackData" Id="{28cb9e3c-68fc-4014-b3ce-de349cfd1cc6}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_PLAS_FillInPackData
+VAR_INPUT
+	eCameraPosition			: E_PACK_FilledInStatus;
+	stImageData				: ST_SCANNER_ImageData;	(* image data structure *)
+	nCodeReadIndex				: INT;
+	stCTDateTime				: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	bUseCameraTrigerID		: BOOL;
+	bDotCodeFormat			: BOOL;
+	bQRCodeFormat			: BOOL;
+	bEnableCodeAdjustment	: BOOL;
+END_VAR
+VAR_OUTPUT
+
+END_VAR
+VAR_IN_OUT
+	stProductInstruction	: ST_PCM_Status;
+	stCodeInfo_Pack			: ST_CodeInfo;
+	stPackRejectReasons		: ST_RejectReasonsForPack;
+	stPackData				: ST_PACK_Data;
+END_VAR
+VAR
+	fbValidatePack			: FB_CODE_ValidateExplicitCode;
+	nLocalTrigerID			: UDINT;
+	sLastCode				: STRING;
+	bOverLenght			: UINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* Init ***********************************************************************************************************************************)
+	MEMSET(ADR(stPackData), 16#00, SIZEOF(stPackData));
+
+	nCodeReadIndex := LIMIT(1, nCodeReadIndex, cMAX_CAMERA_PROG_NUMBER);
+
+(* Fill in basic pack data ****************************************************************************************************************)
+	stPackData.sPackCode				:= stImageData.aCodeData[nCodeReadIndex].strDataString;
+
+(*for check and diagnostic only - in future needst to be removed*)
+	IF bEnableCodeAdjustment THEN
+		sLastCode	:= stImageData.aCodeData[nCodeReadIndex].strDataString;
+		bOverLenght :=bOverLenght+1;
+
+		stPackData.sPackCode	 := LEFT(stPackData.sPackCode, stCodeInfo_Pack.stSerialCode.nCodeLength);
+	END_IF
+(**************************************************************)
+
+	IF bUseCameraTrigerID THEN
+		stPackData.nPackTriggerID 		:= stImageData.stTriggerID.nTriggerID;
+	ELSE
+		nLocalTrigerID := nLocalTrigerID + 1;
+		stPackData.nPackTriggerID 		:= nLocalTrigerID;
+	END_IF
+
+	stPackData.sProductionDate			:= F_StringWildcard('#YYYYMMDD#', stCTDateTime.sSystemTime);
+	stPackData.sProductionTime			:= F_StringWildcard('#hhmmss#', stCTDateTime.sSystemTime);
+	stPackData.sProductionTimeOffset	:= F_SYSTEM_SystemTimeOffsetToHHMM(stCTDateTime.nSystemTimeOffset);
+	stPackData.sPackTimeStamp			:= F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset );
+	stPackData.stPackCodeData 			:= stImageData.aCodeData[nCodeReadIndex];
+	stPackData.ePackCodeFilledIn		:= eCameraPosition;
+
+
+(* Validate code and fill in pack status and reject reason ********************************************************************************)
+	fbValidatePack(
+		sFullCode 				:= stPackData.sPackCode,
+		stCodeInfo 				:= stCodeInfo_Pack,
+		stProductInstruction 	:= stProductInstruction);
+
+
+	IF	stPackData.sPackCode = ''  THEN
+
+		(*stPackData.sPackCode  		:= 'NOK';*)
+		stPackData.nPackStatus		:= 0;
+		stPackData.sPackRejectCode 	:= stPackRejectReasons.stPackCodesNotRead.sMetsDisplayCode;
+		stPackData.nPackRejectID	:= stPackRejectReasons.stPackCodesNotRead.nRejectID;
+
+	ELSIF 	(stPackData.stPackCodeData.eCodeType <> E_SCANNER_CodeType.DATAMARTIX AND NOT bDotCodeFormat AND NOT bQRCodeFormat) OR
+		 	(stPackData.stPackCodeData.eCodeType <> E_SCANNER_CodeType.DOTCODE AND  bDotCodeFormat AND NOT bQRCodeFormat) OR
+ 			(stPackData.stPackCodeData.eCodeType <> E_SCANNER_CodeType.QR AND NOT  bDotCodeFormat AND  bQRCodeFormat) THEN
+
+		(* pack code status - invalid data type*)
+		stPackData.nPackStatus		:= 2;
+		stPackData.sPackRejectCode	:= stPackRejectReasons.stPackCodesTypeError.sMetsDisplayCode;
+		stPackData.nPackRejectID	:= stPackRejectReasons.stPackCodesTypeError.nRejectID;
+
+	ELSIF fbValidatePack.bValidationOK THEN
+
+		(* pack code status - valid *)
+		stPackData.nPackStatus		:= 5;
+		stPackData.sPackRejectCode  := 'OK';
+		stPackData.nPackRejectID	:= 0;
+
+	ELSIF fbValidatePack.bEntireCodeLengthOK = FALSE THEN
+
+		(* pack code status - invalid length*)
+		stPackData.nPackStatus		:= 2;
+		stPackData.sPackRejectCode 	:= stPackRejectReasons.stPackCodeInvalidLength.sMetsDisplayCode;
+		stPackData.nPackRejectID	:= stPackRejectReasons.stPackCodeInvalidLength.nRejectID;
+
+	ELSIF fbValidatePack.bGtinOK = FALSE THEN
+
+		(* pack code status - Gtin invalid *)
+		stPackData.nPackStatus		:= 2;
+		stPackData.sPackRejectCode 	:= stPackRejectReasons.stPackCodesGtinError.sMetsDisplayCode;
+		stPackData.nPackRejectID	:= stPackRejectReasons.stPackCodesGtinError.nRejectID;
+
+	ELSIF fbValidatePack.bBrandOK = FALSE THEN
+
+		(* pack code status - Brand invalid *)
+		stPackData.nPackStatus		:= 2;
+		stPackData.sPackRejectCode 	:= stPackRejectReasons.stPackCodesBrandSpec.sMetsDisplayCode;
+		stPackData.nPackRejectID	:= stPackRejectReasons.stPackCodesBrandSpec.nRejectID;
+
+	ELSIF fbValidatePack.bSerialCodeOK = FALSE THEN
+
+		(* pack code status - Serial code error *)
+		stPackData.nPackStatus		:= 2;
+		stPackData.sPackRejectCode 	:= stPackRejectReasons.stPackCodesSerialError.sMetsDisplayCode;
+		stPackData.nPackRejectID	:= stPackRejectReasons.stPackCodesSerialError.nRejectID;
+
+	ELSE
+
+		(* pack code status - Unknown error *)
+		stPackData.nPackStatus		:= 2;
+		stPackData.sPackRejectCode 	:= stPackRejectReasons.stUnknownPackReject.sMetsDisplayCode;
+		stPackData.nPackRejectID	:= stPackRejectReasons.stUnknownPackReject.nRejectID;
+
+	END_IF
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

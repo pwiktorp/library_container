@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_SYSTEM_ClearOuterArray" Id="{1c4869ad-d5a9-4ccd-a78c-484201ccfc42}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SYSTEM_ClearOuterArray
+VAR_INPUT
+	bClearAllQueues		: BOOL;
+	bClearOuterArray		: BOOL;
+END_VAR
+VAR_IN_OUT
+	aOuterStatus							: ARRAY[1..cMAX_OUTER_STATUS_QUEUE] OF ST_OUTER_Status;	(* Outer status register *)
+	aErrorOuters							: ARRAY[1..cMAX_OUTER_STATUS_QUEUE] OF ST_OUTER_Status;
+END_VAR
+VAR_OUTPUT
+	bDone								: BOOL;
+END_VAR
+VAR
+	rtrigClearAllQueues						: R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bDone:=FALSE;
+
+
+rtrigClearAllQueues(CLK:=bClearAllQueues);
+
+IF bClearOuterArray OR rtrigClearAllQueues.Q THEN
+	MEMSET(ADR(aOuterStatus), 16#00, SIZEOF(aOuterStatus));
+	MEMSET(ADR(aErrorOuters), 16#00, SIZEOF(aErrorOuters));
+	bDone:=TRUE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_SYSTEM_ClearOuterArray">
+      <LineId Id="15" Count="9" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

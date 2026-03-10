@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_FIND_OuterDuplicates" Id="{8fa702b9-e56f-4c99-8ee5-0e0451e228a3}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_FIND_OuterDuplicates
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+	bHasDuplicates		: BOOL;
+	nDuplicateCount		: UINT;
+	nIterationCount		: UINT;
+END_VAR
+VAR
+	nOuterIndex			: UINT;
+	nInnerOuterIndex	: UINT;
+	nInnerPackIndex		: UINT;
+	nPackIndex			: UINT;
+	sCurrentOuterCode	: T_MaxString;
+	sCurrentPackCode	: T_MaxString;	
+	bIsDuplicate 		: BOOL;
+	bISOuterDuplicate	: BOOL;
+END_VAR
+VAR_IN_OUT	
+	stCase				: ST_LAB_CaseData;
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+bHasDuplicates := FALSE;
+nDuplicateCount := 0;
+	
+	(* Loop throught all packs in one case 'stCase' *)
+	FOR nOuterIndex := 1 TO GVL_test.nMax_Outers DO
+		sCurrentOuterCode := stCase.aOuters[nOuterIndex].sOuterCode;
+		FOR nPackIndex := 1 TO GVL_test.nMax_Packs DO
+			sCurrentPackCode := stCase.aOuters[nOuterIndex].aPacks[nPackIndex].sPackCode;
+			bIsDuplicate := FALSE;			
+			(* Looking for same pack codes in all outers *)
+			FOR nInnerOuterIndex := nOuterIndex TO GVL_test.nMax_Outers DO
+				IF nInnerOuterIndex < 50 THEN					
+					IF (sCurrentOuterCode = stCase.aOuters[nInnerOuterIndex + 1].sOuterCode) THEN
+						bIsOuterDuplicate									:= TRUE;													
+						stCase.aOuters[nOuterIndex].nOuterRejectID			:= 200;					
+						stCase.aOuters[nInnerOuterIndex + 1].nOuterRejectID	:= 200;
+					END_IF	
+				END_IF
+				FOR nInnerPackIndex := 1 TO GVL_test.nMax_Packs DO
+					nIterationCount	:= nIterationCount + 1;					
+					(* Exclude comparing same pack with itself *)
+					IF NOT ((nInnerOuterIndex = nOuterIndex) AND (nInnerPackIndex = nPackIndex)) THEN
+						IF sCurrentPackCode = stCase.aOuters[nInnerOuterIndex].aPacks[nInnerPackIndex].sPackCode THEN
+							bIsDuplicate := TRUE;
+							nDuplicateCount := nDuplicateCount + 1;
+							
+							stCase.aOuters[nInnerOuterIndex].aPacks[nInnerPackIndex].nPackRejectID	:= 200;
+							stCase.aOuters[nInnerOuterIndex].nOuterRejectID							:= 200;
+							
+							stCase.aOuters[nOuterIndex].aPacks[nPackIndex].nPackRejectID			:= 200;
+							stCase.aOuters[nOuterIndex].nOuterRejectID								:= 200;
+						END_IF
+					END_IF
+				END_FOR
+			END_FOR			
+			IF bIsDuplicate THEN
+				bHasDuplicates 	:= TRUE;
+			END_IF
+		END_FOR
+	END_FOR
+	
+	
+	(* nDuplicateCount includes all elements with same pack codes *)
+	(* the number of duplicated codes is nDuplicateCount/2 *)]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

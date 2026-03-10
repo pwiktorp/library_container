@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_PACK_ValidateTimeStamp" Id="{8bf2ab88-fd13-46b7-9833-6fe3ec570453}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_PACK_ValidateTimeStamp : BOOL
+VAR_INPUT
+	sPack		: T_MaxString;
+	stCTDateTime	: ST_SYSTEM_DateTime;
+END_VAR
+VAR
+	sDateCode: STRING(8);
+	nHour: INT;
+	sDate: STRING(23);
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* reset output *)
+F_PACK_ValidateTimeStamp := TRUE;
+
+sDateCode := RIGHT(sPack, 8); (*now check entire 8 character datecode*)
+
+IF  F_InvalidNumericChar(sDateCode) > 0 THEN
+	F_PACK_ValidateTimeStamp := FALSE;
+ELSE
+	nHour := STRING_TO_INT(RIGHT(sDateCode, 2));
+	IF nHour < 0 OR nHour > 23 THEN (*first check is to make sure no alphas are on the end*)
+		F_PACK_ValidateTimeStamp := FALSE;
+	ELSE
+		sDate := CONCAT('20', LEFT(sDateCode, 2)); (*year*)
+		sDate := F_CONCAT3(sDate, '-', MID(sDateCode, 2, 3)); (*month*)
+		sDate := F_CONCAT3(sDate, '-', MID(sDateCode, 2, 5)); (*day**)
+		sDate := F_CONCAT3(sDate, '-', RIGHT(sDateCode, 2)); (*hour*)
+		sDate := CONCAT(sDate, ':00:00.000'); (*all the rest*)
+
+		IF F_SYSTEM_DateCompare(STRING_TO_SYSTEMTIME(sDate), stCTDateTime.sSystemTime) > 0 THEN
+			F_PACK_ValidateTimeStamp := FALSE;
+		END_IF
+	END_IF
+END_IF
+]]></ST>
+    </Implementation>
+    <LineIds Name="F_PACK_ValidateTimeStamp">
+      <LineId Id="10" Count="23" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

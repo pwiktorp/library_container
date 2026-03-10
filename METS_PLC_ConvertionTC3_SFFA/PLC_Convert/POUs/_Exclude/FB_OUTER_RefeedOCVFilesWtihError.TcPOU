@@ -1,0 +1,101 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_OUTER_RefeedOCVFilesWtihError" Id="{38c253fe-3503-48ce-9602-f63dacd9c02d}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_OUTER_RefeedOCVFilesWtihError
+VAR_INPUT
+	bExecute				: BOOL;
+	aOCVFileCodeName	: ARRAY[1..2] OF T_MaxString;
+	sTargetPath			: STRING(50);		(* target OCV folder path *)
+	tTimeout				: TIME;
+	bSingleFileOnly		: BOOL;
+END_VAR
+VAR_OUTPUT
+
+	bDone					: BOOL;
+	bTimeOut				: BOOL;
+
+	stOuterStatus1			: ST_OUTER_Status;
+	stOuterStatus2			: ST_OUTER_Status;
+	bOCVFileOK			: BOOL;
+	bOCVFileFound1		: BOOL;
+	bOCVFileFound2		: BOOL;
+	sOCVFile1				: T_OCV_Filename;
+	sOCVFile2				: T_OCV_Filename;
+
+END_VAR
+VAR
+	fbOCVRefeed			: ARRAY[1..2] OF FB_OCV_FindFileWithError;
+	fbExecute				: R_TRIG;
+	tonTimoeOut			: TON;
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK := bExecute);
+
+IF fbExecute.Q = TRUE THEN
+
+		MEMSET(ADR(stOuterStatus1), 16#00, SIZEOF(stOuterStatus1));
+		MEMSET(ADR(stOuterStatus2), 16#00, SIZEOF(stOuterStatus2));
+
+
+		sOCVFile1			:= '';			(* OCV filename *)
+		sOCVFile2			:= '';			(* OCV filename *)
+
+
+ELSIF NOT bExecute THEN
+
+		MEMSET(ADR(stOuterStatus1), 16#00, SIZEOF(stOuterStatus1));
+		MEMSET(ADR(stOuterStatus2), 16#00, SIZEOF(stOuterStatus2));
+
+END_IF
+
+
+fbOCVRefeed[1](
+	bExecute			:= bExecute,
+	strPackCode		:= aOCVFileCodeName[1],
+	strLocalOCVPath	:= sTargetPath,
+	sOuterStatus		:= stOuterStatus1,
+	strOCVFile				=> sOCVFile1,
+	nReadOCVError		=> nReadOCVError,
+	nReadOCVFound		=> nReadOCVFound,
+	nReadOCVFoundInErr	=> nReadOCVFoundInErr
+
+);
+
+bOCVFileFound1 := fbOCVRefeed[1].bOCVFileFound OR fbOCVRefeed[1].bOCVErrorFileFound;
+
+fbOCVRefeed[2](
+	bExecute			:= fbOCVRefeed[1].bDone AND NOT bOCVFileFound1 AND NOT bSingleFileOnly,
+	strPackCode		:= aOCVFileCodeName[2],
+	strLocalOCVPath	:= sTargetPath,
+	sOuterStatus		:= stOuterStatus2,
+	strOCVFile				=> sOCVFile2,
+	nReadOCVError		=> nReadOCVError,
+	nReadOCVFound		=> nReadOCVFound,
+	nReadOCVFoundInErr	=> nReadOCVFoundInErr
+
+);
+
+bOCVFileFound2 := fbOCVRefeed[2].bOCVFileFound OR fbOCVRefeed[2].bOCVErrorFileFound;
+
+(*****************outputs**********************)
+IF bSingleFileOnly THEN
+	bDone			:= fbOCVRefeed[1].bDone;
+	bOCVFileOK 	:= bOCVFileFound1;
+ELSE
+	bDone			:= fbOCVRefeed[2].bDone;
+	bOCVFileOK 	:= bOCVFileFound2;
+END_IF
+
+tonTimoeOut(
+	IN				:= bExecute AND NOT bOCVFileFound1 AND NOT bOCVFileFound2,
+	PT				:= tTimeOut,
+	Q				=> bTimeOut
+);]]></ST>
+    </Implementation>
+    <LineIds Name="FB_OUTER_RefeedOCVFilesWtihError">
+      <LineId Id="29" Count="61" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

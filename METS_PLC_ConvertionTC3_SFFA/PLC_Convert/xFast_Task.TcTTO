@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <Task Name="xFast_Task" Id="{13363385-5440-470c-8975-a14e2467857f}">
+    <!--CycleTime in micro seconds.-->
+    <CycleTime>1000</CycleTime>
+    <Priority>20</Priority>
+    <PouCall>
+      <Name>T03_xFAST</Name>
+    </PouCall>
+    <TaskFBGuid>{7ff36c01-46c3-4454-bf20-9b50dea6d5eb}</TaskFBGuid>
+    <Fb_init>{ed30e89b-5e45-4974-99bc-10a2f67f3bfc}</Fb_init>
+    <Fb_exit>{0396ed83-d670-44d6-963a-fdb8fc9fa320}</Fb_exit>
+    <CycleUpdate>{d32564ad-9b1f-40ab-aab1-0ea35ac05cbf}</CycleUpdate>
+    <PostCycleUpdate>{91857024-31eb-41a8-880f-a7d7c5d6664b}</PostCycleUpdate>
+  </Task>
+</TcPlcObject>

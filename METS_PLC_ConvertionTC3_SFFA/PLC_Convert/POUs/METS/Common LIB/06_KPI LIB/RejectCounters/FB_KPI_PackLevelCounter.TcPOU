@@ -1,0 +1,57 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_KPI_PackLevelCounter" Id="{2b97ecd1-994c-4efd-8bbc-b1ff1d5b0473}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_KPI_PackLevelCounter
+VAR_INPUT
+	bExecute					: BOOL;			(* set TRUE to add value to buffer *)
+	stCTDateTime				: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	stOuterStatus				: ST_OUTER_Status;	(* Outer status *)
+	aRejectCountersID			: ARRAY[0..cMAX_REJECT_REASON] OF UINT;
+END_VAR
+VAR_IN_OUT
+	aShiftRejectCounters		: ARRAY[0..cMAX_REJECT_REASON] OF ST_LOG_RejectReasons;
+	aProdRejectCounters		: ARRAY[0..cMAX_REJECT_REASON] OF ST_LOG_RejectReasons;
+END_VAR
+VAR_OUTPUT
+	bDone					: BOOL;			(* TRUE = complete *)
+END_VAR
+VAR
+	fbExecute					: R_TRIG;
+	//nMaxIndex				: UINT;
+	nPackRejectChekIndex		: T_PositiveINT;
+	nRejectIndex				: T_PositiveINT;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+(* search for strBarcode in queue *)
+IF fbExecute.Q = TRUE THEN
+
+	FOR nPackRejectChekIndex := 1 TO MIN(stOuterStatus.stOACData.NumberOfPacks, cMAX_PACKS_PER_OUTER) BY 1 DO
+		FOR nRejectIndex := 0  TO  cMAX_REJECT_REASON DO
+			IF stOuterStatus.stOACData.PackRejectID[nPackRejectChekIndex] = aRejectCountersID[nRejectIndex] THEN
+
+				aShiftRejectCounters[nRejectIndex].nRejectCounter := aShiftRejectCounters[nRejectIndex].nRejectCounter + 1;
+				aShiftRejectCounters[nRejectIndex].stLastTimeStamp := stCTDateTime.sSystemTime;
+
+				aProdRejectCounters[nRejectIndex].nRejectCounter := aProdRejectCounters[nRejectIndex].nRejectCounter + 1;
+				aProdRejectCounters[nRejectIndex].stLastTimeStamp := stCTDateTime.sSystemTime;
+				EXIT;
+			END_IF
+		END_FOR
+	END_FOR
+
+	bDone := TRUE;
+
+(* bExecute has been reset *)
+ELSIF bExecute = FALSE THEN
+
+	(* reset outputs *)
+	bDone := FALSE;
+
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,557 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SCANNER_SiemensMV4x0Ctrl_Server" Id="{e13e29d4-6dd0-4e59-8736-4ed4882cb71b}" SpecialFunc="None">
+    <Declaration><![CDATA[(* Siemens MV420/MV440 ctrl using TCP comms (requires V5 firmware of later) *)
+FUNCTION_BLOCK FB_SCANNER_SiemensMV4x0Ctrl_Server
+VAR_INPUT
+	bEnable				: BOOL;			(* set TRUE to enable TCP comms connection *)
+	bConfigMode			: BOOL;			(* set TRUE to allow MV4x0 to be switched to CONFIG mode *)
+	bReadCode			: BOOL;			(* set TRUE to read code *)
+	bBrowseLive			: BOOL;			(* set TRUE to launch browser to view live images from MV4x0 *)
+	bBrowseDiag			: BOOL;			(* set TRUE to launch browser to view diagnostic images from MV4x0 *)
+	nReqProgram			: BYTE;			(* requested program to activate in MV4x0 *)
+	strLocalIPAddr		: T_IPv4Addr;	(* local IP address, use F_CX_LocalIPAddr if device has multiple Ethernet ports *)
+	strScannerIPAddr	: T_IPv4Addr;	(* scanner IP address *)
+	nScannerPortNo		: UINT;			(* scanner port number *)
+	sTriggerID			: ST_SCANNER_TriggerID;	(* trigger ID data, will be returned in sImageData to allow trigger and response to be aligned *)
+	sOptions			: ST_SCANNER_Options;	(* MV configuration info *)
+	tTimeout			: TIME;			(* timeout delay *)
+END_VAR
+VAR_OUTPUT
+	bScannerReady		: BOOL;			(* TRUE = scanner port connected *)
+	bDone				: BOOL;			(* TRUE = code scan complete *)
+	bBusy				: BOOL;			(* TRUE = code scan in progress *)
+	bError				: BOOL;			(* TRUE = code scan error *)
+	bdoTrigger			: BOOL;			(* TRG signal to camera *)
+	nActiveProgram		: BYTE;			(* active program *)
+	bAcceptTrigger		: BOOL;			(* TRUE = camera will accept trigger *)
+	strStatus			: T_MaxString;	(* general status string *)
+	sImageData			: ST_SCANNER_ImageData;		(* image data structure *)
+	eSocketState		: E_SocketConnectionState;	(* TCP socket connection state *)
+END_VAR
+VAR
+	fbTaskIndex			: GETCURTASKINDEX;
+	tTaskTime			: TIME;
+	tTCPFastTime		: TIME;
+
+	fbTCPPortCtrl		: FB_TCP_ServerPortCtrl;
+	fbTCPTimeout		: TON;
+	bReInitialiseTCP	: BOOL;
+
+	fbTCPReceive		: FB_TCP_ReceiveLongString;
+	strTCPRxString		: T_LongString;
+
+	eState				: E_SCANNER_State;
+	fbExtractString		: FB_ExtractLongString;
+	strImageData		: T_LongSTRING;
+	fbDecodeImageData	: FB_SCANNER_MVxDecodeImageData;
+	nHeartbeat			: UDINT;
+	bCodeChangeActive	: BOOL;
+
+	fbReadCode			: R_TRIG;
+	nActiveTriggers		: INT;
+	fbAcquisitionTimer	: TP;
+	nMaxImageBuffer		: INT;
+	arrTriggerID		: ARRAY[1..50] OF ST_SCANNER_TriggerID;
+	nResponses			: INT;
+	fbIOTimeout			: TON;
+
+	strTCPCommand		: STRING(20);
+	fbRequestStatus		: R_TRIG;
+	fbTCPSend			: FB_SocketSend;
+	fbTCPSendDone		: F_TRIG;
+	nStatusByte			: BYTE;
+	nErrorCode			: UDINT;
+
+	fbBrowse			: FB_SCANNER_MV4x0Browse;
+	bImageData			: BOOL;
+	bHeartbeat			: BOOL;
+END_VAR
+VAR CONSTANT
+	tAcquisitionTime	: ARRAY[0..8] OF TIME :=[ 	T#0ms, 	T#26ms,		T#12ms,		T#18ms, 	T#12ms, 	T#52ms, 	T#30ms, 	T#65ms, 	T#33ms];
+END_VAR											(*	None,	MV420Full	MV420Half	MV440SRFull	MV440SRHalf	MV440HRFull	MV440HRHalf	MV440URFull MV440URHalf *)
+
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+18/03/2015	3.05.01	PB		TCP connection now re-initialises correctly if TCP Send fails.
+27/02/2015	3.04.00	PB		Changed back to operate with MV4x0 as TCP client and improvements in protocol handling at start-up to improve reliability.
+							TCP Idling string now used from MV4x0 to replicate status message.
+06/02/2015	3.01.00	PB		Acquisition timer added, trigger blocked if acquisition is still in progress.
+							bAcceptTrigger added, new trigger will only be accepted when set TRUE.
+30/01/2015	3.00.00	PB		V5 or later firmware required
+							PC is now TCP client with MV as TCP server
+							GS1-encoded codes are automatically formatted iwth brackets around the Application Identifiers
+							Internal optimisation to reduce single PLC cycle processing time
+
+-------------------------------------------------------------------------------------------------
+19/04/2012	1.38.01	PB		Bug fixed where TRIGGER would be activated when scanner is disabled
+12/01/2012	1.37.00	PB		TRIGGER pulse in E_TCPIP_CONNECT extended to 100ms
+							FB will return to E_TCPIP_IDLE stateif bEnable is reset to FALSE in E_TCPIP_CONNECT state
+30/11/2011	1.34.03	PB		strTCPDataString now only cleared when device disconnect is complete
+22/11/2011	1.34.00	PB		Modified to use new FB_TCP_ServerPortCtrl
+							bTCPTimeout and bIOTimeout outputs removed
+							tCycleTime output added
+03/11/2011	1.32.00	PB		I/O Timeout error is suppressed if scanner is disabled while a scan is in progress
+09/09/2011	1.29.00	PB		Status command is now not sent when nReqCodeSet and nActiveCodeSet are both 0
+07/07/2011	1.24.00	PB		Name changed from FB_SCANNER_MV4x0Ctrl_TCP to FB_SCANNER_SiemensMV4x0Ctrl
+							bBrowseLive and bBrowseDiag inputs added to launch Internet Explorer to view images in target scanner
+							fImageQuality output added for future reporting of image quality from scanner
+07/07/2011	1.23.01	PB		Internal TCP comms optimised to eliminate TCP Timeout error when TwinCAT boot project is downloaded
+07/06/2011	1.19.00	PB		All outputs are reset/cleared when bEnable is set FALSE
+15/03/2011	1.14.04	PB		TCP Timeout error now given after 3 successive failures to receive Status Response
+18/02/2011	1.11.00	PB		TRIGGER pulse during reconnect re-instated, it is required if CX drops TCP connection and forces camera to re-open TCP port
+27/01/2011	1.08.02	PB		Timing problem found if code change command is issued too soon after TCP connection is opened
+							MGST command now sent to check camera status BEFORE code change command is sent
+							Status update time is 1s until camera status is OK and requested code set it active, then reverts to 200ms
+							TRIGGER pulse during reconnect and Reconnect Pulse timer removed as not required
+24/01/2011	1.08.01	PB		Status update time reduced to 200ms
+12/01/2011	1.07.07	PB		Camera Start/Code Change will be disabled if nReqCodeSet = 0.  Can be used during camera configuration.
+29/11/2010	1.07.06	PB		Change of IP Address or Port Number will initiate re-connection of TCP comms
+							Bug fix - multiple status reads at start-up could give TCP Timeout, fixed
+26/11/2010	1.07.05	PB		Scanner will be switched to RUN mode automatically at start-up when TCP comms is established
+							Bug fix - status update timer was not reset after command was issued
+							Bug fix - status outputs were not reset if FB was re-triggered immediately after completion
+24/11/2010	1.07.03	PB		Support for MV4x0 firmware V2.1.2 added
+23/11/2010	1.07.02	PB		bDone now reset to FALSE while code change is in progress
+22/11/2010	1.07.01	PB		TCP comms restructured to ensure status and barcode message cannot be lost
+							strBarcode2 and nPacksReadOK outputs removed
+18/11/2010	1.07.00	PB		Initial release for V3.0.0 firmware
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* 1st pass of FB *)
+IF tTaskTime = T#0ms THEN
+
+	(* get current task index and PLC task time, clamped to 1ms *)
+	fbTaskIndex();
+	tTaskTime := MAX(UDINT_TO_TIME(_TaskInfo[fbTaskIndex.Index].CycleTime / 10000), T#1ms);
+
+	(* fast TCP access time (10 * task time) when trigger is active *)
+	tTCPFastTime := MIN(tTaskTime * 10, T#200ms);
+
+	(* max number of active triggers supported *)
+	nMaxImageBuffer := SIZEOF(arrTriggerID) / SIZEOF(arrTriggerID[1]);
+END_IF
+
+
+(* TCP Port ctrl *)
+fbTCPPortCtrl(
+	bEnable			:= bEnable = TRUE AND bReInitialiseTCP = FALSE,
+	eMode			:= eACCEPT_SEL_HOST,
+	strRemoteIPAddr	:= strScannerIPAddr,
+	strLocalIPAddr	:= strLocalIPAddr,
+	nLocalPortNo	:= nScannerPortNo,
+	tReconnectTime	:= T#4s,
+	eSocketState	=> eSocketState
+);
+
+(* TCP timeout if 3 consecutive heartbeats are missed *)
+fbTCPTimeout(
+	IN	:= fbTCPPortCtrl.bConnected AND nHeartbeat > 0,
+	PT	:= T#3s,
+);
+
+(* TCP timeout has elapsed OR TCP Receive error *)
+IF fbTCPTimeout.Q = TRUE THEN
+
+	(* reset TCP connection and heartbeat counter *)
+	nHeartbeat := 0;
+END_IF
+
+
+(* poll TCP port, use tTCPFastTime when a code is expected, otherwise 200ms *)
+fbTCPReceive(
+	bEnable			:= fbTCPPortCtrl.bConnected,
+	hSocket			:= fbTCPPortCtrl.hSocket,
+	tUpdateTime		:= SEL(nActiveTriggers > 0, T#200ms, tTCPFastTime),
+	nSyncOffset		:= fbTCPPortCtrl.nSyncOffset * TIME_TO_DINT(tTaskTime),
+	strTCPRxString	:= strTCPRxString
+);
+
+
+(* data handling sequence *)
+CASE eState OF
+
+	(* idle *)
+	E_SCANNER_IDLE:
+
+		(* further scan response expected or FB is idle *)
+		IF nActiveTriggers > 0 OR (nActiveTriggers = 0 AND bReadCode = FALSE) THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bError := FALSE;
+			strStatus := '';
+		END_IF
+
+		(* fbTCPReceive update complete *)
+		IF fbTCPReceive.bDone = TRUE THEN
+
+			(* scanner in RUN mode *)
+			IF nStatusByte.2 = TRUE THEN
+
+				eState := E_SCANNER_IMAGE;
+
+			(* scanner not in RUN mode *)
+			ELSE
+
+				eState := E_SCANNER_HEARTBEAT;
+			END_IF
+		END_IF
+
+		(* temporary vars *)
+		bHeartbeat := FALSE;
+
+
+	(* image response *)
+	E_SCANNER_IMAGE:
+
+		(* check for new image response message *)
+		fbExtractString(
+			bExtractData	:= FALSE,
+			nExtractChars	:= 0,
+			strPrefix		:= '$01',
+			strSuffix		:= '$04',
+			strString		:= strTCPRxString,
+			bStringFound	=> bImageData
+		);
+
+		(* image response found, scanner is READY state and 1 or more triggers are active *)
+		IF fbExtractString.bStringFound = TRUE AND bScannerReady = TRUE AND nActiveTriggers > 0 THEN
+
+			(* 1st response for current trigger *)
+			IF nResponses = 0 THEN
+
+				(* clear sImageData *)
+				MEMSET(ADR(sImageData), 16#00, SIZEOF(sImageData));
+			END_IF
+
+			(* log image response string and update number of response message received *)
+			strImageData := fbExtractString.strData;
+			nResponses := nResponses + 1;
+
+			eState := E_SCANNER_DECODE;
+
+		(* no image responses for decoding *)
+		ELSE
+
+			eState := E_SCANNER_HEARTBEAT;
+		END_IF
+
+
+	(* decode image data from MV4x0 *)
+	E_SCANNER_DECODE:
+
+		(* decode message received from scanner *)
+		fbDecodeImageData(
+			bExecute		:= TRUE,
+			(*tAcquireTime	:= tAcquisitionTime[sOptions.eScannerType],*)
+			sTriggerID		:= sTriggerID,
+			strImageData	:= strImageData
+		);
+
+		(* image response message received *)
+		IF fbDecodeImageData.bDone = TRUE THEN
+
+			(* image response message received *)
+			IF fbDecodeImageData.bError = FALSE THEN
+
+				(* move data to sImageData *)
+				MEMMOVE(ADR(sImageData.aCodeData[sImageData.nCodesRead + 1]), ADR(fbDecodeImageData.sImageData.aCodeData[1]), SIZEOF(sImageData.aCodeData[1]) * fbDecodeImageData.sImageData.nCodesRead);
+				sImageData.nCodesRead := sImageData.nCodesRead + fbDecodeImageData.sImageData.nCodesRead;
+				sImageData.tScanTime := fbDecodeImageData.sImageData.tScanTime;
+			END_IF
+
+			(* clear response data and flag *)
+			strImageData := '';
+
+			(* ProgStandard mode and 1 response received OR ProgSequencemode and all response messages received *)
+			IF (sOptions.nExpectedResp = 0 AND nResponses = 1) OR (sOptions.nExpectedResp > 0 AND nResponses = sOptions.nExpectedResp) THEN
+
+				(* reduce active triggers by 1 and reset responses *)
+				nActiveTriggers := MAX(nActiveTriggers - 1, 0);
+				nResponses := 0;
+
+				(* 1 or more codes read *)
+				IF sImageData.nCodesRead > 0 THEN
+
+					(* update status outputs *)
+					strStatus := CONCAT(INT_TO_STRING(sImageData.nCodesRead), ' code(s) read');
+
+				(* no codes read *)
+				ELSE
+
+					(* update status outputs *)
+					bError := TRUE;
+					strStatus := '0 code(s) read';
+				END_IF
+
+				(* update status output *)
+				bDone := TRUE;
+
+				(* image response data received, reset I/O timer *)
+				fbIOTimeout(IN := FALSE);
+			END_IF
+
+			(* final response for image received *)
+			IF bDone = TRUE THEN
+
+				(* return index for response *)
+				sImageData.stTriggerID := arrTriggerID[1];
+
+				(* update trigger index array *)
+				MEMMOVE(ADR(arrTriggerID[1]), ADR(arrTriggerID[2]), SIZEOF(arrTriggerID) - SIZEOF(arrTriggerID[1]));
+				MEMSET(ADR(arrTriggerID[SIZEOF(arrTriggerID) / SIZEOF(arrTriggerID[1])]), 16#00, SIZEOF(arrTriggerID[1]));
+
+				(* finish image response processing until next TCP receive cycle *)
+				(* ensures only 1 completed image per TCP cycle *)
+
+				eState := E_SCANNER_IDLE;
+
+			(* intermediate response for image received *)
+			ELSE
+
+				(* check for another image response message on next cycle *)
+				eState := E_SCANNER_IMAGE;
+			END_IF
+
+			(* close off fbDecodeImageData *)
+			fbDecodeImageData(
+				bExecute	:= FALSE,
+				strImageData:= strImageData
+			);
+		END_IF
+
+
+	(* status response *)
+	E_SCANNER_HEARTBEAT:
+
+		(* check for status message with $04 (EOT) terminating char *)
+		fbExtractString(
+			bExtractData	:= FALSE,
+			nExtractChars	:= 0,
+			strPrefix		:= 'RGST',
+			strSuffix		:= '$04',
+			strString		:= strTCPRxString,
+			bStringFound	=> bHeartbeat
+		);
+
+		(* $04 terminating char not found *)
+		IF fbExtractString.bStringFound = FALSE THEN
+
+			(* check for status message without $04 (EOT) terminating char *)
+			fbExtractString(
+				bExtractData	:= FALSE,
+				nExtractChars	:= 9,
+				strPrefix		:= 'RGST',
+				strSuffix		:= '',
+				strString		:= strTCPRxString,
+				bStringFound	=> bHeartbeat
+			);
+			(* first message back from scanner may have 5th char as 16#00 which looks like a terminated string *)
+		END_IF
+
+		(* string found and response expected *)
+		IF fbExtractString.bStringFound = TRUE THEN
+
+			(* reset TCP timer *)
+			fbTCPTimeout(IN := FALSE);
+
+			(* update heartbeat counter *)
+			nHeartbeat := nHeartbeat + 1;
+			IF nHeartbeat = 0 THEN
+
+				(* ensure roll-over to 1 *)
+				nHeartbeat := 1;
+			END_IF
+
+			(* code change not active, extract status byte *)
+			bCodeChangeActive := FALSE;
+			nStatusByte := ASC(MID(fbExtractString.strData, 1, 5));
+
+			(* MSGT response *)
+			IF LEN2(ADR(fbExtractString.strData)) > 6 THEN
+
+				(* extract additional info *)
+				nActiveProgram := STRING_TO_BYTE(MID(fbExtractString.strData, 2, 6));
+				nErrorCode := STRING_TO_UDINT(MID(fbExtractString.strData, 2, 8));
+			END_IF
+
+			(* status is valid, CONFIGURE mode is not active and required code set not active *)
+			IF nReqProgram > 0 AND bConfigMode = FALSE AND (nStatusByte.2 = FALSE OR nReqProgram <> nActiveProgram) THEN
+
+				(* build command to change code and return status *)
+				strTCPCommand := F_CONCAT3('MR', F_StringAddPrefix(BYTE_TO_STRING(nReqProgram), 2, '0'), 'MGST');
+				bCodeChangeActive := TRUE;
+				nHeartbeat := 0;
+
+				(* reset status info *)
+				nStatusByte := 0;
+				nActiveProgram := 0;
+				nErrorCode := 0;
+			END_IF
+		END_IF
+
+		eState := E_SCANNER_IDLE;
+
+
+(* unknown state *)
+ELSE
+
+	(* clear vars *)
+	nActiveTriggers := 0;
+	bdoTrigger := FALSE;
+
+	(* reset outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+
+	eState := E_SCANNER_IDLE;
+END_CASE
+
+
+(* scanner ready when TCP port is connected, status byte is valid and code change is not in progress *)
+bScannerReady := fbTCPPortCtrl.bConnected = TRUE AND nStatusByte.2 = TRUE AND bCodeChangeActive = FALSE;
+
+
+(* rising edge of bReadCode *)
+fbReadCode(CLK:= bReadCode);
+
+(* scanner is ready *)
+IF bScannerReady = TRUE THEN
+
+	(* new code requested, acquisition timer has elapsed and max triggers has not been reached *)
+	IF fbReadCode.Q = TRUE AND fbAcquisitionTimer.Q = FALSE AND nActiveTriggers < LIMIT(1, sOptions.nImageBuffer, nMaxImageBuffer) THEN
+
+		(* update number of active triggers and log TriggerID *)
+		bdoTrigger := TRUE;
+		nActiveTriggers := nActiveTriggers + 1;
+		arrTriggerID[nActiveTriggers] := sTriggerID;
+
+		(* trigger image acquisition timer *)
+		fbAcquisitionTimer(
+			IN	:= TRUE,
+			PT	:= MAX(tAcquisitionTime[sOptions.eScannerType], tTaskTime)
+		);
+
+	(* strobe and trigger are both ON or no trigger required *)
+	ELSE
+
+		(* reset trigger *)
+		bdoTrigger := FALSE;
+	END_IF
+
+(* scanner not ready *)
+ELSE
+
+	(* reset trigger and no of triggers active *)
+	bdoTrigger := FALSE;
+	nActiveTriggers := 0;
+END_IF
+
+(* reset image acquisition timer trigger *)
+fbAcquisitionTimer(IN := FALSE);
+
+(* bAcceptTrigger is set TRUE when new trigger will be accepted *)
+bAcceptTrigger := bScannerReady = TRUE AND fbAcquisitionTimer.Q = FALSE AND nActiveTriggers < MIN(sOptions.nImageBuffer, nMaxImageBuffer);
+
+(* I/O time-out delay *)
+fbIOTimeout(
+	IN	:= nActiveTriggers > 0,
+	PT	:= tTimeout
+);
+
+(* I/O timeout elapsed *)
+IF fbIOTimeout.Q = TRUE THEN
+
+	(* reset active triggers *)
+	nActiveTriggers := 0;
+	nResponses := 0;
+
+	(* set outputs *)
+	bDone := TRUE;
+	bError := TRUE;
+	strStatus := 'I/O Timeout';
+	MEMSET(ADR(sImageData), 16#00, SIZEOF(sImageData));
+END_IF
+
+
+(* busy output active while waiting for code *)
+bBusy := bDone = FALSE AND nActiveTriggers > 0;
+
+
+(* browse scanner *)
+fbBrowse(
+	bViewLive	:= bBrowseLive,
+	bViewDiag	:= bBrowseDiag,
+	strIPAddress:= strScannerIPAddr,
+);
+
+
+(* TCP connection is connected *)
+IF fbTCPPortCtrl.bConnected = TRUE THEN
+
+	(* scanner in CONFIG mode *)
+	IF bScannerReady = FALSE THEN
+
+		(* clear output data *)
+		nActiveProgram := 0;
+		strStatus := '';
+		MEMSET(ADR(sImageData), 16#00, SIZEOF(sImageData));
+	END_IF
+
+(* TCP connoection is disabled *)
+ELSE
+
+	(* reset outputs *)
+	strStatus := '';
+	MEMSET(ADR(sImageData), 16#00, SIZEOF(sImageData));
+
+	(* reset status info *)
+	nStatusByte := 0;
+	nActiveProgram := 0;
+	nErrorCode := 0;
+END_IF
+
+
+(* no heartbeat received for 2.2s *)
+fbRequestStatus(CLK := fbTCPTimeout.ET > T#2.2s);
+IF fbRequestStatus.Q = TRUE AND strTCPCommand = '' THEN
+
+	(* request status from the camera *)
+	strTCPCommand := 'MGST';
+END_IF
+
+(* access to TCPServer uses significant resource on CX1020, so TCPSend is synced with TCPReceive and ImageDecode to prevent uP task spikes *)
+(* send data to TCP port *)
+fbTCPSend(
+	sSrvNetId	:= '',
+	hSocket		:= fbTCPPortCtrl.hSocket,
+	cbLen		:= LEN2(ADR(strTCPCommand)),
+	pSrc		:= ADR(strTCPCommand),
+	bExecute	:= fbTCPSend.cbLen > 0 AND fbTCPReceive.bDone,
+	tTimeout	:= T#1s
+);
+
+(* send data complete *)
+fbTCPSendDone(CLK := fbTCPSend.bBusy);
+
+(* TCP send complete *)
+IF fbTCPSendDone.Q = TRUE THEN
+
+	(* clear strTCPCommand *)
+	strTCPCommand := '';
+
+	(* close off fbSendTCPData *)
+	fbTCPSend(bExecute := FALSE);
+END_IF
+
+(* re-initialise TCP connection if TCP Send Data fails or Heartbeat times out *)
+bReInitialiseTCP := (fbTCPSendDone.Q = TRUE AND fbTCPSend.bError = TRUE) OR fbTCPTimeout.Q = TRUE;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

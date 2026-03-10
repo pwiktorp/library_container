@@ -1,0 +1,89 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_SCANNER_Keyence_SymbolID_To_CodeType" Id="{1861b864-4ac7-4f37-8076-1f6ff0f11343}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_SCANNER_Keyence_SymbolID_To_CodeType : E_SCANNER_CodeType
+VAR_INPUT
+	sSymbolID	: STRING(3);
+END_VAR
+VAR
+	eCodeType	: E_SCANNER_CodeType;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF LEFT(sSymbolID,1) <> ']' THEN
+	eCodeType := E_SCANNER_CodeType.NONE;
+
+ELSIF sSymbolID = ']d1' OR sSymbolID = ']d2' OR sSymbolID = ']d3' OR sSymbolID = ']d4' OR sSymbolID = ']d5' OR sSymbolID = ']d6' THEN
+	eCodeType := E_SCANNER_CodeType.DATAMARTIX;
+
+ELSIF sSymbolID = ']Q0' OR sSymbolID = ']Q1' OR sSymbolID = ']Q2' OR sSymbolID = ']Q3' OR sSymbolID = ']Q4' OR sSymbolID = ']Q5' OR sSymbolID = ']Q6' THEN
+	eCodeType := E_SCANNER_CodeType.QR;
+
+ELSIF sSymbolID = ']J0' OR sSymbolID = ']J1' OR sSymbolID = ']J2' OR sSymbolID = ']J3' OR sSymbolID = ']J4' OR sSymbolID = ']J5' THEN
+	eCodeType := E_SCANNER_CodeType.DOTCODE;
+
+ELSIF sSymbolID = ']C0' OR sSymbolID = ']C1' OR sSymbolID = ']C2' THEN
+	eCodeType := E_SCANNER_CodeType.CODE128;
+
+ELSIF sSymbolID = ']E0' OR sSymbolID = ']E3' THEN
+	eCodeType := E_SCANNER_CodeType.EAN13;
+
+ELSIF sSymbolID = ']E4' THEN
+	eCodeType := E_SCANNER_CodeType.EAN8;
+
+ELSE
+	eCodeType := E_SCANNER_CodeType.UNKNOWN;
+END_IF
+
+F_SCANNER_Keyence_SymbolID_To_CodeType := eCodeType;
+
+
+
+(*
+Symbol ID	Detail
+]Q0	QR: Model 1
+]Q1	QR: Model 2, ECI not applied
+]Q2	QR: Model 2, ECI applied
+]Q3	QR: Model 2, ECI not applied, FNC1 (1st)
+]Q4	QR: Model 2, ECI applied, FNC1 (1st)
+]Q5	QR: Model 2, ECI not applied, FNC1 (2nd)
+]Q6	QR: Model 2, ECI applied, FNC1 (2nd)
+]d1	DataMatrix: ECC 200
+]d2	DataMatrix: ECC 200, FNC1 (1st)
+]d3	DataMatrix: ECC 200, FNC1 (2nd)
+]d4	DataMatrix: ECC 200, ECI applied
+]d5	DataMatrix: ECC 200, ECI applied, FNC1 (1st)
+]d6	DataMatrix: ECC 200, ECI applied, FNC1 (2nd)
+]A0	CODE39: No check digit validation
+]A1	CODE39: Check digit is validated and transmitted
+]A3	CODE39: Check digit is validated but not transmitted
+]I0	ITF: No check digit validation
+]I1	ITF: Check digit is validated and transmitted
+]I3	ITF: Check digit is validated but not transmitted
+]F0	NW-7 (Codabar)
+]E0	JAN/EAN/UPC: UPC-A, UPC-E, JAN/EAN13
+]E4	JAN/EAN/UPC: JAN/EAN8
+]E3	JAN/EAN/UPC: UPC-A, UPC-E, JAN/EAN13 Addon 2, addon 5
+]C0	CODE128: FNC1 not included
+]C1	CODE128: FNC1 on the first digit (GS1-128)
+]C2	CODE128: FNC1 on the second digit
+]e0	GS1 Databar
+]L0	PDF417, MicroPDF417: Standard
+]L1	PDF417, MicroPDF417: Extended channel interpretation
+]L2	PDF417, MicroPDF417: Basic channel interpretation
+]G0	CODE93
+]S0	2of5
+]X0	COOP2of5
+]A8	Trioptic CODE39
+]X0	Postal
+]J0	DotCode Generic Data
+]J1	DotCode GS1 format (GS1 DotCode)
+]J2	DotCode Application Specific
+]J3	DotCode Generic Data + ECI
+]J4	DotCode GS1 format (GS1 DotCode) + ECI
+]J5	DotCode Application Specific + ECI
+*)
+
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

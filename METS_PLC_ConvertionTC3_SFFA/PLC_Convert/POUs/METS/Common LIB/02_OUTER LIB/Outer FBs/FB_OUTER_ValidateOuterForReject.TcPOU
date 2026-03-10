@@ -1,0 +1,352 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_OUTER_ValidateOuterForReject" Id="{7f1418d4-9134-4ecb-bd67-859e5bf254fd}" SpecialFunc="None">
+    <Declaration><![CDATA[ (* scan for and validate Outers marked as requiring validation *)
+FUNCTION_BLOCK FB_OUTER_ValidateOuterForReject
+VAR_INPUT
+	bExecute					: BOOL;			(* scan for completed Outer *)
+	stCTDateTime				: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	bValidateOCVOnly			: BOOL;
+	bEnableRestoreOCV			: BOOL;
+END_VAR
+VAR_IN_OUT
+	stProductInstruction		: ST_PCM_Status;					(* Product Instruction *)
+	nSecquentionalCounter	: UDINT;
+	stCodeInfo_Outer			: ST_CodeInfo;
+	stOuterStatus				: ST_OUTER_Status;	(* Outer status *)
+	stOuterStatusForRestore	: ST_OUTER_Status;	(* Outer status *)
+	stOuterRejectReasons		: ST_RejectReasonsForOuter;
+	stOuterStatusHMI			: ST_HMI_OuterStatus;
+END_VAR
+VAR_OUTPUT
+	bDone						: BOOL;			(* TRUE = validation complete *)
+	bBusy						: BOOL;			(* TRUE = validation in progress *)
+	bError						: BOOL;			(* TRUE = validation error *)
+	nErrorID					: UDINT;		(* error ID *)
+
+	sRejectCode				: T_RejectCode;
+	nRejectID					: UINT;
+	bRejectOuter				: BOOL;
+END_VAR
+VAR
+	fbExecute					: R_TRIG;
+	(*sRetailSKU					: T_CodeRSKU;*)
+	sLastBarcode				: T_OUTER_Barcode;
+	nPackIndex				: INT;
+	nCheckIndex				: INT;
+	nDuplicatePairs			: INT;
+	stSystemTime				: TIMESTRUCT;
+
+	nTest			:INT;
+
+
+	aPackStatusValue		: ARRAY[0..10] OF INT;
+	aRejectCodePointer      : ARRAY[0..10] OF STRING(10);
+	nRejectIndex			: INT;
+
+	fbValidateOuter		: FB_CODE_ValidateExplicitCode;
+	fbValidatePack			: FB_CODE_ValidateExplicitCode;
+
+	bDuplicateFound		: BOOL;
+	nGoodPackReads		: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* monitor rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+(*stSystemTime := stCTDateTime.sSystemTime;*)
+
+(* scan for completed Outers when validation is active *)
+IF fbExecute.Q = TRUE THEN
+
+	(* update outputs *)
+	bDone := FALSE;
+	bBusy := TRUE;
+	bError := FALSE;
+	nErrorID := 0;
+
+	sRejectCode := '';
+	bRejectOuter := FALSE;
+	nRejectID	:= 0;
+
+	(* validate OAC data *)
+	stOuterStatus.stOACData.CodingAndTrackingMode := stProductInstruction.nOpMode;
+
+	(* extract RetailSKU and SerialCode *)
+	fbValidateOuter(	sFullCode := stOuterStatus.stOACData.Barcode,
+						stCodeInfo := stCodeInfo_Outer,
+						stProductInstruction := stProductInstruction);
+
+	(*sRetailSKU	:= fbValidateOuter.sRsku;*)
+
+	IF bValidateOCVOnly THEN
+
+		nGoodPackReads	:=  stOuterStatus.stOACData.NumberOfLinkedPacks;
+
+		IF  nGoodPackReads = stOuterStatus.stOACData.NumberOfPacks THEN
+
+			FOR nPackIndex := 1 TO stOuterStatus.stOACData.NumberOfPacks DO
+
+				IF stOuterStatus.aOACPackStatus[nPackIndex]  <> 2 	THEN
+
+					(* Outer is valid, update status *)
+					stOuterStatus.bOuterCodeValid := TRUE;
+					stOuterStatus.bPackCodesValid := TRUE;
+
+					sRejectCode := 'OK';
+					nRejectID		:= 0;
+				ELSE
+
+					(* Outer is valid, update status *)
+					stOuterStatus.bOuterCodeValid := FALSE;
+					stOuterStatus.bPackCodesValid := FALSE;
+
+					bError := TRUE;
+					nErrorID := 20;
+					sRejectCode 	:=	stOuterRejectReasons.stOuterPackCodeInvalid.sMetsDisplayCode;
+					nRejectID		:= 	stOuterRejectReasons.stOuterPackCodeInvalid.nRejectID;
+
+					EXIT;
+				END_IF
+			END_FOR
+		ELSE
+			(* update status *)
+			bError := TRUE;
+			nErrorID := 21;
+
+			aPackStatusValue[0] := 	nGoodPackReads;
+			aPackStatusValue[1] := 	stOuterStatus.stOACData.NumberOfPacks;
+			aRejectCodePointer[0] := 'n1';
+			aRejectCodePointer[1] := 'n2';
+
+			sRejectCode 	:=	F_CODE_AssignValToString(stOuterRejectReasons.stOuterPackCodeNotRead.sMetsDisplayCode, aPackStatusValue, aRejectCodePointer);
+			nRejectID		:= 	stOuterRejectReasons.stOuterPackCodeNotRead.nRejectID;
+		END_IF
+
+	ELSIF stOuterStatus.stOACData.OuterRejectCode <> 'OK' THEN
+
+		bError := TRUE;
+		nErrorID := 10;
+
+		sRejectCode 	:= stOuterStatus.stOACData.OuterRejectCode;
+		nRejectID		:= stOuterStatus.stOACData.OuterRejectID;
+	ELSIF  stProductInstruction.nOpMode >= 7 AND sLastBarcode = stOuterStatus.stOACData.Barcode  AND stOuterStatus.stOACData.Barcode <> '' THEN
+
+		bError := TRUE;
+		nErrorID := 11;
+
+		sRejectCode :=  stOuterRejectReasons.stOuterBarcodeDuplicate.sMetsDisplayCode;
+		nRejectID		:= stOuterRejectReasons.stOuterBarcodeDuplicate.nRejectID;
+
+	ELSIF stProductInstruction.nOpMode = 7
+		AND fbValidateOuter.bValidationOK = TRUE THEN
+
+		(* Outer is valid, update status *)
+		stOuterStatus.bOuterCodeValid := TRUE;
+		sRejectCode 	:= 'OK';
+		nRejectID		:= 0;
+
+	ELSIF stProductInstruction.nOpMode = 11
+		AND fbValidateOuter.bValidationOK = TRUE THEN
+
+		(* Outer is valid, update status *)
+		stOuterStatus.bOuterCodeValid := TRUE;
+		sRejectCode 	:= 'OK';
+		nRejectID		:= 0;
+		nGoodPackReads := 0;
+
+		(*Restore missing data from OCV struct - do not reject outer*)
+		IF bEnableRestoreOCV AND stOuterStatus.nStatus.16 = TRUE  AND stOuterStatusForRestore.nStatus.16 = FALSE THEN
+
+			sRejectCode := 'OK - attempt to restore Pack (OCV) Data';
+			stOuterStatus.bPackCodesValid := TRUE;
+		(* <NumberOfPacks> > 0 *)
+		ELSIF stOuterStatus.stOACData.NumberOfLinkedPacks > 0 THEN
+			(*nGoodPackReads := 0;*)
+			(* <nGoodPackReads>  > <AcceptanceLevel> *)
+			FOR nPackIndex := 1 TO stOuterStatus.stOACData.NumberOfPacks DO
+
+(*alternativly we could check********************************************************************************
+		IF NOT stOuterStatus.stOACData.PackCodeStatus[nPackIndex].1 		AND
+			NOT stOuterStatus.stOACData.PackCodeStatus[nPackIndex].2	AND
+			NOT stOuterStatus.stOACData.PackCodeStatus[nPackIndex].3	THEN
+
+					IF stOuterStatus.stOACData.PackCodeStatus[nPackIndex].5 		OR 
+						stOuterStatus.stOACData.PackCodeStatus[nPackIndex].6 		OR 
+						stOuterStatus.stOACData.PackCodeStatus[nPackIndex].9 		OR 
+						stOuterStatus.stOACData.PackCodeStatus[nPackIndex].10	THEN
+***************************************************************************************************************)
+
+				IF stOuterStatus.aOACPackStatus[nPackIndex]  <> 1 		AND
+					stOuterStatus.aOACPackStatus[nPackIndex]  <> 2 	AND
+					stOuterStatus.aOACPackStatus[nPackIndex]  <> 3 	THEN
+
+					IF stOuterStatus.aOACPackStatus[nPackIndex]  > 4  	THEN
+						nGoodPackReads := nGoodPackReads + 1;
+					END_IF
+				ELSE
+					nGoodPackReads := -1;
+					EXIT;
+				END_IF
+			END_FOR
+
+		(* sufficient number of Pack codes read and valid, update status *)
+			IF nGoodPackReads >= stOuterStatus.stOACData.AcceptanceLevel THEN
+				stOuterStatus.bPackCodesValid := TRUE;
+
+				FOR nPackIndex := 1 TO stOuterStatus.stOACData.NumberOfPacks DO
+
+					IF  stOuterStatus.aOACPackStatus[nPackIndex]  = 0 THEN
+
+							stOuterStatus.stOACData.PackCode[nPackIndex] 			:= F_CODE_BATSerializator(stCTDateTime, ePack, TRUE, stProductInstruction, nSecquentionalCounter);
+							(* change status to indicate no read in an accepted outer *)
+							stOuterStatus.aOACPackStatus[nPackIndex]				:= 5 (*4 - for now avoid 4 as PackStatus is check in several places and has to be 5*);
+							(*additional bit passing to CAC*)
+							stOuterStatus.stOACData.PackCodeStatus[nPackIndex]:=
+														F_FiltredSetBitState16(TRUE, 'LOW', 4, TRUE, stOuterStatus.stOACData.PackCodeStatus[nPackIndex]);
+
+							stOuterStatus.stOACData.PackRejectCode[nPackIndex]   	:= 'OK';
+							stOuterStatus.stOACData.PackRejectID[nPackIndex]		:= 0;
+					END_IF
+				END_FOR
+				(*NumberOfLinkedPacks we modify only in final case content validation*)
+
+		(* invalid pack code(s) found *)
+			ELSIF nGoodPackReads = -1 THEN
+								(* update status *)
+				bError := TRUE;
+				nErrorID := 22;
+				sRejectCode 	:=	stOuterRejectReasons.stOuterPackCodeInvalid.sMetsDisplayCode;
+				nRejectID		:= 	stOuterRejectReasons.stOuterPackCodeInvalid.nRejectID;
+		(* insufficient pack codes read *)
+			ELSE
+				(* update status *)
+				bError := TRUE;
+				nErrorID := 23;
+
+				aPackStatusValue[0] := 	nGoodPackReads;
+				aPackStatusValue[1] := 	stOuterStatus.stOACData.NumberOfPacks;
+				aRejectCodePointer[0] := 'n1';
+				aRejectCodePointer[1] := 'n2';
+
+				sRejectCode 	:=	F_CODE_AssignValToString(stOuterRejectReasons.stOuterPackCodeNotRead.sMetsDisplayCode, aPackStatusValue, aRejectCodePointer);
+				nRejectID		:= 	stOuterRejectReasons.stOuterPackCodeNotRead.nRejectID;
+			END_IF
+		(* <NumberOfPacks> invalid *)
+		ELSE
+			(* update status *)
+			bError := TRUE;
+			nErrorID := 24;
+			sRejectCode	 := 	stOuterRejectReasons.stOuterPackCodeDataNotFound.sMetsDisplayCode;
+			nRejectID		:= 	stOuterRejectReasons.stOuterPackCodeDataNotFound.nRejectID;
+		END_IF
+	(* code is invalid *)
+	ELSIF stOuterStatus.stOACData.Barcode <> '' THEN
+		(* update outputs *)
+		bError := TRUE;
+		nErrorID := 12;
+		IF fbValidateOuter.bGtinOK = FALSE THEN
+			sRejectCode := stOuterRejectReasons.stOuterBarcodeGtinError.sMetsDisplayCode;
+			nRejectID		:= 	stOuterRejectReasons.stOuterBarcodeGtinError.nRejectID;
+		ELSIF fbValidateOuter.bBrandOK = FALSE THEN
+			sRejectCode := stOuterRejectReasons.stOuterCodesBrandSpecError.sMetsDisplayCode;
+			nRejectID		:= 	stOuterRejectReasons.stOuterCodesBrandSpecError.nRejectID;
+		ELSIF fbValidateOuter.bRskuOK = FALSE THEN
+			sRejectCode := stOuterRejectReasons.stOuterBarcodeRskuError.sMetsDisplayCode;
+			nRejectID		:= 	stOuterRejectReasons.stOuterBarcodeRskuError.nRejectID;
+		ELSIF fbValidateOuter.bSerialCodeOK = FALSE THEN
+			sRejectCode := stOuterRejectReasons.stOuterCodeSerialError.sMetsDisplayCode;
+			nRejectID		:= 	stOuterRejectReasons.stOuterCodeSerialError.nRejectID;
+		ELSE
+			sRejectCode :=  stOuterRejectReasons.stOuterBarcodeInvalidLength.sMetsDisplayCode;
+			nRejectID		:= 	stOuterRejectReasons.stOuterBarcodeInvalidLength.nRejectID;
+		END_IF
+
+	(* no code read *)
+	ELSE
+		(* update outputs *)
+		bError := TRUE;
+		nErrorID := 13;
+		sRejectCode := stOuterRejectReasons.stOuterBarcodeNotRead.sMetsDisplayCode;
+		nRejectID		:= 	stOuterRejectReasons.stOuterBarcodeNotRead.nRejectID;
+
+	END_IF
+
+
+(**************** update Outer status *******************)
+	stOuterStatus.nStatus.10 := FALSE;
+	stOuterStatus.nStatus.11 := FALSE;
+
+	IF stOuterStatus.bQAReject THEN
+		sRejectCode 	:= stOuterRejectReasons.stOuterQAReject.sMetsDisplayCode;
+		nRejectID		:= 	stOuterRejectReasons.stOuterQAReject.nRejectID;
+	END_IF
+
+	(* CaseTrace mode, Outer code must be valid *)
+	IF stProductInstruction.nOpMode = 7 AND stOuterStatus.bOuterCodeValid = TRUE AND stOuterStatus.bQAReject = FALSE THEN
+		(* Outer is valid *)
+		stOuterStatus.nStatus.10 := TRUE;
+		bRejectOuter := FALSE;
+
+	(* PackTrace mode, Outer code and Pack codes must be valid *)
+	ELSIF stProductInstruction.nOpMode  = 11 AND stOuterStatus.bOuterCodeValid = TRUE AND stOuterStatus.bPackCodesValid = TRUE AND stOuterStatus.bQAReject = FALSE THEN
+		(* Outer is valid *)
+		stOuterStatus.nStatus.10 := TRUE;
+		bRejectOuter := FALSE;
+
+	(* Outer has failed validation *)
+	ELSE
+
+		(* Outer is invalid *)
+		stOuterStatus.nStatus.11 := TRUE;
+		bRejectOuter := TRUE;
+	END_IF
+
+	stOuterStatus.stOACData.OuterRejectCode := sRejectCode;
+	stOuterStatus.stOACData.OuterRejectID	:= nRejectID;
+
+	stOuterStatusHMI.sBarcode := stOuterStatus.stOACData.Barcode;
+
+	stOuterStatusHMI.sProductionDate := 	stOuterStatus.stOACData.ProductionDate;
+	stOuterStatusHMI.sProductionTime :=		stOuterStatus.stOACData.ProductionTime;
+
+	MEMMOVE(ADR(stOuterStatusHMI.aPackCode), ADR(stOuterStatus.stOACData.PackCode), SIZEOF(stOuterStatus.stOACData.PackCode));
+	MEMMOVE(ADR(stOuterStatusHMI.aOACPackStatus), ADR(stOuterStatus.aOACPackStatus), SIZEOF(stOuterStatus.aOACPackStatus));
+
+(* 7 for now see asigmnet on screen - after leave 5*)
+	FOR nPackIndex := 1 TO stOuterStatus.stOACData.NumberOfPacks DO
+
+		IF  stOuterStatus.stOACData.PackCodeStatus[nPackIndex].4 THEN
+			stOuterStatusHMI.aOACPackStatus[nPackIndex]	:= 7;
+		END_IF
+	END_FOR
+
+	MEMMOVE(ADR(stOuterStatusHMI.aPackRejectCode), ADR(stOuterStatus.stOACData.PackRejectCode), SIZEOF(stOuterStatus.stOACData.PackRejectCode));
+	MEMMOVE(ADR(stOuterStatusHMI.aPackRejectID), ADR(stOuterStatus.stOACData.PackRejectID), SIZEOF(stOuterStatus.stOACData.PackRejectID));
+
+	stOuterStatusHMI.nNumberOfPacks			:=	stOuterStatus.stOACData.NumberOfPacks;
+	stOuterStatusHMI.nAcceptanceLevel			:=	stOuterStatus.stOACData.AcceptanceLevel;
+	stOuterStatusHMI.nNumberOfLinkedPacks	:=	SEL(nGoodPackReads = -1, nGoodPackReads, 0) ;
+
+	stOuterStatusHMI.sOuterRejectCode	:= stOuterStatus.stOACData.OuterRejectCode;
+	stOuterStatusHMI.nOuterRejectID		:= stOuterStatus.stOACData.OuterRejectID;
+
+	sLastBarcode := stOuterStatus.stOACData.Barcode;
+
+	(* update outputs *)
+	bDone := TRUE;
+	bBusy := FALSE;
+
+(* no action required *)
+ELSIF bExecute = FALSE THEN
+
+	(* reset outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+	(*nErrorID := 0;*)
+	bRejectOuter := FALSE;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

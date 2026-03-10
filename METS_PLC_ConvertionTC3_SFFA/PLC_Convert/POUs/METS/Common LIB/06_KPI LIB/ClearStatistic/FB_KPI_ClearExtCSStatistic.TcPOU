@@ -1,0 +1,66 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_KPI_ClearExtCSStatistic" Id="{21a9574b-b1af-4300-8759-008274799aee}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_KPI_ClearExtCSStatistic
+VAR_INPUT
+	bExecute				: BOOL;
+	stCTDateTime			: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	sProductionSite		: STRING(4);
+	sPCM					: STRING(4);
+END_VAR
+VAR_IN_OUT
+	stPCMStatus						: ST_PCM_Status;
+	(*stCaseContentValidEfficiency		: ST_KPI_InspectionEfficency;
+	stCaseLableValidEfficiency		: ST_KPI_InspectionEfficency;*)
+	stCasePackerSignals				: ST_NOVRAM_METS_DualInputs;
+	stCaseInspactionLog				: ST_NOVRAM_METS_CaseInspactionLog;
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;
+END_VAR
+VAR
+	fbExecute 			: R_TRIG;
+	bTimerFlag			: BOOL;
+	tofDoneTimer			: TOF;
+
+	nCounter				: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+bTimerFlag:=FALSE;
+
+IF fbExecute.Q THEN
+
+	nCounter := nCounter +1;
+
+(*	MEMSET(ADR(stCaseContentValidEfficiency), 16#00, SIZEOF(stCaseContentValidEfficiency));
+	MEMSET(ADR(stCaseLableValidEfficiency), 16#00, SIZEOF(stCaseLableValidEfficiency));*)
+
+	MEMSET(ADR(stCasePackerSignals), 16#00, SIZEOF(stCasePackerSignals));
+	MEMSET(ADR(stCaseInspactionLog), 16#00, SIZEOF(stCaseInspactionLog));
+
+
+	stCasePackerSignals.MachineID.ProductionSite	 := sProductionSite;
+	stCasePackerSignals.MachineID.ProductionLine	:= sPCM;
+	stCasePackerSignals.StartDateTime 				:=  F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset );
+	stCasePackerSignals.CodingAndTrackingMode	 	:=stPCMStatus.nOpMode;
+
+	stCaseInspactionLog.MachineID.ProductionSite 	:= sProductionSite;
+	stCaseInspactionLog.MachineID.ProductionLine	:= sPCM;
+	stCaseInspactionLog.StartDateTime 				:=  F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset );
+	stCaseInspactionLog.CodingAndTrackingMode		:= stPCMStatus.nOpMode;
+	stCaseInspactionLog.nPacksPerCase  			:= stPCMStatus.nPacksPerCase;
+	stCaseInspactionLog.nOutersPerCase			:= stPCMStatus.nOutersPerCase;
+
+	bTimerFlag:=TRUE;
+END_IF
+
+tofDoneTimer(IN:=bTimerFlag,PT:=t#5s, Q=>bDone);]]></ST>
+    </Implementation>
+    <LineIds Name="FB_KPI_ClearExtCSStatistic">
+      <LineId Id="24" Count="31" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_ALARM_Message" Id="{f4bb0b24-935f-49d9-bb54-852880546349}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ALARM_Message
+VAR_INPUT
+	bCurrentStatus					:	BOOL;
+END_VAR
+VAR_IN_OUT
+	bAlarmTrigger					:	BOOL;
+	tAlarmTimout					:	TIME;
+	bAlarmEnable					:	BOOL;
+	bInhibitReset					:	BOOL;
+	bAutoReset					:	BOOL;
+	bInternalReset					:	BOOL;
+	//sAlarmMessege				:	STRING(200);
+	//tonAlarmDelayTimer			:	TON;
+END_VAR
+VAR_OUTPUT
+	bAlarmActive					: 	BOOL;
+	//sLogMessage					:	STRING(200);
+END_VAR
+VAR
+	ftrigStatusReset				: 	F_TRIG;
+	bAlarmConfirmed				:	BOOL;
+	tonAlarmDelayTimer			:	TON;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*****************************************************************************)
+IF NOT  bAlarmEnable AND NOT bAlarmActive THEN
+	//sLogMessage := 'ALARM MANAGEMENT BLOCK DISABLE';
+	tonAlarmDelayTimer(IN:= FALSE, PT:= , Q=> , ET=> );
+	RETURN;
+END_IF
+
+IF bInhibitReset AND NOT bInternalReset  AND NOT bAlarmConfirmed AND bAlarmActive THEN
+	bAlarmActive := TRUE;
+	RETURN;
+ELSIF bInhibitReset AND bInternalReset THEN
+	bAlarmConfirmed := TRUE;
+END_IF
+
+bAlarmActive := bCurrentStatus;
+bAlarmConfirmed :=	bCurrentStatus;
+ftrigStatusReset(CLK:=bCurrentStatus OR bInhibitReset);  (* uncoment this triger if alarm shuld be avilble to reset even triger is active*)
+
+tonAlarmDelayTimer(IN:= bAlarmTrigger AND NOT ftrigStatusReset.Q , PT:= tAlarmTimout , Q=> , ET=> );
+
+(* Conditions to Generate Fault *)
+IF tonAlarmDelayTimer.Q	AND  bAlarmEnable AND NOT bAlarmActive THEN
+	bAlarmActive := TRUE;
+ELSIF NOT tonAlarmDelayTimer.Q AND  bAutoReset	THEN
+	bAlarmActive := FALSE;
+END_IF
+
+(*****************************************************************************)
+(*****************************************************************************)
+
+//sLogMessage := sAlarmMessege;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,74 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_ALARM_OutputDB" Id="{c4db1a85-f27b-4828-9e6b-1a28d2a6ad9e}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ALARM_OutputDB
+VAR_INPUT
+	bSystemTimeValid		: BOOL;
+	stCTDateTime			: ST_SYSTEM_DateTime;
+	nAppOnlineChangeCnt 	: UDINT;
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR_IN_OUT
+	stAlarmTable			:	ST_AlarmsTable;
+	//stAlarms 				: 	ARRAY [0..cMAX_ALARM_GROUP] OF ST_Alarms;
+	stMachineConfig		: ST_SYSTEM_Config;
+END_VAR
+VAR
+	nOnlineChangeCount			: UDINT;
+	nIndex						: INT ;
+	
+	nMsgCatLen					: INT;
+	nMsgCatPos					: INT;
+	nMsgTypeLen					: INT;
+	nMsgTypePos					: INT;
+	
+	aAlarmActive : ARRAY[0..cMAX_MESSAGE_NUMBER] OF R_TRIG;
+	aAlarmNotActive : ARRAY[0..cMAX_MESSAGE_NUMBER] OF F_TRIG;
+END_VAR
+
+(*	eAlarmID			: E_MessageID;
+	eRootAlarmID		: E_MessageID;
+	sAlarmType			: STRING;
+	sEquipmentName		: STRING;
+	bIsActive			: BOOL;
+	sEventStart			: STRING;
+	sEventEnd			: STRING;*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[FOR nIndex := 0 TO cMAX_MESSAGE_NUMBER DO
+	
+	stAlarmTable.aAlarmDB[nIndex].eEventID := nIndex;
+	stAlarmTable.aAlarmDB[nIndex].sEquipmentName := F_CONCAT3(stMachineConfig.sProductionSite, '_', stMachineConfig.stProductionLine.sPCM);
+
+	nMsgCatPos := find(stAlarmTable.aMsgHMI[nIndex], 'Cat=') + len('Cat=');	
+	nMsgCatLen := find(stAlarmTable.aMsgHMI[nIndex], ';MsgType') - nMsgCatPos;
+	
+	nMsgTypePos := find(stAlarmTable.aMsgHMI[nIndex], ';MsgType=') + len(';MsgType=');	
+	nMsgTypeLen := find(stAlarmTable.aMsgHMI[nIndex], ';MsgInfo=') - nMsgTypePos;
+	
+	stAlarmTable.aAlarmDB[nIndex].nEventCat := STRING_TO_INT(mid(stAlarmTable.aMsgHMI[nIndex], nMsgCatLen, nMsgCatPos));
+	stAlarmTable.aAlarmDB[nIndex].nEventTypeNo := STRING_TO_INT(mid(stAlarmTable.aMsgHMI[nIndex], nMsgTypeLen, nMsgTypePos));
+	
+	stAlarmTable.aAlarmDB[nIndex].sEventTypeID :='A';
+	IF stAlarmTable.aAlarmDB[nIndex].nEventTypeNo > 7 THEN
+		stAlarmTable.aAlarmDB[nIndex].sEventTypeID :='W';
+	END_IF
+
+	IF bSystemTimeValid THEN
+		stAlarmTable.aAlarmDB[nIndex].bIsActive := stAlarmTable.aActiveID[nIndex];
+	
+		aAlarmActive[nIndex](CLK:=stAlarmTable.aAlarmDB[nIndex].bIsActive);
+		IF	aAlarmActive[nIndex].Q THEN
+			stAlarmTable.aAlarmDB[nIndex].sEventStart :=  F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset);
+			stAlarmTable.aAlarmDB[nIndex].sEventEnd := '';
+		END_IF
+	
+		aAlarmNotActive[nIndex](CLK:=stAlarmTable.aAlarmDB[nIndex].bIsActive);
+		IF	aAlarmNotActive[nIndex].Q THEN
+			stAlarmTable.aAlarmDB[nIndex].sEventEnd :=  F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset);
+		END_IF
+	END_IF
+END_FOR]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

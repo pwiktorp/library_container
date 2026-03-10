@@ -1,0 +1,384 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_SYSTEM_DateTime" Id="{ac2c3665-6e4c-4a4c-b304-c5b170efd284}" SpecialFunc="None">
+    <Declaration><![CDATA[(* generates PLC and System time clocks in real-time kernel, synchronise to System time when required *)
+FUNCTION_BLOCK FB_SYSTEM_DateTime
+VAR_INPUT
+	bEnable					: BOOL;		(* set TRUE to enable system time update *)
+	bNVDataInitOK			: BOOL;		(* set TRUE when NV data is initialised, enables PCM timer *)
+	nShiftOffsetTime		: DINT;		(* OffsetTime = SystemTime + tTimeOffset*)
+END_VAR
+VAR_IN_OUT
+	stPCMStatus				: ST_PCM_Status;	(* PCM status *)
+	(*stMetsStatusNV			: ST_NOVRAM_CaseTraceNV;	(* CaseTrace NV data, used for last PCM  timestamps *)*)
+END_VAR
+VAR_OUTPUT
+	bSystemTimeValid		: BOOL;		(* TRUE = System time is valid *)
+	bPCMTimeValid			: BOOL;		(* TRUE = PCM time is valid *)
+	bBusy					: BOOL;		(* TRUE = sync in progress, PLC continues to be updated while sync is active *)
+	stCTDateTime				: ST_SYSTEM_DateTime;	(* output time structure *)
+END_VAR
+VAR
+	fbSyncSysTime			: FB_SquareWave;
+	fbInitPCMTime			: R_TRIG;
+	fbSyncPCMTime			: R_TRIG;
+	bSyncPCMTime			: BOOL;
+
+	eState					: E_SYSTEM_CTState;
+	eErrorState				: E_SYSTEM_CTState;
+	fbReadSystemTime		: NT_GetTime;
+	fbGetTimeZoneInfo		: FB_GetTimeZoneInformation;
+	eTimeZoneID				: E_TimeZoneID;
+	sTimeZoneInfo			: ST_TimeZoneInformation;
+	sBaseTime				: TIMESTRUCT;
+
+	bStartSystemTimer		: BOOL;
+	fbSystemTime			: RTC_EX2;
+	nLastSysSecond			: WORD;
+	nSysUpdateStep			: UINT;
+	nSystemTime				: T_Filetime;
+	nLastTime				: T_Filetime;
+
+	bStartPCMTimer			: BOOL;
+	fbPCMTime				: RTC_EX2;
+	bSyncPCMToSysTime		: BOOL;
+
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+01/08/2014	2.00.00	PB		sPLCTime added as VAR_IN_OUT to allow last value to be stored in NOVRAM.
+							At start-up, sPLCTime is now initialised to stored sPLCTime or sSystemTime, whichever is later.
+							sPLCTime is only synchronised with sSystemDate time on rising edge of bUpdatePLCTime.
+							These changes prevent sPLCTime from jumping back in time and remove the possibility of producing duplicate timestamp codes.
+							sUTCTime and corresponding date and time strings added.
+							nUTCOffset also generated to determine the time difference between sSystemTime and sUTCTime, specified in ms.
+
+-------------------------------------------------------------------------------------------------
+03/08/2012	1.39.00	PB		Re-written to generate PLC, System and Offset time and create updated ST_SYSTEM_DateTime structure.
+							PLC time is synchronised at start-up and on rising edge of bSyncPLCTime.
+							System time is synchronised at start-up and every 1s thereafter.
+							Offset time is System time with tTimeOffset subtracted.
+16/12/2011	1.36.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* enabled *)
+IF bEnable = TRUE THEN
+
+	(* re-sync sSystemTime system every 1s *)
+	fbSyncSysTime(
+		bEnable		:= bStartSystemTimer,
+		tPeriod		:= T#1s,
+	);
+
+	(* synchronise sPCMTime when PCM is enabled OR RetailSKU is changed *)
+	fbInitPCMTime(CLK := bNVDataInitOK AND stPCMStatus.bEnabled);
+	fbSyncPCMTime(CLK := bNVDataInitOK AND stPCMStatus.bRSKUChanged);
+
+	(* PCM enabled *)
+	IF fbInitPCMTime.Q = TRUE THEN
+
+		(* PCM time will be synchronised to SystemTime or LastPCMTime used, whichever is later *)
+		bSyncPCMTime := TRUE;
+		(* this ensures that PCM time continues from last time-stamp used to prevent duplicate timestamp codes *)
+
+	(* PCM RetailSKU has changed *)
+	ELSIF fbSyncPCMTime.Q = TRUE THEN
+
+		(* clear last PCM time *)
+		MEMSET(ADR(stPCMStatus.stLastPCMTime), 16#00, SIZEOF(stPCMStatus.stLastPCMTime));
+
+		(* PCM time will be synchronised to SystemTime as LastPCMTime will be older than SystemTime*)
+		bSyncPCMTime := TRUE;
+		(* bRSKUChanged is suppressed when PCM is first loaded *)
+	END_IF
+
+	CASE eState OF
+
+		(* INIT state *)
+		E_SYSTEMCT_IDLE:
+
+			(* system timer not initialised *)
+			IF stCTDateTime.bSystemTimeValid = FALSE THEN
+
+				(* update output and clear error state *)
+				bBusy := TRUE;
+				eErrorState := eState;
+
+				eState := E_SYSTEMCT_TIMEZONE;
+
+			(* system timer initialised *)
+			ELSE
+
+				(* re-sync system timer *)
+				IF fbSyncSysTime.bRisingEdge = TRUE OR bSyncPCMTime = TRUE THEN
+
+					(* update output and clear error state *)
+					bBusy := TRUE;
+					eErrorState := eState;
+
+					eState := E_SYSTEMCT_TIMEZONE;
+				END_IF
+			END_IF
+
+
+		(* get timezone info *)
+		E_SYSTEMCT_TIMEZONE:
+			(* read time zone info from conifg file*)
+			(*stCTDateTime.nSystemTimeOffset := nShiftOffsetTime;
+
+			eState := E_SYSTEMCT_SYSTEMTIME;*)
+
+			(* read Windows time zone info *)
+			fbGetTimeZoneInfo(
+				sNetID		:= '',
+				bExecute	:= TRUE,
+				tTimeout	:= T#5s
+			);
+
+			(* read timezone complete *)
+			IF fbGetTimeZoneInfo.bBusy = FALSE THEN
+
+				(* read timezone completed OK *)
+				IF fbGetTimeZoneInfo.bError = FALSE THEN
+
+					(* get time zone info *)
+					eTimeZoneID := fbGetTimeZoneInfo.tzID;
+					sTimeZoneInfo := fbGetTimeZoneInfo.tzInfo;
+
+					(* Daylight Saving time active *)
+					IF eTimeZoneID = eTimeZoneID_Daylight THEN
+
+						(* convert mins to ms *)
+						stCTDateTime.nSystemTimeOffset := (sTimeZoneInfo.bias + sTimeZoneInfo.daylightBias) * -60000;
+
+					(* Standard time active *)
+					ELSIF eTimeZoneID = eTimeZoneID_Standard THEN
+
+						(* convert mins to ms *)
+						stCTDateTime.nSystemTimeOffset := (sTimeZoneInfo.bias + sTimeZoneInfo.standardBias) * -60000;
+
+					(* eTimeZoneID invalid *)
+					ELSE
+
+						(*stCTDateTime.nSystemTimeOffset := 0;*)
+						stCTDateTime.nSystemTimeOffset := nShiftOffsetTime;
+					END_IF
+
+					stCTDateTime.sUTCTimeZoneOffset  := F_SYSTEM_SystemTimeOffsetToHHMM(stCTDateTime.nSystemTimeOffset);
+
+
+					eState := E_SYSTEMCT_SYSTEMTIME;
+
+				(* read timezone error *)
+				ELSE
+
+					eErrorState := eState;
+
+					eState := E_SYSTEMCT_ERROR;
+				END_IF
+
+				(* close off fbGetTimeZoneInfo *)
+				fbGetTimeZoneInfo(bExecute := FALSE);
+			END_IF
+
+
+		E_SYSTEMCT_SYSTEMTIME:
+
+			(* read system time *)
+			fbReadSystemTime(
+				NETID	:= '',
+				START	:= TRUE,
+				TMOUT	:= T#1s
+			);
+
+			(* read system time complete and sPLCTime has been restored *)
+			IF fbReadSystemTime.BUSY = FALSE THEN
+
+				(* read system time completed OK *)
+				IF fbReadSystemTime.ERR = FALSE THEN
+
+					(* base time for updating system time *)
+					sBaseTime := fbReadSystemTime.TIMESTR;
+					bStartSystemTimer := TRUE;
+
+					(* re-sync system time *)
+					fbSystemTime(EN := FALSE);
+	
+					(* re-sync PCM time *)
+					IF bSyncPCMTime = TRUE THEN
+
+						bSyncPCMTime := FALSE;
+						bStartPCMTimer := TRUE;
+
+						(* convert sLastPCMTimeStamp and current system time from TIMESTRUCT to T_Filetime *)
+						nLastTime := SYSTEMTIME_TO_FILETIME(stPCMStatus.stLastPCMTime);
+						nSystemTime := SYSTEMTIME_TO_FILETIME(fbReadSystemTime.TIMESTR);
+	
+						(* sLastPCMTimeStamp > sSystemTime *)
+						IF nLastTime.dwHighDateTime > nSystemTime.dwHighDateTime OR (nLastTime.dwHighDateTime = nSystemTime.dwHighDateTime AND nLastTime.dwLowDateTime > nSystemTime.dwLowDateTime) THEN
+	
+							(* sync PCM time to last PCM time stamp + 1s *)
+							bSyncPCMToSysTime := FALSE;
+	
+						(* sLastPCMTimeStamp <= sSystemTime *)
+						ELSE
+	
+							(* sync PCM time to system time *)
+							bSyncPCMToSysTime := TRUE;
+						END_IF
+	
+						(* re-sync PCM PLC time *)
+						fbPCMTime(EN := FALSE);
+					END_IF
+
+					eState := E_SYSTEMCT_DONE;
+
+				(* read system time error *)
+				ELSE
+	
+					eErrorState := eState;
+	
+					eState := E_SYSTEMCT_ERROR;
+				END_IF
+
+				(* close off fbReadSystemTime *)
+				fbReadSystemTime(START := FALSE);
+			END_IF
+	
+	
+		(* done *)
+		E_SYSTEMCT_DONE:
+	
+			(* update outputs *)
+			bBusy := FALSE;
+	
+			eState := E_SYSTEMCT_IDLE;
+	
+
+	(* unknown state *)
+	ELSE
+	
+		eState := E_SYSTEMCT_IDLE;
+	END_CASE
+	
+	
+	(* system timer - sync occurs when EN goes TRUE *)
+	fbSystemTime(
+		EN		:= bEnable AND bStartSystemTimer,
+		PDT		:= sBaseTime,
+		PMICRO	:= 0,
+		Q		=> stCTDateTime.bSystemTimeValid,
+		CDT		=> stCTDateTime.sSystemTime
+	);
+
+	(* system timer not active *)
+	IF fbSystemTime.EN = FALSE OR stCTDateTime.bSystemTimeValid = FALSE THEN
+
+		(* clear sSystemTime, sOffsetTime and sUTCTime *)
+		stCTDateTime.bSystemTimeValid := FALSE;
+		MEMSET(ADR(stCTDateTime.sSystemTime), 16#00, SIZEOF(stCTDateTime.sSystemTime));
+		MEMSET(ADR(stCTDateTime.sOffsetTime), 16#00, SIZEOF(stCTDateTime.sOffsetTime));
+		MEMSET(ADR(stCTDateTime.sUTCTime), 16#00, SIZEOF(stCTDateTime.sUTCTime));
+
+	(* system date/time is valid *)
+	ELSE
+	
+		(* system update step *)
+		CASE nSysUpdateStep OF
+	
+			(* idle *)
+			0:
+	
+				(* system time second has changed *)
+				IF stCTDateTime.sSystemTime.wSecond <> nLastSysSecond THEN
+	
+					(* move next step and remember current second *)
+					nSysUpdateStep := nSysUpdateStep + 1;
+					nLastSysSecond := stCTDateTime.sSystemTime.wSecond;
+				END_IF
+	
+			(* update sOffsetTime *)
+			1:
+
+				(* apply offset to sSystemTime to produce sOffsetTime *)
+				stCTDateTime.sOffsetTime := F_ApplyTimeOffset(stCTDateTime.sSystemTime, nShiftOffsetTime);
+				stCTDateTime.sOffsetTime.wMilliseconds := 0;
+				nSysUpdateStep := nSysUpdateStep + 1;
+
+	
+			(* update sUTCTime *)
+			2:
+
+				(* apply offset to sSystemTime to produce UTC time *)
+				stCTDateTime.sUTCTime := F_ApplyTimeOffset(stCTDateTime.sSystemTime, stCTDateTime.nSystemTimeOffset *-1);
+				stCTDateTime.sUTCTime.wMilliseconds := 0;
+				(*stCTDateTime.sUTCTimeZoneOffset := strUTCTimeZone;*)
+				nSysUpdateStep := nSysUpdateStep + 1;
+
+			(* generate HMI date/time display string *)
+			3:
+	
+				stCTDateTime.strHMIDateTime := F_SYSTEM_HMIDateTime(stCTDateTime.sSystemTime);
+				nSysUpdateStep := nSysUpdateStep + 1;
+	
+		(* unkonw state *)
+		ELSE
+	
+			(* return to step 0 *)
+			nSysUpdateStep := 0;
+		END_CASE
+	END_IF
+
+
+	(* PCM timer - sync occurs bStartPCMTimer is set to TRUE *)
+	fbPCMTime(
+		EN		:= stPCMStatus.bEnabled AND bStartPCMTimer,
+		PDT		:= SEL(bSyncPCMToSysTime, stPCMStatus.stLastPCMTime, stCTDateTime.sSystemTime),
+		PMICRO	:= 0,
+		Q		=> stCTDateTime.bPCMTimeValid,
+		CDT		=> stCTDateTime.sPCMTime
+	);
+
+	(* PCM timer not active *)
+	IF fbPCMTime.EN = FALSE OR bPCMTimeValid = FALSE THEN
+
+		(* clear sPCMTime *)
+		MEMSET(ADR(stCTDateTime.sPCMTime), 16#00, SIZEOF(stCTDateTime.sPCMTime));
+
+	(* PCM timer active *)
+	ELSE
+
+		(* reduce timer resolution to 0.1s *)
+		stCTDateTime.sPCMTime.wMilliseconds := (stCTDateTime.sPCMTime.wMilliseconds / 100) * 100;
+	END_IF
+
+(* disabled *)
+ELSE
+
+	(* clear outputs *)
+	bBusy := FALSE;
+	MEMSET(ADR(stCTDateTime), 16#00, SIZEOF(stCTDateTime));
+
+	(* disable timers *)
+	bStartSystemTimer := FALSE;
+	bStartPCMTimer := FALSE;
+
+END_IF
+
+(* update outputs *)
+(*stCTDateTime.sUTCTimeZoneOffset := strUTCTimeZone;*)
+
+bSystemTimeValid := stCTDateTime.bSystemTimeValid;
+bPCMTimeValid := stCTDateTime.bPCMTimeValid;
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_SYSTEM_DateTime">
+      <LineId Id="64" Count="309" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

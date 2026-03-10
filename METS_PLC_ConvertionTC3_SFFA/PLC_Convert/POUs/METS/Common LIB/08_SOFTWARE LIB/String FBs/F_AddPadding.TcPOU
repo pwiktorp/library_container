@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_AddPadding" Id="{719dc483-a24f-4f03-975b-5d06842ab86a}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_AddPadding : STRING
+VAR_INPUT
+	nNumber:		INT;
+	nSize:			UINT;
+END_VAR
+VAR
+	sTemp: STRING;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[sTemp := INT_TO_STRING(nNumber);
+
+WHILE LEN(sTemp) < nSize DO
+	sTemp := CONCAT('0',sTemp);
+END_WHILE
+
+F_AddPadding := sTemp;]]></ST>
+    </Implementation>
+    <LineIds Name="F_AddPadding">
+      <LineId Id="8" Count="6" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,40 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_8BitsToByte" Id="{98835c5e-e6da-417e-8601-212cd77ec33e}" SpecialFunc="None">
+    <Declaration><![CDATA[(* moves 8 bits into a single byte *)
+FUNCTION F_8BitsToByte : BYTE
+VAR_INPUT
+	bInput1		: BOOL;
+	bInput2		: BOOL;
+	bInput3		: BOOL;
+	bInput4		: BOOL;
+	bInput5		: BOOL;
+	bInput6		: BOOL;
+	bInput7		: BOOL;
+	bInput8		: BOOL;
+END_VAR
+VAR
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[F_8BitsToByte.0 := bInput1;
+F_8BitsToByte.1 := bInput2;
+F_8BitsToByte.2 := bInput3;
+F_8BitsToByte.3 := bInput4;
+F_8BitsToByte.4 := bInput5;
+F_8BitsToByte.5 := bInput6;
+F_8BitsToByte.6 := bInput7;
+F_8BitsToByte.7 := bInput8;]]></ST>
+    </Implementation>
+    <LineIds Name="F_8BitsToByte">
+      <LineId Id="22" Count="7" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

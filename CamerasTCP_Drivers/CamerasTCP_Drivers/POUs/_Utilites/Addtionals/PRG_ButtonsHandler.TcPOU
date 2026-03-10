@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="PRG_ButtonsHandler" Id="{408eb239-41ce-49b0-8720-a2bd8f343ee2}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM PRG_ButtonsHandler
+VAR
+	rTrig			: R_TRIG;
+	tTimer			: TOF;
+	tTriggerTime	: TIME := T#100MS;
+	bTimerOn		: BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+rTrig(CLK:= GVL.bSiemensTriggerButton);
+
+tTimer(IN:= bTimerOn, PT:= tTriggerTime);
+
+IF rTrig.Q THEN
+	bTimerOn := TRUE;	
+ELSIF tTimer.ET = T#0S THEN
+	bTimerOn := FALSE;
+END_IF
+
+GVL.bSiemensTriggerOutput := tTimer.Q;
+
+
+
+
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

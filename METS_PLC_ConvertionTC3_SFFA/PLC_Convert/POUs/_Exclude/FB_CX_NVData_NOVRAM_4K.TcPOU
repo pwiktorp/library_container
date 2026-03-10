@@ -1,0 +1,561 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CX_NVData_NOVRAM_4K" Id="{dfd84850-1e04-41b3-a138-e20f33ff273f}" SpecialFunc="None">
+    <Declaration><![CDATA[(* stores data in local NOV/DP-RAM device (CX only) *)
+FUNCTION_BLOCK FB_CX_NVData_NOVRAM_4K
+VAR_INPUT
+	bEnable				: BOOL;				(* set TRUE to enable NOVRAM data storage *)
+	bExport				: BOOL;				(* set TRUE to export data to XML file, format is compatible with TSM export file *)
+	bImport				: BOOL;				(* set TRUE to import data from XML file, format is compatible with TSM export file *)
+	pCtrlData			: POINTER TO WORD;	(* pointer to 1st byte of ctrl data to be stored *)
+	nCtrlBytes			: UDINT;			(* no of ctrl data bytes to be stored *)
+	strTransferPathFile	: T_MaxString;		(* transfer file name for export/import *)
+END_VAR
+VAR_OUTPUT
+	bNVDataInitOK		: BOOL;				(* TRUE = initialisation completed OK *)
+	bError				: BOOL;				(* TRUE = initialisation error (device or checksum) *)
+	nUpdates			: UDINT;			(* number of NOVRAM writes completed *)
+	nDeviceID			: WORD;				(* NOVRAM device ID *)
+END_VAR
+VAR
+	eState				: E_CX_NVDataCtrlState;
+	eErrorState			: E_CX_NVDataCtrlState;
+	arrInputData		: ARRAY[0..4095] OF BYTE;
+	arrOutputData		: ARRAY[0..4095] OF BYTE;
+
+	fbExport			: R_TRIG;
+	bExportReq			: BOOL;
+	fbImport			: R_TRIG;
+	bImportReq			: BOOL;
+
+	fbTaskTime			: FB_SYSTEM_TaskInfo;
+	nNVReadBlockSize	: UDINT;
+	nNVWriteBlockSize	: UDINT;
+	nChecksumBlockSize	: UDINT;
+	pNVData				: POINTER TO BYTE;
+
+	fbGetCXPlatform		: FB_CxGetDeviceIdentificationEx;
+	nMaxDataBytes		: UDINT;
+	fbGetDeviceID		: FB_CX_GetDeviceID;
+	fbGetDeviceInfo		: FB_GetDPRAMInfo;
+	sDeviceInfo			: ST_NovRamAddrInfo;
+
+	nActiveDataArea		: UINT;
+	pChecksum			: POINTER TO WORD;
+	nCalcChecksum		: WORD;
+	nNVBlockOffset		: UDINT;
+	nNVBlockBytes		: UDINT;
+	nIndexOffset		: UDINT;
+	nIndexBlockBytes	: UDINT;
+	fbTransferData		: FB_CX_NVData_Transfer;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExport *)
+fbExport(CLK := bExport);
+IF fbExport.Q = TRUE THEN
+
+	(* set flag to export data at next opportunity *)
+	bExportReq := TRUE;
+END_IF
+
+(* rising edge of bImport *)
+fbImport(CLK := bImport);
+IF fbImport.Q = TRUE THEN
+
+	(* set flag to import data at next opportunity *)
+	bImportReq := TRUE;
+END_IF
+
+
+CASE eState OF
+
+	(* IDLE state *)
+	E_CX_NVDATA_IDLE:
+
+		(* NOVRAM storage is enabled *)
+		IF bEnable = TRUE THEN
+
+			(* get current task time *)
+			fbTaskTime();
+
+			(* initialise vars *)
+			nActiveDataArea := 0;
+			nMaxDataBytes := SIZEOF(arrInputData);
+			MEMSET(ADR(sDeviceInfo), 16#00, SIZEOF(sDeviceInfo));
+
+			(* initialise outputs *)
+			nUpdates := 0;
+			nDeviceID := 0;
+
+			eState := E_CX_NVDATA_PLATFORM;
+
+		(* else *)
+		ELSE
+
+			bNVDataInitOK := FALSE;
+			bError := FALSE;
+		END_IF
+
+
+	(* find CX type *)
+	E_CX_NVDATA_PLATFORM:
+
+		(* get CX platform type *)
+		fbGetCXPlatform(
+			bExecute	:= TRUE,
+			tTimeout	:= T#1s
+		);
+
+		(* get CX platform type complete *)
+		IF fbGetCXPlatform.bBusy = FALSE THEN
+
+			(* get CX platform type completed OK *)
+			IF fbGetCXPlatform.bError = FALSE THEN
+
+				(* Block sizes have been selected to use approx 5% resource in 1ms PLC task on CX1020 and CX2020. *)
+				(* Processor resource should be lower on CX1030 and CX2030/CX2040 due to higher processor speed. *)
+				(* FB will be adjusted for other platforms when they are available for testing *)
+
+				(* CX1020/CX1030 platform *)
+				IF FIND(fbGetCXPlatform.stDevIdent.strHardwareModel, '1020') > 0 OR FIND(fbGetCXPlatform.stDevIdent.strHardwareModel, '1030') > 0 THEN
+
+					(* NOVRAM block access size per 1ms of PLC cycle time:  READ = 32 bytes/ms, WRITE = 128 bytes/ms *)
+					nNVReadBlockSize := MIN(LREAL_TO_UDINT(fbTaskTime.fTaskTimeMicrosecs * 32.0 / 1000.0), 32);
+					nNVWriteBlockSize := MIN(LREAL_TO_UDINT(fbTaskTime.fTaskTimeMicrosecs * 128.0 / 1000.0), 128);
+
+					(* checksum block size:  512 bytes/ms PLC task time *)
+					nChecksumBlockSize := LREAL_TO_UDINT(fbTaskTime.fTaskTimeMicrosecs * 512.0 / 1000.0);
+
+				(* CX2020/CX2030/CX2040 platform *)
+				ELSIF FIND(fbGetCXPlatform.stDevIdent.strHardwareModel, '2020') > 0 OR FIND(fbGetCXPlatform.stDevIdent.strHardwareModel, '2030') > 0 OR FIND(fbGetCXPlatform.stDevIdent.strHardwareModel, '2040') > 0 THEN
+
+					(* NOVRAM block access size per 1ms of PLC cycle time:  READ = 64 bytes/ms, WRITE = 1024 bytes/ms *)
+					nNVReadBlockSize := MIN(LREAL_TO_UINT(fbTaskTime.fTaskTimeMicrosecs * 64.0 / 1000.0), 64);
+					nNVWriteBlockSize := MIN(LREAL_TO_UINT(fbTaskTime.fTaskTimeMicrosecs * 1024.0 / 1000.0), 1024);
+
+					(* checksum block size per 1ms of PLC cycle time:  1024 bytes/ms *)
+					nChecksumBlockSize := LREAL_TO_UINT(fbTaskTime.fTaskTimeMicrosecs * 1024.0 / 1000.0);
+
+				(* CX2020/CX2030/CX2040 platform *)
+				ELSIF FIND(fbGetCXPlatform.stDevIdent.strTargetType, 'PC') > 0  THEN
+
+					(* NOVRAM block access size per 1ms of PLC cycle time:  READ = 64 bytes/ms, WRITE = 1024 bytes/ms *)
+					nNVReadBlockSize := MIN(LREAL_TO_UINT(fbTaskTime.fTaskTimeMicrosecs * 64.0 / 1000.0), 64);
+					nNVWriteBlockSize := MIN(LREAL_TO_UINT(fbTaskTime.fTaskTimeMicrosecs * 1024.0 / 1000.0), 1024);
+
+					(* checksum block size per 1ms of PLC cycle time:  1024 bytes/ms *)
+					nChecksumBlockSize := LREAL_TO_UINT(fbTaskTime.fTaskTimeMicrosecs * 1024.0 / 1000.0);
+				END_IF
+
+				(* DeviceID is not specified *)
+				IF nDeviceID = 0 THEN
+
+					(* search CX for NOVRAM device *)
+					eState := E_CX_NVDATA_DEVICEID;
+
+				(* DeviceID is specifeid *)
+				ELSE
+
+					(* use specified DeviceID *)
+					eState := E_CX_NVDATA_DEVICEINFO;
+				END_IF
+
+			(* get CX platform type error *)
+			ELSE
+
+				bError := TRUE;
+				eErrorState := eState;
+
+				eState := E_CX_NVDATA_DONE;
+			END_IF
+
+			(* cloes off fbGetCXPlatform *)
+			fbGetCXPlatform(bExecute := FALSE);
+		END_IF
+
+
+	(* find NOVRAM device ID *)
+	E_CX_NVDATA_DEVICEID:
+
+		(* get DeviceID for DPRAM *)
+		fbGetDeviceID(
+			bExecute	:= TRUE,
+			eDeviceType	:= IODEVICETYPE_DPRAM
+		);
+
+		(* get DeviceID complete *)
+		IF fbGetDeviceID.bDone = TRUE THEN
+
+			(* get DeviceID completed OK and NOVRAM device found *)
+			IF fbGetDeviceID.bDone = TRUE AND fbGetDeviceID.bDeviceFound = TRUE THEN
+
+				(* DeviceID of NOVRAM device *)
+				nDeviceID := fbGetDeviceID.nDeviceID;
+
+				eState := E_CX_NVDATA_DEVICEINFO;
+
+			(* fbGetDeviceID error of NOVRAM device not found *)
+			ELSE
+
+				(* reset nDeviceID *)
+				nDeviceID := 0;
+
+				(* update error status *)
+				bError := TRUE;
+				eErrorState := eState;
+
+				eState := E_CX_NVDATA_DONE;
+			END_IF
+
+			(* close off fbGetDeviceID *)
+			fbGetDeviceID(bExecute := FALSE);
+		END_IF
+
+
+	(* read info of NOVRAM device *)
+	E_CX_NVDATA_DEVICEINFO:
+
+		(* get device info *)
+		fbGetDeviceInfo(
+			nDevId	:= nDeviceID,
+			bExecute:= TRUE,
+			tTimeOut:= T#1s
+		);
+
+		(* device info read complete *)
+		IF fbGetDeviceInfo.bBusy = FALSE THEN
+
+			(* NOVRAM info read successful *)
+			IF fbGetDeviceInfo.bError = FALSE THEN
+
+				(* set up config data for NV data block *)
+				sDeviceInfo := fbGetDeviceInfo.stInfo;
+
+				(* maximum number of NV bytes that can be handled *)
+				nMaxDataBytes := sDeviceInfo.iCardMemSize / 2;
+
+				(* specified number of data bytes is valid *)
+				IF nCtrlBytes <= nMaxDataBytes THEN
+
+					(* read primary data from NOVRAM *)
+					nActiveDataArea := 1;
+					pNVData := sDeviceInfo.pCardAddress;
+
+					(* initial byte offset and block size for 1st scan *)
+					nNVBlockOffset := 0;
+					nNVBlockBytes := MIN(nNVReadBlockSize, nCtrlBytes - nNVBlockOffset);
+
+					eState := E_CX_NVDATA_READ;
+
+				(* memory area too large *)
+				ELSE
+
+					bError := TRUE;
+					eErrorState := eState;
+	
+					eState := E_CX_NVDATA_DONE;
+				END_IF
+
+			(* unable to read NOVRAM info *)
+			ELSE
+
+				bError := TRUE;
+				eErrorState := eState;
+
+				eState := E_CX_NVDATA_DONE;
+			END_IF
+
+			(* close fbGetDeviceInfo *)
+			fbGetDeviceInfo(bExecute:= FALSE);
+		END_IF
+
+
+	(* read data to NOVRAM *)
+	E_CX_NVDATA_READ:
+
+		(* restore NOVRAM data into arrInputData in blocks *)
+		MEMMOVE(ADR(arrInputData[nNVBlockOffset]), F_PointerToByteADD(pNVData, nNVBlockOffset), nNVBlockBytes);
+
+		(* update memory offset values *)
+		nNVBlockOffset := nNVBlockOffset + nNVBlockBytes;
+		nNVBlockBytes := MIN(nNVReadBlockSize, nCtrlBytes - nNVBlockOffset);
+
+		(* all bytes transferred *)
+		IF nNVBlockOffset >= nCtrlBytes THEN
+
+			(* initialise checksum block vars *)
+			nIndexOffset := 0;
+			nIndexBlockBytes := MIN(nChecksumBlockSize, nCtrlBytes - 2 - nIndexOffset);
+			nCalcChecksum := 16#FFFF;
+
+			eState := E_CX_NVDATA_VALIDATE;
+		END_IF
+
+
+	(* verify checksum *)
+	E_CX_NVDATA_VALIDATE:
+
+		(* calculate checksum on block of data *)
+		nCalcChecksum := F_DATA_TO_CRC16_CCITT(ADR(arrInputData[nIndexOffset]), nIndexBlockBytes, nCalcChecksum);
+
+		(* update nIndexOffset and nIndexBlockBytes for next pass *)
+		nIndexOffset := nIndexOffset + nIndexBlockBytes;
+		nIndexBlockBytes := MIN(nChecksumBlockSize, nCtrlBytes - 2 - nIndexOffset);
+
+		(* checksum completed for all bytes *)
+		IF nIndexOffset >= nCtrlBytes - 2 THEN
+
+			(* pointer to restored checksum in arrInputData *)
+			pChecksum := ADR(arrInputData[nCtrlBytes - 2]);
+
+			(* calculated checksum = restored checksum *)
+			IF nCalcChecksum = pChecksum^ THEN
+
+				(* restore NOVRAM data into snapshot array *)
+				MEMMOVE(pCtrlData, ADR(arrInputData), nCtrlBytes);
+				bNVDataInitOK := TRUE;
+
+				eState := E_CX_NVDATA_COMPARE;
+
+			(* calculated checksum <> restored checksum *)
+			ELSE
+
+				(* primary data failed *)
+				IF nActiveDataArea = 1 THEN
+
+					(* move to secondary data *)
+					nActiveDataArea := 2;
+
+					(* calculate pointers needed to restore secondary data *)
+					pNVData := F_PointerToByteADD(pNVData, sDeviceInfo.iCardMemSize / 2);
+
+					(* initial byte offset and block size for 1st scan *)
+					nNVBlockOffset := 0;
+					nNVBlockBytes := MIN(nNVWriteBlockSize, nCtrlBytes - nNVBlockOffset);
+
+					eState := E_CX_NVDATA_READ;
+
+				(* secondary data failed *)
+				ELSE
+
+					(* checksum invalid for primary and secondary data, clear arrInput data *)
+					MEMSET(ADR(arrInputData), 16#00, SIZEOF(arrInputData));
+					bError := TRUE;
+					eErrorState := eState;
+					(* data will be written to NOVRAM on COMPARE cycle, unless all values are 0 when no update will occur *)
+
+					eState := E_CX_NVDATA_COMPARE;
+				END_IF
+			END_IF
+		END_IF
+
+
+	(* snapshot data *)
+	E_CX_NVDATA_COMPARE:
+
+		(* FB is enabled *)
+		IF bEnable = TRUE THEN
+
+			(* specified number of data bytes is valid *)
+			IF nCtrlBytes <= nMaxDataBytes THEN
+
+				(* export data requested *)
+				IF bExportReq = TRUE THEN
+
+					(* cancel export flag *)
+					bExportReq := FALSE;
+
+					eState := E_CX_NVDATA_EXPORT;
+
+				(* import data requested *)
+				ELSIF bImportReq = TRUE THEN
+
+					(* cancel import flag *)
+					bImportReq := FALSE;
+
+					eState := E_CX_NVDATA_IMPORT;
+
+				(* check for change of data *)
+				ELSE
+
+					(* snapshot data into arrOutputData *)
+					MEMMOVE(ADR(arrOutputData), pCtrlData, nCtrlBytes - 2);
+
+					(* snapshot data block does not match terminal data block *)
+					IF MEMCMP(ADR(arrOutputData), ADR(arrInputData), nCtrlBytes - 2) <> 0 THEN
+
+						(* initialise checksum block vars *)
+						nIndexOffset := 0;
+						nIndexBlockBytes := MIN(nChecksumBlockSize, nCtrlBytes - 2 - nIndexOffset);
+						nCalcChecksum := 16#FFFF;
+
+						eState := E_CX_NVDATA_CHECKSUM;
+					END_IF
+				END_IF
+
+			(* memory area too large *)
+			ELSE
+
+				bError := TRUE;
+				eErrorState := eState;
+
+				eState := E_CX_NVDATA_DONE;
+			END_IF
+
+		(* FB is disabled *)
+		ELSE
+
+			eState := E_CX_NVDATA_DONE;
+		END_IF
+
+
+	(* calculate checksum for output data *)
+	E_CX_NVDATA_CHECKSUM:
+
+		(* calculate checksum on block of data *)
+		nCalcChecksum := F_DATA_TO_CRC16_CCITT(ADR(arrOutputData[nIndexOffset]), nIndexBlockBytes, nCalcChecksum);
+
+		(* update nIndexOffset and nIndexBlockBytes for next pass *)
+		nIndexOffset := nIndexOffset + nIndexBlockBytes;
+		nIndexBlockBytes := MIN(nChecksumBlockSize, nCtrlBytes - 2 - nIndexOffset);
+
+		(* checksum completed for all bytes *)
+		IF nIndexOffset >= nCtrlBytes - 2 THEN
+
+			(* pointer to restored checksum in arrInputData *)
+			pChecksum := ADR(arrOutputData[nCtrlBytes - 2]);
+			pChecksum^ := nCalcChecksum;
+
+			(* write primary data from NOVRAM *)
+			nActiveDataArea := 1;
+			pNVData := sDeviceInfo.pCardAddress;
+
+			(* initial byte offset and block size for 1st scan *)
+			nNVBlockOffset := 0;
+			nNVBlockBytes := MIN(nNVWriteBlockSize, nCtrlBytes - nNVBlockOffset);
+
+			eState := E_CX_NVDATA_WRITE;
+		END_IF
+
+
+	(* write data *)
+	E_CX_NVDATA_WRITE:
+
+		(* move arrOutputData to NOVRAM *)
+		MEMMOVE(F_PointerToByteADD(pNVData, nNVBlockOffset), ADR(arrOutputData[nNVBlockOffset]), nNVBlockBytes);
+
+		(* update memory offset values *)
+		nNVBlockOffset := nNVBlockOffset + nNVBlockBytes;
+		nNVBlockBytes := MIN(nNVWriteBlockSize, nCtrlBytes - nNVBlockOffset);
+
+		(* all bytes transferred *)
+		IF nNVBlockOffset >= nCtrlBytes THEN
+
+			(* primary data written *)
+			IF nActiveDataArea = 1 THEN
+
+				(* write primary data from NOVRAM *)
+				nActiveDataArea := 2;
+				pNVData := F_PointerToByteADD(sDeviceInfo.pCardAddress, sDeviceInfo.iCardMemSize / 2);
+
+				(* initial byte offset and block size for 1st scan *)
+				nNVBlockOffset := 0;
+				nNVBlockBytes := MIN(nNVWriteBlockSize, nCtrlBytes - nNVBlockOffset);
+
+			(* secondary data complete *)
+			ELSE
+
+				(* update outputs *)
+				bNVDataInitOK := TRUE;
+				bError := FALSE;
+				nActiveDataArea := 0;
+				nUpdates := nUpdates + 1;
+
+				(* copy arrOutputData to arrInputData *)
+				MEMMOVE(ADR(arrInputData), ADR(arrOutputData), nCtrlBytes);
+
+				(* update checksum in pCtrlData area *)
+				pChecksum := F_PointerToWordADD(pCtrlData, nCtrlBytes - 2);
+				pChecksum^ := nCalcChecksum;
+
+				eState := E_CX_NVDATA_COMPARE;
+			END_IF
+		END_IF
+
+
+	(* export data to XML file *)
+	E_CX_NVDATA_EXPORT:
+
+		(* export data from arrInputData to XML file *)
+		fbTransferData(
+			bExecute		:= TRUE,
+			bImport			:= FALSE,
+			nMaxBlockSize	:= nChecksumBlockSize / 2,
+			pCtrlData		:= ADR(arrInputData),
+			nCtrlBytes		:= nCtrlBytes,
+			strPathFile		:= strTransferPathFile
+		);
+
+		(* export data complete *)
+		IF fbTransferData.bDone = TRUE THEN
+
+			eState := E_CX_NVDATA_COMPARE;
+
+			(* close off fbTransferData *)
+			fbTransferData(bExecute := FALSE);
+		END_IF
+
+
+	(* import data to XML file *)
+	E_CX_NVDATA_IMPORT:
+
+		(* import data from XML file to arrOutputData *)
+		fbTransferData(
+			bExecute		:= TRUE,
+			bImport			:= TRUE,
+			nMaxBlockSize	:= nChecksumBlockSize / 2,
+			pCtrlData		:= ADR(arrOutputData),
+			nCtrlBytes		:= SIZEOF(arrOutputData),
+			strPathFile		:= strTransferPathFile
+		);
+
+		(* import data complete *)
+		IF fbTransferData.bDone = TRUE THEN
+
+			(* import data completed OK *)
+			IF fbTransferData.bError = FALSE THEN
+
+				(* move data loaded to pCtrlData *)
+				MEMMOVE(pCtrlData, ADR(arrOutputData), fbTransferData.nTotalDataBytes);
+
+				eState := E_CX_NVDATA_COMPARE;
+
+			(* import data error *)
+			ELSE
+
+				eState := E_CX_NVDATA_COMPARE;
+			END_IF
+
+			(* close off fbTransferData *)
+			fbTransferData(bExecute := FALSE);
+		END_IF
+
+
+	(* access complete *)
+	E_CX_NVDATA_DONE:
+
+		;
+
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

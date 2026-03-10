@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_GetSign" Id="{0e64ecf9-9008-4df4-9153-74536ab93cc4}" SpecialFunc="None">
+    <Declaration><![CDATA[(* F_GetSign indicates the sign of the input LREAL value, set to 0 is input value is 0 *)
+(* 1 = +ive, -1 = -ive *)
+FUNCTION F_GetSign : INT
+VAR_INPUT
+	fValue		: LREAL;
+END_VAR
+VAR
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		No change
+
+-------------------------------------------------------------------------------------------------
+05/02/10	1.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* input value is positive *)
+IF fValue > 0.0 THEN
+
+	F_GetSign := 1;
+
+(* input value is negative *)
+ELSIF fValue < 0.0 THEN
+
+	F_GetSign := -1;
+
+(* input value is zero *)
+ELSE
+
+	F_GetSign := 0;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="F_GetSign">
+      <LineId Id="19" Count="14" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

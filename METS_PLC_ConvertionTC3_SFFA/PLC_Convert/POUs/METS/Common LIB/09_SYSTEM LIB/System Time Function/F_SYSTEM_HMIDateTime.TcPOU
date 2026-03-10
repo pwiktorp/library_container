@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_SYSTEM_HMIDateTime" Id="{ab5c7fd4-488c-4dc2-a5f2-87f1a1f345f1}" SpecialFunc="None">
+    <Declaration><![CDATA[(* generate date/time as hh:mm:ss DD/MM/YYYY from TIMESTRUCT value *)
+FUNCTION F_SYSTEM_HMIDateTime : STRING(19)
+VAR_INPUT
+	sDateTime		: TIMESTRUCT;	(* system date/time structure *)
+END_VAR
+VAR
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+01/08/2014	2.00.00	PB		Updated to use F_StringAddPrefix
+
+-------------------------------------------------------------------------------------------------
+03/08/2012	1.39.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[F_SYSTEM_HMIDateTime := F_CONCAT6(	F_StringAddPrefix(WORD_TO_STRING(sDateTime.wHour), 2, '0'), ':',
+									F_StringAddPrefix(WORD_TO_STRING(sDateTime.wMinute), 2, '0'), ':',
+									F_StringAddPrefix(WORD_TO_STRING(sDateTime.wSecond), 2, '0'), ' ');
+
+F_SYSTEM_HMIDateTime := F_CONCAT6(	F_SYSTEM_HMIDateTime,
+									F_StringAddPrefix(WORD_TO_STRING(sDateTime.wDay), 2, '0'), '/',
+									F_StringAddPrefix(WORD_TO_STRING(sDateTime.wMonth), 2, '0'), '/',
+									F_StringAddPrefix(WORD_TO_STRING(sDateTime.wYear), 4, '0'));]]></ST>
+    </Implementation>
+    <LineIds Name="F_SYSTEM_HMIDateTime">
+      <LineId Id="19" Count="7" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

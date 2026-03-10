@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_SYSTEM_TimeSuperFine" Id="{9df367df-6da9-4071-bfac-c89a5864bb27}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_SYSTEM_TimeSuperFine : STRING
+VAR_INPUT
+	sTime		: TIMESTRUCT;
+END_VAR
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[F_SYSTEM_TimeSuperFine := F_CONCAT4(F_ZeroPadString(WORD_TO_STRING(sTime.wHour), 2),
+								F_ZeroPadString(WORD_TO_STRING(sTime.wMinute), 2),
+								F_ZeroPadString(WORD_TO_STRING(sTime.wSecond), 2),
+								F_ZeroPadString(WORD_TO_STRING(sTime.wMilliseconds), 3));]]></ST>
+    </Implementation>
+    <LineIds Name="F_SYSTEM_TimeSuperFine">
+      <LineId Id="6" Count="3" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

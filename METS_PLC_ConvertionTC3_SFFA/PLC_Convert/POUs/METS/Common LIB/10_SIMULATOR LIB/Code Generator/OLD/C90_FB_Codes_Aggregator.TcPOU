@@ -1,0 +1,101 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="C90_FB_Codes_Aggregator" Id="{2a8751af-3e4d-483f-be0e-c39d85c031fe}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK C90_FB_Codes_Aggregator
+VAR_INPUT
+	bStart:BOOL;
+	bReset:BOOL;
+END_VAR
+VAR_OUTPUT
+	bDone:BOOL;
+	sNewCHMData: ST_CHM_Data;
+	sState:STRING(22);
+END_VAR
+VAR
+	fbCaseCodeGenerator:C90_FB_CaseCodeGenerator;
+	fbPackCodeGenerator:C90_FB_PackCodeGenerator;
+
+	nPackCodeLenght:INT:=12;
+
+	sOuterCode:STRING(50);
+	sPackCode:STRING(255);
+
+	nPackIndex:INT;
+	nOuterIndex:INT;
+END_VAR
+
+
+
+
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbCaseCodeGenerator(bStart:=FALSE);
+fbPackCodeGenerator(bStart:=FALSE);
+
+IF NOT bStart THEN
+	nOuterIndex:=1;
+	nPackIndex:=1;
+	sState:='IDLE';
+
+ELSIF nOuterIndex <=32 THEN
+
+	IF bReset THEN
+		sOuterCode:='';
+	ELSE
+		fbCaseCodeGenerator	(
+								bStart:=TRUE,
+								sOuterCode=>sOuterCode
+							);
+	END_IF
+
+
+	IF LEN(sNewCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].identity.ID)<=50 THEN
+		sNewCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].identity.ID:=sOuterCode;
+		sState:='OK';
+	ELSE
+		sState:='OUTER CODE OVER LENGHT';
+	END_IF
+
+	IF nPackIndex <=12 THEN
+
+		IF bReset THEN
+			sPackCode:='';
+		ELSE
+			fbPackCodeGenerator	(
+									bStart:=TRUE,
+									nPackCodeLenght:=nPackCodeLenght,
+									sPackCode=>sPackCode
+								);
+		END_IF
+
+		IF LEN(sNewCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].identity.ID)<=12 THEN
+			sNewCHMData.GenericHierarchy.CaseItem.Content.arrOuterItem[nOuterIndex].Content.arrPackItem[nPackIndex].identity.ID:=sPackCode;
+			nPackIndex:=nPackIndex+1;
+			sState:='OK';
+		ELSE
+			sState:='PACK CODE OVER LENGHT';
+		END_IF
+
+	END_IF
+
+	IF nPackIndex>12 THEN
+		nOuterIndex:=nOuterIndex+1;
+		nPackIndex:=1;
+	END_IF
+
+END_IF
+
+IF nOuterIndex>=32 THEN
+	bDone:=TRUE;
+ELSE
+	bDone:=FALSE;
+END_IF
+
+]]></ST>
+    </Implementation>
+    <LineIds Name="C90_FB_Codes_Aggregator">
+      <LineId Id="28" Count="62" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,58 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_StringAddSuffix" Id="{a344ea66-40ad-434c-8815-013f63f6e67e}" SpecialFunc="None">
+    <Declaration><![CDATA[(* add specified char(s) to the end of a string to make up to specified length *)
+FUNCTION F_StringAddSuffix : T_MaxString
+VAR_INPUT
+	sString		: T_MaxString;	(* initial string *)
+	nTargetLen 		: UINT;			(* string length required *)
+	sChar			: STRING(1);	(* char to be appended to string *)
+END_VAR
+VAR
+	nStringLen		: UINT;
+	nCharsReq		: UINT;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* length of input string *)
+nStringLen := TO_UINT(LEN(sString));
+
+(* Chekck target string is longer than processing string *)
+IF nTargetLen >= nStringLen THEN
+	
+	(* total suffix chars required *)
+	nCharsReq := MIN(nTargetLen, SIZEOF(F_StringAddSuffix) - 1) - nStringLen;
+	
+	(* string needs additional chars *)
+	IF nCharsReq > 0 THEN
+	
+		(* append strString to output string *)
+		MEMMOVE(ADR(F_StringAddSuffix), ADR(sString), nStringLen);
+	
+		(* set suffix chars to specified character *)
+		MEMSET(ADR(F_StringAddSuffix) + nStringLen, F_ToASC(sChar), nCharsReq);
+	
+		(* reset last char to 16#00 to terminate the string *)
+		MEMSET(ADR(F_StringAddSuffix) + nStringLen + nCharsReq, 16#00, 1);
+	
+	(* no additional chars required *)
+	ELSE
+	
+		(* copy strString to output *)
+		F_StringAddSuffix := sString;
+	END_IF
+ELSE
+	(* copy shrinced strString to output *)
+	F_StringAddSuffix := LEFT(sString, TO_INT(nTargetLen));
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

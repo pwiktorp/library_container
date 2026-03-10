@@ -1,0 +1,74 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_IO2_ForceOutputs" Id="{3e7ffa3f-4f1c-4f98-a6e6-c76835e4c8c9}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_IO2_ForceOutputs
+VAR_INPUT
+	bEnable						: BOOL;
+	sLabelName01					: STRING;
+	sLabelName02					: STRING;
+	sLabelName03					: STRING;
+	sLabelName04					: STRING;
+	sLabelName05					: STRING;
+	sLabelName06					: STRING;
+END_VAR
+VAR_IN_OUT
+	bForceOutput01				: BOOL;
+	bForceOutput02				: BOOL;
+	bForceOutput03				: BOOL;
+	bForceOutput04				: BOOL;
+	bForceOutput05				: BOOL;
+	bForceOutput06				: BOOL;
+END_VAR
+VAR_OUTPUT
+	aSetForceOutput				: ARRAY[1..6] OF ST_IO2_Diagnostic ;
+	bOutputForceActive			: BOOL;
+END_VAR
+
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[aSetForceOutput[1].sVarName		:= 	sLabelName01;
+aSetForceOutput[2].sVarName		:= 	sLabelName02;
+aSetForceOutput[3].sVarName		:= 	sLabelName03;
+aSetForceOutput[4].sVarName		:= 	sLabelName04;
+aSetForceOutput[5].sVarName		:= 	sLabelName05;
+aSetForceOutput[6].sVarName		:= 	sLabelName06;
+
+IF bEnable THEN
+	aSetForceOutput[1].bState		:=	bForceOutput01;
+	aSetForceOutput[1].sVarName		:= 	sLabelName01;
+	aSetForceOutput[2].bState		:=	bForceOutput02;
+	aSetForceOutput[2].sVarName		:= 	sLabelName02;
+	aSetForceOutput[3].bState		:=	bForceOutput03;
+	aSetForceOutput[3].sVarName		:= 	sLabelName03;
+	aSetForceOutput[4].bState		:=	bForceOutput04;
+	aSetForceOutput[4].sVarName		:= 	sLabelName04;
+	aSetForceOutput[5].bState		:=	bForceOutput05;
+	aSetForceOutput[5].sVarName		:= 	sLabelName05;
+	aSetForceOutput[6].bState		:=	bForceOutput06;
+	aSetForceOutput[6].sVarName		:= 	sLabelName06;
+ELSE
+	bForceOutput01				:= 	FALSE;
+	bForceOutput02				:= 	FALSE;
+	bForceOutput03				:= 	FALSE;
+	bForceOutput04				:= 	FALSE;
+	bForceOutput05				:= 	FALSE;
+	bForceOutput06				:= 	FALSE;
+
+	aSetForceOutput[1].bState		:=	bForceOutput01;
+	aSetForceOutput[2].bState		:=	bForceOutput02;
+	aSetForceOutput[3].bState		:=	bForceOutput03;
+	aSetForceOutput[4].bState		:=	bForceOutput04;
+	aSetForceOutput[5].bState		:=	bForceOutput05;
+	aSetForceOutput[6].bState		:=	bForceOutput06;
+END_IF
+
+bOutputForceActive	:= bEnable;
+
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_IO2_ForceOutputs">
+      <LineId Id="25" Count="38" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

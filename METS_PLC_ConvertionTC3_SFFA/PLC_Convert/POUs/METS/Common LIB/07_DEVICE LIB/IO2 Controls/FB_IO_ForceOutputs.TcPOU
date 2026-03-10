@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_IO_ForceOutputs" Id="{2e1f7ce1-d932-42f6-96b2-7d6cce488568}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_IO_ForceOutputs
+VAR_INPUT
+	bEnable							: BOOL;
+END_VAR
+VAR_IN_OUT
+	bForceEUCAMachineRun_STCP		: BOOL;
+	bForceCaseValidationOK_STCP		: BOOL;
+	bForceOuterValidationOK_STCP	: BOOL;
+	bForceLabellerInhibit_STL		: BOOL;
+	bForceTPDMachineRun				: BOOL;
+END_VAR
+VAR_OUTPUT
+	bSetEUCAMachineRun_STCP			: BOOL;	(*to set qb82KF1_1_EUCAMachineRun*)
+	bSetCaseValidationOK_STCP		: BOOL;	(*to set qb82KF1_5_CaseValidationOK*)
+	bSetOuterValidationOK_STCP		: BOOL;	(*to set qb82KF1_2_OuterValidationOK*)
+	bSetLabellerInhibit_STL			: BOOL;	(*to set qb82KF1_3_LabellerInhibit_STL*)
+	bSetTPDMachineRun				: BOOL;	(*to set qb482KF1_4_TPDMachineRun*)
+END_VAR
+VAR
+END_VAR
+
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF bEnable THEN
+	bSetEUCAMachineRun_STCP			:=	bForceEUCAMachineRun_STCP;
+	bSetCaseValidationOK_STCP		:=	bForceCaseValidationOK_STCP;
+	bSetOuterValidationOK_STCP		:=	bForceOuterValidationOK_STCP;
+	bSetLabellerInhibit_STL			:=	bForceLabellerInhibit_STL;
+	bSetTPDMachineRun				:=	bForceTPDMachineRun;
+ELSE
+	bForceEUCAMachineRun_STCP		:=	FALSE;
+	bForceCaseValidationOK_STCP		:=	FALSE;
+	bForceOuterValidationOK_STCP	:=	FALSE;
+	bForceLabellerInhibit_STL		:=	FALSE;
+	bForceTPDMachineRun				:=	FALSE;
+
+	bSetEUCAMachineRun_STCP			:=	FALSE;
+	bSetCaseValidationOK_STCP		:=	FALSE;
+	bSetOuterValidationOK_STCP		:=	FALSE;
+	bSetLabellerInhibit_STL			:=	FALSE;
+	bSetTPDMachineRun				:=	FALSE;
+END_IF
+
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

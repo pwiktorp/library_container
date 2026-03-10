@@ -1,0 +1,368 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_OUTER_RepairOCVContent" Id="{52d86f16-ef27-4b97-917a-809dc97d43e7}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_OUTER_RepairOCVContent
+VAR_INPUT
+	bExecute					: BOOL;			(* scan for completed Outer *)
+	ePackAggregationMode	: E_SYSTEM_PackAggregationMode ;
+	bResetErrorStats			: BOOL;
+	strLocalOCVPath			: STRING(255);		(* OCV folder path *)
+	sProductInstruction			: ST_PCM_Status;
+	nPackPos1				: INT 	:=1;
+	nPackPos2				: INT	:=2;
+	bUseInterimCodeForValidation	: BOOL;
+	stDuplicatedItem			: ST_RejectItems;(*stPackRejectReasons.stPackCodesDuplicated*)
+	bEnableSUPICheck			: BOOL;
+	nSUPI_Identyfication		: DINT;
+	tTimeout					: TIME := t#1s;
+END_VAR
+VAR_IN_OUT
+	strNewPackCodeRefeed		:T_PACK_Barcode;
+	arrErrorOuters				: ARRAY[1..cMAX_OUTER_STATUS_QUEUE] OF ST_OUTER_Status;
+	nErrorIndex				: INT;
+	arrOCVPackStatus			: ARRAY[1..cMAX_OUTER_STATUS_QUEUE] OF ST_OUTER_Status;
+	stOCVDataDB					: ST_DB_OCVDataCtrl;
+	stCodeInfo_Pack			: ST_CodeInfo;
+	stCodeInfo_Intermediate		: ST_CodeInfo;
+END_VAR
+VAR_OUTPUT
+	bDone					: BOOL;			(* TRUE = validation complete *)
+	bBusy					: BOOL;			(* TRUE = validation in progress *)
+	bError					: BOOL;			(* TRUE = validation error *)
+	nErrorID					: UDINT;			(* error ID *)
+	strOCVFile1				: T_OCV_Filename;	(* OCV file name *)
+	strOCVFile2				: T_OCV_Filename;	(* OCV file name *)
+	nOutersStoredInOCV		: UINT;
+END_VAR
+VAR
+	fbExecute					: R_TRIG;
+	tonTimeOut				: TON;
+	eState					: E_OUTER_State;
+	fbDuplicatesPackCodesDB		: FB_PACK_DuplicatesPackCodesDB;
+	aOCVFileCodeName			: ARRAY[1..2] OF T_MaxString;
+	fbWriteOCVFile			: FB_OCV_WriteFile;
+	fbValidatePack				: FB_CODE_ValidateExplicitCode;
+
+	sErrorOuterData			: ST_OUTER_Status;	(* Outer status array *)
+	sEmptyOuterData			: ST_OUTER_Status;	(* Outer status array *)
+
+
+	bAggregationCodes1Valid			: BOOL;
+	bAggregationCodes2Valid			: BOOL;
+
+	nPackIndex				: INT;
+	nSourceIndex				: INT;
+
+	nOuterIndex				: INT;
+	nMaxOuterIndex 			: INT;
+	bPackDataRemovedFromST	: BOOL;
+
+	nStatusError				: UDINT;
+	nValidationError			: UDINT;
+	nEmptySource				: UDINT;
+
+	nWriteOCVerror			: UDINT;
+	strMemoPackCodeRefeed	:T_PACK_Barcode;
+
+	(*Diagnostic counters*)
+	aDiagCounter : ARRAY[0..5] OF INT;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* monitor rising edge of bExecute *)
+fbExecute(CLK := bExecute);
+
+(* monitor Busy timeout *)
+tonTimeOut(IN:=bBusy, PT:=tTimeout, Q=>);
+
+IF tonTimeOut.Q THEN
+	bError := TRUE;
+	nErrorID := 10;
+	strNewPackCodeRefeed := '';
+	eState := E_OUTER_IDLE;
+END_IF
+
+IF bResetErrorStats THEN
+
+	(* clear error statistic counters *)
+	nStatusError := 0;
+	nValidationError := 0;
+	nEmptySource := 0;
+	nOutersStoredInOCV := 0;
+	nWriteOCVerror := 0;
+	strMemoPackCodeRefeed := '';
+END_IF
+
+(* rising edge of bExecute *)
+CASE eState OF
+
+	(* idle *)
+	E_OUTER_IDLE:
+
+		(* scan for completed Outer when OAC files are required *)
+		IF fbExecute.Q = TRUE THEN
+
+			(* update outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+
+			aDiagCounter[0] := aDiagCounter[0] +1;
+
+			eState := E_OUTER_SCAN;
+
+		(* no action required *)
+		ELSIF bExecute = FALSE THEN
+
+			(* reset outputs *)
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			(*bAggregationCodes1Valid := FALSE;
+			bAggregationCodes2Valid := FALSE;
+			fbWriteOCVFile(bExecute := FALSE);
+			nErrorID := 0;*)
+
+		END_IF
+
+	(* scan for completed Outer *)
+	E_OUTER_SCAN:
+
+		bBusy := TRUE;
+		nSourceIndex := 0;
+		sErrorOuterData := arrErrorOuters[nErrorIndex];
+
+		IF sProductInstruction.nPacksPerOuter - sErrorOuterData.stOACData.NumberOfLinkedPacks = 1  AND strNewPackCodeRefeed <> '' THEN
+
+			FOR nPackIndex := 1 TO sProductInstruction.nPacksPerOuter BY 1 DO
+
+				IF  sErrorOuterData.aOACPackStatus[nPackIndex] = 0 OR sErrorOuterData.aOACPackStatus[nPackIndex] = 1  THEN
+
+						nSourceIndex := nPackIndex;
+					EXIT;
+
+				END_IF
+
+			END_FOR
+
+		END_IF
+
+
+		IF nSourceIndex > 0 THEN
+
+			aDiagCounter[1] := aDiagCounter[1] +1;
+
+			MEMSET(ADR(aOCVFileCodeName), 16#00, SIZEOF(aOCVFileCodeName));
+
+			fbValidatePack(	sFullCode := strNewPackCodeRefeed,
+							stCodeInfo := stMachineConfig.stCodeInfo_Pack,
+							stProductInstruction := sProductInstruction);
+
+
+			IF fbValidatePack.bValidationOK THEN
+
+				sErrorOuterData.stOACData.PackCode[nSourceIndex]:= strNewPackCodeRefeed;
+				sErrorOuterData.stOACData.PackCodeStatus[nSourceIndex].6 := TRUE;
+
+				aDiagCounter[2] := aDiagCounter[2] +1;
+
+				(*fbChekcDupPackCode(nNumberPackInOuters := sProductInstruction.nPacksPerOuter,
+							sOuterStatus := sErrorOuterData,
+							stDuplicatedItem := stDuplicatedItem,
+							bDuplicateFound => 	);*)
+
+				fbDuplicatesPackCodesDB(
+					stDuplicatedItem := stDuplicatedItem,
+					bExtendedDupCheck	:=	FALSE,
+					stOuterStatus := sErrorOuterData,
+					stLastOuterStatus := sEmptyOuterData,
+					bDuplicateFound =>
+					);
+
+				(*IF bEnableSUPICheck AND  nSUPI_Identyfication <> 0  THEN
+					sErrorOuterData.aPackSUPIResult[nSourceIndex]	:=  F_CogCheck(sErrorOuterData.stOACData.PackCode[nSourceIndex]);
+					IF  sErrorOuterData.aPackSUPIResult[nSourceIndex] <>  nSUPI_Identyfication   THEN
+						sErrorOuterData.nStatus.26 := TRUE;
+						sErrorOuterData.aOACPackStatus[nSourceIndex]:= 2;
+					END_IF
+				END_IF*)
+
+				IF NOT sErrorOuterData.nStatus.23 (*AND NOT sErrorOuterData.nStatus.26*) THEN
+
+
+					sErrorOuterData.aOACPackStatus[nSourceIndex]:= 5;
+					sErrorOuterData.stOACData.PackRejectCode[nSourceIndex]:= 'OK';
+					sErrorOuterData.stOACData.PackRejectID[nSourceIndex]	:= 0;
+
+					IF nPackPos1= nSourceIndex AND sErrorOuterData.stOACData.AggregationCodes[1] = '' THEN sErrorOuterData.stOACData.AggregationCodes[1] := strNewPackCodeRefeed; END_IF
+					IF nPackPos2= nSourceIndex AND sErrorOuterData.stOACData.AggregationCodes[2] = '' THEN sErrorOuterData.stOACData.AggregationCodes[2] := strNewPackCodeRefeed; END_IF
+
+					sErrorOuterData.aPackCodes[nSourceIndex].sBuffer[1].strCode := sErrorOuterData.stOACData.PackCode[nSourceIndex];
+					sErrorOuterData.aPackCodes[nSourceIndex].sBuffer[1].nStatus := sErrorOuterData.aOACPackStatus[nSourceIndex];
+					sErrorOuterData.aPackCodes[nSourceIndex].sBuffer[1].nStringSize := LEN(sErrorOuterData.stOACData.PackCode[nSourceIndex]);
+					sErrorOuterData.aPackCodes[nSourceIndex].sBuffer[2].strCode := sErrorOuterData.stOACData.PackCode[nSourceIndex];
+					sErrorOuterData.aPackCodes[nSourceIndex].sBuffer[2].nStatus := sErrorOuterData.aOACPackStatus[nSourceIndex];
+					sErrorOuterData.aPackCodes[nSourceIndex].sBuffer[2].nStringSize := LEN(sErrorOuterData.stOACData.PackCode[nSourceIndex]);
+
+					sErrorOuterData.stOACData.NumberOfLinkedPacks := sProductInstruction.nPacksPerOuter;
+
+					aDiagCounter[3] := aDiagCounter[3] +1;
+
+					eState := E_OUTER_CHECKPACKS;
+				ELSE
+					sErrorOuterData.stOACData.PackCode[nSourceIndex]:= 'STATUS REJECTED';
+
+					nStatusError := nStatusError+1;
+					strNewPackCodeRefeed := '';
+					bError := TRUE;
+					nErrorID := 1;
+
+					eState := E_OUTER_IDLE;
+				END_IF
+			ELSE
+				sErrorOuterData.stOACData.PackCode[nSourceIndex]:= 'CODE INVALIDE';
+				sErrorOuterData.aOACPackStatus[nSourceIndex]:= 2;
+
+				nValidationError := nValidationError+1;
+				strNewPackCodeRefeed := '';
+
+				bError := TRUE;
+				nErrorID := 2;
+
+
+				eState := E_OUTER_IDLE;
+			END_IF
+
+		ELSE
+			nEmptySource := nEmptySource+1;
+			strNewPackCodeRefeed := '';
+
+			bError := TRUE;
+			nErrorID := 3;
+
+			eState := E_OUTER_IDLE;
+		END_IF
+
+	E_OUTER_CHECKPACKS:
+
+		nMaxOuterIndex := UDINT_TO_INT(SIZEOF(arrOCVPackStatus) / SIZEOF(arrOCVPackStatus[1]));
+		bPackDataRemovedFromST := FALSE;
+
+		FOR nPackIndex := 1 TO sProductInstruction.nPacksPerOuter BY 1 DO
+			IF nPackIndex  <> nSourceIndex  THEN
+				FOR nOuterIndex := 1 TO nMaxOuterIndex BY 1 DO
+
+					IF arrOCVPackStatus[nOuterIndex].stOACData.PackCode[nPackIndex] = sErrorOuterData.stOACData.PackCode[nPackIndex] THEN
+
+						MEMMOVE(ADR(arrOCVPackStatus[nOuterIndex]), ADR(arrOCVPackStatus[nOuterIndex + 1]), SIZEOF(arrOCVPackStatus[1]) * (nMaxOuterIndex - nOuterIndex) );
+						MEMSET(ADR(arrOCVPackStatus[nMaxOuterIndex]), 0, SIZEOF(arrOCVPackStatus[1]));
+						bPackDataRemovedFromST := TRUE;
+						EXIT;
+					END_IF
+
+				END_FOR
+			END_IF
+			IF bPackDataRemovedFromST THEN
+				EXIT;
+			END_IF
+		END_FOR
+
+		eState := E_OUTER_WRITEDATA;
+
+
+
+
+
+
+
+
+
+
+
+
+	(* write OCVC file *)
+	E_OUTER_WRITEDATA:
+
+		aDiagCounter[4] := aDiagCounter[4] +1;
+
+		aOCVFileCodeName[1]	:=	F_CodeToHex(F_CODE_GetItem(sErrorOuterData.stOACData.AggregationCodes[1] , eCodeAIType.SerialCode,
+																				SEL(bUseInterimCodeForValidation, stCodeInfo_Pack, stCodeInfo_Intermediate)));
+		aOCVFileCodeName[2]	:=	F_CodeToHex(F_CODE_GetItem(sErrorOuterData.stOACData.AggregationCodes[2] , eCodeAIType.SerialCode,   stCodeInfo_Pack)); (*no reason to have 2 diffrent intermediate codes*)
+
+		IF F_InvalidateASCIIChar(aOCVFileCodeName[1]) =	0 	THEN bAggregationCodes1Valid := nPackPos1 <> 0 OR  bUseInterimCodeForValidation;  	END_IF
+		IF F_InvalidateASCIIChar(aOCVFileCodeName[2]) =	0 	THEN bAggregationCodes2Valid := nPackPos2 <> 0; 		END_IF
+
+		(* write OCV file *)
+		fbWriteOCVFile(
+			bExecute					:= TRUE,
+			sTargetPath				:= strLocalOCVPath,
+			ePackAggregationMode	:= ePackAggregationMode,
+			nPacksPerOuter			:= sProductInstruction.nPacksPerOuter,
+			aOCVFileCodeName		:= aOCVFileCodeName,  (*strAggregationCodes is a table*)
+			bSkipWriteFile1			:= NOT bAggregationCodes1Valid,
+			bSkipWriteFile2			:= NOT bAggregationCodes2Valid,
+			stOCVPackStatus			:= sErrorOuterData
+			);
+
+		(* write OCV file complete *)
+		IF fbWriteOCVFile.bDone = TRUE THEN
+
+			(* write OCV file completed OK *)
+			IF fbWriteOCVFile.bError = FALSE THEN
+
+				arrErrorOuters[nErrorIndex].aOACPackStatus[nSourceIndex]:= 6;
+
+				arrErrorOuters[nErrorIndex].stOACData.PackCode[nSourceIndex]:= strNewPackCodeRefeed;
+				arrErrorOuters[nErrorIndex].stOACData.PackRejectCode[nSourceIndex]:= 'OCV Restored';
+				arrErrorOuters[nErrorIndex].stOACData.PackRejectID[nSourceIndex]:= 0;
+
+				arrErrorOuters[nErrorIndex].stOACData.NumberOfLinkedPacks := sProductInstruction.nPacksPerOuter;
+				arrErrorOuters[nErrorIndex].stOACData.OuterRejectCode := CONCAT(arrErrorOuters[nErrorIndex].stOACData.OuterRejectCode, ' *OCV Restored*');
+				arrErrorOuters[nErrorIndex].stOACData.OuterRejectID := 0;
+
+				(* count OCV files written *)
+				nOutersStoredInOCV := nOutersStoredInOCV + 1;
+				aDiagCounter[5] := aDiagCounter[5] +1;
+
+				strOCVFile1 := fbWriteOCVFile.sOCVFile1;
+				strOCVFile2 := fbWriteOCVFile.sOCVFile2;
+				eState := E_OUTER_DONE;
+
+			ELSE
+				(* update sOuterStatus - OCV file write error  - general error for OCV *)
+				nWriteOCVerror := nWriteOCVerror +1;
+				strNewPackCodeRefeed := '';
+
+				bError := TRUE;
+				nErrorID := 4;
+
+				eState := E_OUTER_IDLE;
+			END_IF
+
+			(* close off fbWriteOCVFile*)
+			fbWriteOCVFile(bExecute := FALSE);
+		END_IF
+
+	(* OCV file complete *)
+	E_OUTER_DONE:
+
+		strMemoPackCodeRefeed := strNewPackCodeRefeed;
+		strNewPackCodeRefeed := '';
+
+		(* update outputs *)
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState := E_OUTER_IDLE;
+
+(* unknown state *)
+ELSE
+	eState := E_OUTER_IDLE;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_OUTER_RepairOCVContent">
+      <LineId Id="67" Count="290" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

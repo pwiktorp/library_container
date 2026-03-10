@@ -1,0 +1,191 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_CASE_ShiftCaseQueue_ORG" Id="{4fc78ab1-7312-4dc4-85af-bb9798bb9bdd}" SpecialFunc="None">
+    <Declaration><![CDATA[(* shifts specified group of cases in CaseQueue by 1 index *)
+FUNCTION_BLOCK FB_CASE_ShiftCaseQueue_ORG
+VAR_INPUT
+	bExecute					: BOOL;			(* set TRUE to shift Case Queue *)
+	bLogCaseOwerwriten		: BOOL;
+	stCTDateTime				: ST_SYSTEM_DateTime;
+	nFirstCaseIndex			: INT;			(* index of 1st case to be shifted *)
+	nLastCaseIndex			: INT;			(* index of last case position owerwriten *)
+	bStopOnOverWrittenData	: BOOL;
+	tTimeOut					: TIME;
+END_VAR
+VAR_IN_OUT
+	stCaseQueue				: ST_CASE_CaseQueue;	(* Case Queue *)
+	stCaseQueueHMI			: ST_HMI_CASE_CaseQueue;	(* Case Queue *)
+	(*bFoundNotEmptyTarget		: BOOL;*)
+END_VAR
+VAR_OUTPUT
+	bDone					: BOOL;			(* TRUE = complete *)
+	bBusy					: BOOL;
+	bError					: BOOL;			(* TRUE = nFirstIndex and nLastCaseIndex not valid *)
+	nErrorID					: UDINT;
+	bFoundNotEmptyTarget		: BOOL;
+END_VAR
+VAR
+	fbExecute					: R_TRIG;
+	nMaxCaseIndex			: INT;
+
+	eStep					: E_CASE_State;
+	eErrorState				: E_CASE_State;
+
+	tonTimeOut					:	TON;
+
+	stCACDataToLog					:  ST_CAC_Data;	(* array of CAC data *)
+	nCaseQueueToShift				: INT;
+	bLogOwerwritenDataToFileEx		: BOOL;
+	fbLogOwerwritenCACData		: FB_CAC_WriteFile;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+tonTimeOut(IN:= eStep=E_CASE_DATAWRITEXML, PT:= tTimeOut);
+
+CASE eStep OF
+
+	E_CASE_IDLE:
+		(* move CaseData *)
+		IF fbExecute.Q = TRUE THEN
+
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID	:= 0;
+	
+			eErrorState	:=eStep;
+			(* max index of Case Queue buffer *)
+			nMaxCaseIndex := UDINT_TO_INT(SIZEOF(stCaseQueue.aCACData) / SIZEOF(stCaseQueue.aCACData[1]));
+			bFoundNotEmptyTarget := FALSE;
+			bLogOwerwritenDataToFileEx	:= FALSE;
+			 MEMSET(ADR(stCACDataToLog), 16#00, SIZEOF(stCACDataToLog));
+			(*nLastCaseIndex := nFirstCaseIndex + nTotalCasesToShift ;*)
+			eStep :=E_CASE_DATAVALIDATE;
+	
+		(* bExecute has been reset *)
+		ELSIF bExecute = FALSE THEN
+	
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID	:= 0;
+
+			bFoundNotEmptyTarget := FALSE;
+	
+		END_IF
+
+	E_CASE_DATAVALIDATE:
+		(* specified range within buffer limits *)
+		IF nFirstCaseIndex > 0 AND nLastCaseIndex <= nMaxCaseIndex THEN
+
+			nCaseQueueToShift := nLastCaseIndex-nFirstCaseIndex;
+			(* cases to be shifted > 0 *)
+			IF  nCaseQueueToShift > 0 THEN
+
+				stCACDataToLog	:= stCaseQueue.aCACData[MAX(1, nLastCaseIndex)];
+
+				eStep :=E_CASE_DATAWRITEXML;
+
+			ELSE
+				bError := TRUE;
+				eErrorState	:=eStep;
+				nErrorID	:= 1;
+
+				eStep :=E_CASE_DONE;
+			END_IF
+		(* nFirstIndex = 0 or specified range exceeds stCaseQueue limits *)
+		ELSE
+			bError := TRUE;
+			eErrorState	:=eStep;
+			nErrorID	:= 11;
+
+			eStep :=E_CASE_DONE;
+		END_IF
+
+	E_CASE_DATAWRITEXML:
+
+		IF stCaseQueue.aCACData[nLastCaseIndex].CodingAndTrackingMode <> 0 AND bLogCaseOwerwriten THEN
+
+			bFoundNotEmptyTarget := bStopOnOverWrittenData;
+			bLogOwerwritenDataToFileEx	:= TRUE;
+
+			IF tonTimeOut.Q	THEN
+
+				bError := TRUE;
+				eErrorState	:=eStep;
+				nErrorID	:= 2;
+
+				eStep :=E_CASE_DATAFINALISE;
+
+
+			ELSIF	 fbLogOwerwritenCACData.bDone THEN
+				IF  fbLogOwerwritenCACData.bError THEN
+
+					bError := TRUE;
+					eErrorState	:=eStep;
+					nErrorID	:= 22;
+				END_IF
+
+				eStep :=E_CASE_DATAFINALISE;
+			END_IF
+		ELSE
+			eStep :=E_CASE_DATAFINALISE;
+		END_IF
+
+	E_CASE_DATAFINALISE:
+
+		bLogOwerwritenDataToFileEx	:= FALSE;
+
+		(* shift specified cases in CaseQueue *)
+		MEMMOVE(ADR(stCaseQueue.aCACData[nFirstCaseIndex + 1]), ADR(stCaseQueue.aCACData[nFirstCaseIndex]), nCaseQueueToShift* SIZEOF(stCaseQueue.aCACData[1]));
+
+		(* shift specified cases in CaseQueue *)
+		MEMMOVE(ADR(stCaseQueueHMI.aCACData[nFirstCaseIndex + 1]), ADR(stCaseQueueHMI.aCACData[nFirstCaseIndex]), nCaseQueueToShift* SIZEOF(stCaseQueueHMI.aCACData[1]));
+
+		(* clear data in 1st indexes *)
+		MEMSET(ADR(stCaseQueue.aCACData[nFirstCaseIndex]), 16#00, SIZEOF(stCaseQueue.aCACData[nFirstCaseIndex]));
+
+		(* clear data in 1st indexes *)
+		MEMSET(ADR(stCaseQueueHMI.aCACData[nFirstCaseIndex]), 16#00, SIZEOF(stCaseQueueHMI.aCACData[nFirstCaseIndex]));
+
+		eStep :=E_CASE_DONE;
+
+	E_CASE_DONE:
+
+		bFoundNotEmptyTarget := FALSE;
+
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eStep :=E_CASE_IDLE;
+ELSE
+	eStep :=E_CASE_IDLE;
+END_CASE
+
+fbLogOwerwritenCACData(
+
+(*Do zminany tak aby podawac finalna sciezke i inalna nazwe dla bloku WireFile_v2*)
+	bExecute			:=	bLogOwerwritenDataToFileEx,
+	bOverwrittenCAC	:= TRUE,
+	strLocalCACPath	:= stMetsStatus.sLocalCACPath,
+	strCaseFilename	:=F_CONCAT5('OVERWRITEN_Pos_',INT_TO_STRING(nLastCaseIndex),'_', F_SYSTEM_SystemTimeToCHM_Header(stCTDateTime.sSystemTime),'.xml'),
+	stCACData			:= stCACDataToLog, (*stCaseQueue.stCACData[MAX(1, nLastCaseIndex)],*)
+	bDone			=>,
+	bBusy			=>,
+	bError			=>,
+	nErrorID			=>,
+	bCACValid		=>,
+	strCACFile		=>,
+	strFirstOuter		=>,
+	strLastOuter		=>
+);
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_CASE_ShiftCaseQueue_ORG">
+      <LineId Id="38" Count="142" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

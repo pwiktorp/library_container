@@ -1,0 +1,89 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F40_StationManager" Id="{4e12f51a-83d0-4221-8065-6dd86ad44502}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM F40_StationManager
+VAR
+
+	aMonitoringTimer : ARRAY[1..5] OF TON;
+	aMonitoringTriger : ARRAY[1..5] OF R_TRIG;
+	 aMonitoringMaxTime : ARRAY[1..5] OF TIME;
+
+	nSize1	: UINT;
+	nSize2	: uINT;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+nSize1 := SIZEOF(gHMI.aCylinderStatusHMI[E_CYLINDER_Name.CLAMP]);
+nSize2	:= SIZEOF(gDevice.stMachineDevices.aCylinderStatus[E_CYLINDER_Name.CLAMP].Q);
+
+(******************************************************************************************)
+(* Condition for All Stations Not Moving *)
+IF NOT gDevice.stMachineDevices.aDriverStatus[E_DRIVE_Name.OUTER_SEPAR].bDriveRun AND
+	NOT gDevice.aG120Control[E_DRIVE_Name.OUTER_SEPAR].bRun		AND gDevice.stMachineDevices.aDriveInterfaces[E_DRIVE_Name.OUTER_SEPAR].Q.rActualSpeed < 5 	AND
+	NOT gDevice.aG120Control[E_DRIVE_Name.INFEED_CONV].bRun			AND gDevice.stMachineDevices.aDriveInterfaces[E_DRIVE_Name.INFEED_CONV].Q.rActualSpeed < 5 			AND
+	NOT gDevice.aG120Control[E_DRIVE_Name.ROTARY_TRNSFR].bRun			AND gDevice.stMachineDevices.aDriveInterfaces[E_DRIVE_Name.ROTARY_TRNSFR].Q.rActualSpeed < 5 		AND
+	NOT gDevice.aG120Control[E_DRIVE_Name.LOWR_BELTS].bRun		AND gDevice.stMachineDevices.aDriveInterfaces[E_DRIVE_Name.LOWR_BELTS].Q.rActualSpeed < 5 		AND
+	NOT gDevice.aG120Control[E_DRIVE_Name.REJECT_CONV].bRun 			AND gDevice.stMachineDevices.aDriveInterfaces[E_DRIVE_Name.REJECT_CONV].Q.rActualSpeed < 5			AND
+	NOT gDevice.aG120Control[E_DRIVE_Name.TRANSF_CONV].bRun			AND gDevice.stMachineDevices.aDriveInterfaces[E_DRIVE_Name.TRANSF_CONV].Q.rActualSpeed < 5 		AND
+	NOT gDevice.aG120Control[E_DRIVE_Name.ADDIT_CONV].bRun	AND gDevice.stMachineDevices.aDriveInterfaces[E_DRIVE_Name.ADDIT_CONV].Q.rActualSpeed < 5 AND
+	NOT gDevice.aG120Control[E_DRIVE_Name.OUTFD_CONV].bRun 			AND gDevice.stMachineDevices.aDriveInterfaces[E_DRIVE_Name.OUTFD_CONV].Q.rActualSpeed < 5 		AND
+	gDevice.stMachineDevices.aCylinderStatus[E_CYLINDER_Name.CLAMP].Q.bInPosition	AND
+	gDevice.stMachineDevices.aCylinderStatus[E_CYLINDER_Name.GATE].Q.bInPosition		AND
+	gDevice.stMachineDevices.aCylinderStatus[E_CYLINDER_Name.REJECT].Q.bInPosition	THEN
+
+	gDevice.stMetsStatus.bAllStationNotMoving	:= TRUE;
+ELSE
+	gDevice.stMetsStatus.bAllStationNotMoving	:= FALSE;
+END_IF
+
+(******************************************************************************************)
+(* Condition for All Stations Homed *)
+
+IF 	gDevice.stMachineConfig.bNoStationsAvailable 	OR
+	(gDevice.stMetsStatus.bAllStationNotMoving		AND
+	gIOFiltered.stRotaryTransferDelayStop1.bStateInput 	AND
+ 	gIOFiltered.stRotaryTransferDelayStop2.bStateInput	AND
+	gDevice.stMachineDevices.aCylinderStatus[E_CYLINDER_Name.CLAMP].Q.bHomePosition	AND
+	gDevice.stMachineDevices.aCylinderStatus[E_CYLINDER_Name.GATE].Q.bHomePosition		AND
+	gDevice.stMachineDevices.aCylinderStatus[E_CYLINDER_Name.REJECT].Q.bHomePosition)	THEN
+
+	gDevice.stMetsStatus.bAllSeqStationHomed 	:= TRUE;
+ELSE
+	gDevice.stMetsStatus.bAllSeqStationHomed 	:= FALSE;
+END_IF
+(*
+aMonitoringTimer[1](IN:= NOT gIOFiltered.stLabeller1HomePosition.bStateInput AND gDevice.stMetsStatus.bMachineEnabled, PT:= tPrinterHomeTimeout);
+
+aMonitoringMaxTime[1]:=MAX(aMonitoringMaxTime[1], aMonitoringTimer[1].ET);
+aMonitoringTriger[1](CLK:=  aMonitoringTimer[1].Q);
+IF aMonitoringTriger[1].Q THEN
+	nPrinterHomeMonitoring:= nPrinterHomeMonitoring +1;
+END_IF
+
+aMonitoringTimer[2](IN:= F07_OuterAggregationCtrl.bNewOuterIsProccesing, PT:= t#1000ms);
+
+aMonitoringMaxTime[2]:=MAX(aMonitoringMaxTime[2], aMonitoringTimer[2].ET);
+aMonitoringTriger[2](CLK:=  aMonitoringTimer[2].Q);
+IF aMonitoringTriger[2].Q THEN
+	nAirPrssureMonitoring:= nAirPrssureMonitoring +1;
+END_IF
+
+aMonitoringTimer[3](IN:= gIOFiltered.stCamera09.bStateInput AND gDevice.stMetsStatus.bMachineRunning, PT:= tValidationTrigerTimeout);
+
+aMonitoringMaxTime[3]:=MAX(aMonitoringMaxTime[3], aMonitoringTimer[3].ET);
+aMonitoringTriger[3](CLK:=  aMonitoringTimer[3].Q);
+IF aMonitoringTriger[3].Q THEN
+	nValidationTrigerMonitroing:= nValidationTrigerMonitroing +1;
+END_IF
+
+aMonitoringTimer[4](IN:= gIOFiltered.stGateCylinderRetracted.bStateInput AND gDevice.stMetsStatus.bMachineRunning, PT:= tGateRetractTimeout);
+
+aMonitoringMaxTime[4]:=MAX(aMonitoringMaxTime[4], aMonitoringTimer[4].ET);
+aMonitoringTriger[4](CLK:=  aMonitoringTimer[4].Q);
+IF aMonitoringTriger[4].Q THEN
+	nGateRetractMonitoring:= nGateRetractMonitoring +1;
+END_IF*)]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

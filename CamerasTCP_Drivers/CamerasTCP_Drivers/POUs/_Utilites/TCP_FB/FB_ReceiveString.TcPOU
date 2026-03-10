@@ -1,0 +1,126 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_ReceiveString" Id="{f9d0d73d-9c6f-440f-b45c-c1138df8e9a1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ReceiveString
+
+VAR_INPUT
+	bEnable				: BOOL;			(* set TRUE to enable periodic TCP data receive *)
+	hSocket				: T_HSocket;	(* TCP socket *)
+	tUpdateTime			: TIME;			(* receive update rate *)
+	nSyncOffset			: DINT;			(* ms offset to spread TCP Server access loading *)
+END_VAR
+
+VAR_IN_OUT
+	strTCPRxString		: T_MaxString;	(* string to which incoming TCP data will be appended *)
+END_VAR
+
+VAR_OUTPUT
+	bDone				: BOOL;			(* TRUE = complete *)
+	bBusy				: BOOL;			(* TRUE = in progress *)
+	bError 				: BOOL;			(* TRUE = error *)
+	nErrorID			: UDINT;		(* error code *)
+	bDataReceived		: BOOL;			(* TRUE = data received *)
+END_VAR
+
+VAR
+	fbTCPReceive		: FB_SocketReceive;
+	strTCPRxChars		: T_MaxString;
+	bTCPReceive			: BOOL:= FALSE;
+	fbTimer				: FB_PulseGenerator_Sync;
+	nMaxBytes			: UDINT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+(* TCP update timer *)
+fbTimer(
+	bEnable		:= bEnable,
+	tPeriod		:= tUpdateTime,
+	nSyncOffset	:= nSyncOffset
+);
+
+(* TCP update timer elapsed and fbTCPReceive is not active *)
+IF fbTimer.bOutput = TRUE THEN
+
+	(* max number of bytes that can be received into strTCPRxString on next cycle *)
+	nMaxBytes := SIZEOF(strTCPRxString) - LEN2(ADR(strTCPRxString)) - 1;
+
+	(* clear strTCPRxChars *)
+	MEMSET(ADR(strTCPRxChars), 16#00, SIZEOF(strTCPRxChars));
+
+	(* strTCPRxString has space for 1 or more bytes *)
+	IF nMaxBytes > 0 THEN
+
+		(* receive data from TCP port *)
+		bTCPReceive := TRUE;
+		bBusy := TRUE;
+	END_IF
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bError := FALSE;
+	nErrorID := 0;
+	bDataReceived := FALSE;
+
+(* TPC receive not active *)
+ELSIF bTCPReceive = FALSE THEN
+
+	(* clear outputs *)
+	bDone := FALSE;
+	bBusy := FALSE;
+	bError := FALSE;
+	nErrorID := 0;
+	
+	bDataReceived := FALSE;
+END_IF
+
+fbTCPReceive(
+	sSrvNetId	:= , 
+	hSocket		:= hSocket, 
+	cbLen		:= nMaxBytes, 
+	pDest		:= ADR(strTCPRxChars), 
+	bExecute	:= bTCPReceive, 
+	tTimeout	:= T#500MS, 
+	bBusy		=> bBusy
+);
+	
+	
+(* receive TCP data complete *)
+IF bTCPReceive = TRUE AND fbTCPReceive.bBusy = FALSE THEN
+
+	(* receive TCP data completed OK *)
+	IF fbTCPReceive.bError = FALSE THEN
+
+		(* data bytes received *)
+		IF fbTCPReceive.nRecBytes > 0 THEN
+
+			(* append returned data to TCP data string *)
+			strTCPRxString := CONCAT(strTCPRxString, strTCPRxChars); //CONCAT limited to return String(255)
+			bDataReceived := TRUE;
+		END_IF
+
+		(* clear errors flags if currently no error*)
+		bError := FALSE;
+		nErrorID := 0;
+	(* receive data error *)
+	ELSE
+
+		bDataReceived := FALSE;
+		bError := TRUE;
+		nErrorID := fbTCPReceive.nErrId;
+		bDone := FALSE;
+	END_IF
+
+	(* clear TCP Receive flag *)
+	bTCPReceive := FALSE;
+
+	(* update outputs *)
+	bDone := TRUE;
+	bBusy := FALSE;
+
+	(* close off fbReceiveTCPData *)
+	fbTCPReceive(bExecute := FALSE);
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

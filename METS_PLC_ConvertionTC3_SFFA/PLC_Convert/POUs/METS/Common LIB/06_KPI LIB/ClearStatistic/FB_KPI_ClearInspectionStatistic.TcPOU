@@ -1,0 +1,59 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_KPI_ClearInspectionStatistic" Id="{8b4edb6a-866d-42fc-aba7-ffbd98b3b28b}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_KPI_ClearInspectionStatistic
+VAR_INPUT
+	bExecute						: BOOL;
+	stCTDateTime					: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	nLowerCameraGroupIndex		: INT;
+	nUpperCameraGroupIndex		: INT;
+END_VAR
+VAR_IN_OUT
+	stEfficiencyToBeCleared			: ST_KPI_InspectionEfficency;
+	stMetsCameras					: ST_NOVRAM_METS_Cameras;
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;
+END_VAR
+VAR
+	fbExecute 			: R_TRIG;
+	bTimerFlag			: BOOL;
+	tofDoneTimer			: TOF;
+	nIndex				: INT;
+
+	nCounter				: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+bTimerFlag:=FALSE;
+
+IF fbExecute.Q THEN
+
+	nCounter := nCounter +1;
+
+
+
+	MEMSET(ADR(stEfficiencyToBeCleared), 16#00, SIZEOF(stEfficiencyToBeCleared));
+
+	(*stEfficiencyToBeCleared.StartDateTime 			:= F_SYSTEM_SystemTimeAsISO8601(stCTDateTime.sSystemTime, stCTDateTime.sUTCTimeZoneOffset );*)
+
+	IF nLowerCameraGroupIndex > 0 	AND
+		nLowerCameraGroupIndex <= nUpperCameraGroupIndex THEN
+
+		FOR nIndex :=nLowerCameraGroupIndex  TO MIN(nUpperCameraGroupIndex, cMAX_CAMERA_NUMBER)  DO
+			MEMSET(ADR(stMetsCameras.aCameraEvaluation[nIndex]), 16#00, SIZEOF(stMetsCameras.aCameraEvaluation[nIndex]));
+		END_FOR
+	END_IF
+
+	bTimerFlag:=TRUE;
+END_IF
+
+tofDoneTimer(IN:=bTimerFlag,PT:=t#5s, Q=>bDone);]]></ST>
+    </Implementation>
+    <LineIds Name="FB_KPI_ClearInspectionStatistic">
+      <LineId Id="22" Count="26" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

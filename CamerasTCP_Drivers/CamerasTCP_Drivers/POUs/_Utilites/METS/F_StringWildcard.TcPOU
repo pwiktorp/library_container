@@ -1,0 +1,162 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_StringWildcard" Id="{86268a7f-749f-44c9-981e-d0738a2742f4}" SpecialFunc="None">
+    <Declaration><![CDATA[(* replaces date and time wildcards in string *)
+FUNCTION F_StringWildcard : T_MaxString
+VAR_INPUT
+	strInput		: T_MaxString;	(* string with wildcard markers *)
+	sDateTime		: TIMESTRUCT;	(* date/time structure *)
+END_VAR
+VAR
+	fbExtractData	: FB_ExtractString;
+	strWildcard		: T_MaxString;
+	strData			: STRING(4);
+	nCharPos		: INT;
+END_VAR
+VAR CONSTANT
+	arrMonthCode	: ARRAY[0..12] OF STRING(1) :=[ '', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+13/04/2015	3.00.01	PB		Check for 'MM' and 'M' now checked last, fixes problem where 'M' followed by 'DD' during April will generate corrupt string.
+30/01/2015	3.00.00	PB		Initial release.
+
+-------------------------------------------------------------------------------------------------
+
+The following wildcard strings are supported:
+YYYY - Year (4 chars)				hh	- hour
+YY	 - Year (last 2 chars)			mm	- minute
+Y	 - Year (last char only)		ss	- second
+MM	 - Month (01-12 = Jan-Dec)		t	- tenth of second
+M	 - Month (A-L = Jan-Dec)
+DD	 - Date
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* find and extract wildcard string, enclosed by '#' chars *)
+fbExtractData(
+	bExtractData	:= TRUE,
+	nExtractChars	:= 0, 
+	strPrefix		:= '#',
+	strSuffix		:= '#',
+	strString		:= strInput
+);
+
+(* wildcard string found *)
+IF fbExtractData.bStringFound = TRUE THEN
+
+	(* log wildcard string for modification *)
+	strWildcard := fbExtractData.strData;
+
+	(* check for wildcard 'YYYY' *)
+	nCharPos := FIND(strWildcard, 'YYYY');
+	IF nCharPos > 0 THEN
+
+		(* generate year as 4 chars and replace YYYY *)
+		strData := F_StringAddPrefix(WORD_TO_STRING(sDateTime.wYear), 4, '0');
+		strWildcard := REPLACE(strWildcard, strData, 4, nCharPos);
+
+	(* wildcard 'YYYY' not found *)
+	ELSE
+
+		(* check for wildcard 'YY' *)
+		nCharPos := FIND(strWildcard, 'YY');
+		IF nCharPos > 0 THEN
+
+			(* generate year as 2 chars and replace YY *)
+			strData := F_StringAddPrefix(RIGHT(WORD_TO_STRING(sDateTime.wYear), 2), 2, '0');
+			strWildcard := REPLACE(strWildcard, strData, 2, nCharPos);
+
+		(* wildcard 'YY' not found *)
+		ELSE
+	
+			(* check for wildcard 'Y' *)
+			nCharPos := FIND(strWildcard, 'Y');
+			IF nCharPos > 0 THEN
+	
+				(* generate year as 1 char and replace Y *)
+				strData := RIGHT(WORD_TO_STRING(sDateTime.wYear), 1);
+				strWildcard := REPLACE(strWildcard, strData, 1, nCharPos);
+			END_IF
+		END_IF
+	END_IF
+
+	(* check for wildcard 'DD' *)
+	nCharPos := FIND(strWildcard, 'DD');
+	IF nCharPos > 0 THEN
+
+		(* generate date as 2 chars and replace DD *)
+		strData := F_StringAddPrefix(WORD_TO_STRING(sDateTime.wDay), 2, '0');
+		strWildcard := REPLACE(strWildcard, strData, 2, nCharPos);
+	END_IF
+
+	(* check for wildcard 'hh' *)
+	nCharPos := FIND(strWildcard, 'hh');
+	IF nCharPos > 0 THEN
+
+		(* generate hour as 2 chars and replace hh *)
+		strData := F_StringAddPrefix(WORD_TO_STRING(sDateTime.wHour), 2, '0');
+		strWildcard := REPLACE(strWildcard, strData, 2, nCharPos);
+	END_IF
+
+	(* check for wildcard 'mm' *)
+	nCharPos := FIND(strWildcard, 'mm');
+	IF nCharPos > 0 THEN
+
+		(* generate minute as 2 chars and replace mm *)
+		strData := F_StringAddPrefix(WORD_TO_STRING(sDateTime.wMinute), 2, '0');
+		strWildcard := REPLACE(strWildcard, strData, 2, nCharPos);
+	END_IF
+
+	(* check for wildcard 'ss' *)
+	nCharPos := FIND(strWildcard, 'ss');
+	IF nCharPos > 0 THEN
+
+		(* generate second as 2 chars and replace ss *)
+		strData := F_StringAddPrefix(WORD_TO_STRING(sDateTime.wSecond), 2, '0');
+		strWildcard := REPLACE(strWildcard, strData, 2, nCharPos);
+	END_IF
+
+	(* check for wildcard 't' *)
+	nCharPos := FIND(strWildcard, 't');
+	IF nCharPos > 0 THEN
+
+		(* generate tenth of second as 1 char and replace t *)
+		strData := WORD_TO_STRING(sDateTime.wMilliseconds / 100);
+		strWildcard := REPLACE(strWildcard, strData, 1, nCharPos);
+	END_IF
+
+	(* check for wildcard 'MM' *)
+	nCharPos := FIND(strWildcard, 'MM');
+	IF nCharPos > 0 THEN
+
+		(* generate month as 2 chars and replace MM *)
+		strData := F_StringAddPrefix(WORD_TO_STRING(sDateTime.wMonth), 2, '0');
+		strWildcard := REPLACE(strWildcard, strData, 2, nCharPos);
+
+	(* wildcard 'YYYY' not found *)
+	ELSE
+
+		(* check for wildcard 'M' *)
+		nCharPos := FIND(strWildcard, 'M');
+		IF nCharPos > 0 THEN
+
+			(* generate month as 1 char and replace M *)
+			strData := arrMonthCode[sDateTime.wMonth];
+			strWildcard := REPLACE(strWildcard, strData, 1, nCharPos);
+		END_IF
+	END_IF
+
+	(* insert strWildcard back into strInput *)
+	F_StringWildcard := INSERT(strInput, strWildcard, TO_INT(fbExtractData.nStartPos) - 1);
+
+(* no wildcard string found *)
+ELSE
+
+	(* strInput direct to output without modification *)
+	F_StringWildcard := strInput;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

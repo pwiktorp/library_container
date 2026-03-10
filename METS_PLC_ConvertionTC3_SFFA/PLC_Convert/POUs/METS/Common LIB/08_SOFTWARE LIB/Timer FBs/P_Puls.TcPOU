@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="P_Puls" Id="{c5ab2a54-7799-46fe-9e2e-e4f7e73115a1}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM P_Puls
+VAR
+	tonFlashOn			: 	TON;
+	bFlashEnable			: 	BOOL;
+	tonFlashOff			: 	TON;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[tonFlashOn(IN:= bFlashEnable, PT:= t#1000ms);
+
+IF	tonFlashOn.Q	THEN
+	bFlashEnable	:= FALSE;
+END_IF
+
+tonFlashOff(IN:= NOT bFlashEnable, PT:= t#1000ms);
+
+IF	tonFlashOff.Q	THEN
+	bFlashEnable	:= TRUE;
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="P_Puls">
+      <LineId Id="6" Count="10" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

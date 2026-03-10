@@ -1,0 +1,146 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="FB_TCP_ReceiveData_V2" Id="{9e6de5bf-d7ed-4270-946f-33933d89fa23}" SpecialFunc="None">
+    <Declaration><![CDATA[(* poll TCP Server for incoming data *)
+FUNCTION_BLOCK FB_TCP_ReceiveData_V2
+VAR_INPUT
+	bEnable				: BOOL;			(* set TRUE to enable periodic TCP data receive *)
+	hSocket				: T_HSocket;	(* TCP socket *)
+	tUpdateTime			: TIME;			(* receive update rate *)
+END_VAR
+VAR_IN_OUT
+	strTCPData			: T_MaxString;	(* string to which incoming TCP data will be appended *)
+END_VAR
+VAR_OUTPUT
+	bDone				: BOOL;			(* TRUE = TCP receive done *)
+	bBusy				: BOOL;			(* TRUE = TCP receive in progress *)
+	bError				: BOOL;			(* TRUE = TCP receive error *)
+	nErrorID			: UDINT;		(* TCP receive error code *)
+	bDataReceived		: BOOL;			(* TRUE = data received *)
+END_VAR
+VAR
+	fbTimer				: TON;
+	eState				: E_TCPIP_State;
+	fbTCPReceive		: FB_SocketReceive;
+	strTCPRxChars		: T_MaxString;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+16/08/2012	1.40.02	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* TCP receive timer *)
+fbTimer(
+	IN	:= bEnable,
+	PT	:= tUpdateTime
+);
+
+CASE eState OF
+
+	(* idle state *)
+	E_TCPIP_IDLE:
+
+		(* receive data *)
+		IF fbTimer.Q = TRUE THEN
+
+			(* reset TCP receive timer *)
+			fbTimer(IN := FALSE);
+
+			(* update status outputs *)
+			bDone := FALSE;
+			bBusy := TRUE;
+			bError := FALSE;
+			nErrorID := 0;
+			bDataReceived := FALSE;
+
+			(* clear TCP receive string *)
+			MEMSET(ADR(strTCPRxChars), 16#00, SIZEOF(strTCPRxChars));
+
+			eState := E_TCPIP_RECEIVE;
+
+		(* no action required *)
+		ELSE
+
+			bDone := FALSE;
+			bBusy := FALSE;
+			bError := FALSE;
+			nErrorID := 0;
+			bDataReceived := FALSE;
+		END_IF
+
+
+	(* receive data *)
+	E_TCPIP_RECEIVE:
+
+		(* receive data from TCP server *)
+		fbTCPReceive(
+			sSrvNetId	:= '',
+			hSocket		:= hSocket,
+			cbLen		:= SIZEOF(strTCPRxChars),
+			pDest		:= ADR(strTCPRxChars),
+			bExecute	:= TRUE,
+			tTimeout	:= T#500ms
+		);
+		
+		(* receive TCP data complete *)
+		IF fbTCPReceive.bBusy = FALSE THEN
+		
+			(* receive TCP data completed OK *)
+			IF fbTCPReceive.bError = FALSE THEN
+
+				(* 1 or more data bytes received *)
+				IF fbTCPReceive.nRecBytes > 0 THEN
+
+					(* append returned data to TCP data string *)
+					strTCPData := CONCAT(strTCPData, strTCPRxChars);
+					bDataReceived := TRUE;
+
+				(* no data received *)
+				ELSE
+
+					bDataReceived := FALSE;
+				END_IF
+
+			(* receive data error *)
+			ELSE
+
+				bError := TRUE;
+				nErrorID := fbTCPReceive.nErrId;
+			END_IF
+		
+			eState :=E_TCPIP_DONE;
+
+			(* close off fbReceiveTCPData *)
+			fbTCPReceive(bExecute := FALSE);
+		END_IF
+
+
+	(* done *)
+	E_TCPIP_DONE:
+
+		bDone := TRUE;
+		bBusy := FALSE;
+
+		eState :=E_TCPIP_IDLE;
+
+
+	(* unknown state *)
+	ELSE
+
+		(* close off FBs *)
+		fbTCPReceive(bExecute := FALSE);
+		fbTimer(IN := FALSE);
+
+		eState :=E_TCPIP_IDLE;
+
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_TCP_ReceiveData_V2">
+      <LineId Id="31" Count="104" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

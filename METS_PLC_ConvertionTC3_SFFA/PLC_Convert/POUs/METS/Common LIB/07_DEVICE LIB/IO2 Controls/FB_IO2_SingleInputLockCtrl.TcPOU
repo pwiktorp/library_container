@@ -1,0 +1,52 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_IO2_SingleInputLockCtrl" Id="{40136247-fca3-4a4e-9b15-4a2db98b8d80}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_IO2_SingleInputLockCtrl
+VAR_INPUT
+	bEnable				: BOOL;
+	eTypeInput 			: E_IO2_Type;
+	tTimeOnFilter		: TIME;
+	tTimeOffFilter 		: TIME;
+	tTimeLatch			: TIME;
+END_VAR
+VAR_OUTPUT
+	stProcessedInput	: ST_IO2_InputPLC;
+END_VAR
+VAR
+	bInputState			: BOOL;
+	rt_RawInput			: R_TRIG;
+	ft_RawInput			: F_TRIG;
+
+	tof_LockInput		: TOF;
+
+	ton_FilterONInput	: TON;
+	tof_FilterOFFInput	: TOF;
+	rt_ProcessedInput	: R_TRIG;
+	ft_ProcessedInput	: F_TRIG;
+
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bInputState	:= SEL(eTypeInput=E_IO2_Type.NO, NOT bEnable, bEnable);
+IF eTypeInput = E_IO2_Type.BLOCKED THEN bInputState := FALSE; END_IF
+
+stProcessedInput.bRawInput :=bInputState;
+rt_RawInput(CLK:=stProcessedInput.bRawInput, Q=>stProcessedInput.bRawRTrigger);
+ft_RawInput(CLK:=stProcessedInput.bRawInput, Q=>stProcessedInput.bRawFTrigger);
+
+tof_LockInput(IN:=bInputState, PT:=tTimeLatch, Q=>);
+
+ton_FilterONInput(IN:= tof_LockInput.Q, PT:=tTimeOnFilter, Q=>);
+IF ton_FilterONInput.Q THEN
+	stProcessedInput.bStateInput := TRUE;
+END_IF
+
+tof_FilterOFFInput(IN:=tof_LockInput.Q, PT:=tTimeOffFilter, Q=>);
+IF NOT tof_FilterOFFInput.Q THEN
+	stProcessedInput.bStateInput := FALSE;
+END_IF
+
+rt_ProcessedInput(CLK:=stProcessedInput.bStateInput, Q=>stProcessedInput.bStateRTrigger);
+ft_ProcessedInput(CLK:=stProcessedInput.bStateInput, Q=>stProcessedInput.bStateFTrigger);]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

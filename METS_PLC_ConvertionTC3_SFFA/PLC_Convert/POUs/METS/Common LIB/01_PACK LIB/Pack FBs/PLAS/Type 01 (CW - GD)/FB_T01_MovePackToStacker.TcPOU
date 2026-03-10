@@ -1,0 +1,136 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_T01_MovePackToStacker" Id="{d4a60eb9-2487-43ae-8aa7-5c708d3c5b94}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_T01_MovePackToStacker
+VAR_INPUT
+	bExecute					: BOOL;
+	nPacksPerStack				: INT;
+	nPackInfeedOffset					: INT;
+END_VAR
+VAR_IN_OUT
+	stPackRejectReasons		: ST_RejectReasonsForPack;
+	stPackInFeedQueue						: ST_PACK_InfeedQueue; (* Infeed queue *)
+	aStackerQueue							: ARRAY[1..cMAX_PACK_INFEED_QUEUE] OF ST_PACK_Data;
+	aStackIndexDebug				: ARRAY[0..21] OF UDINT;
+	stCodeInfo					: ST_CodeInfo;
+END_VAR
+VAR_OUTPUT
+	bDone										: BOOL;
+	bOCVStackOutOfSequence					: BOOL;
+	sStackerDataLog							: T_LongSTRING;
+END_VAR
+VAR
+	fbExecute									: R_TRIG;
+	nPackIndex: INT;
+	nPackOffsetIndex	: INT;
+	nStackerIndex : INT;
+	nDebugCounter1	: INT;
+	nDebugCounter2	: INT;
+	nLogIndex			: INT;
+	sAppendedString				: STRING;
+
+	fbAddOffsetPack									: R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbExecute(CLK := bExecute);
+
+IF fbExecute.Q THEN
+
+	bDone 			:= FALSE;
+	nPackIndex 		:= 1;
+	sAppendedString	:= '';	
+	sStackerDataLog	:='';
+
+	bOCVStackOutOfSequence		:= FALSE;
+
+	MEMMOVE(ADR(aStackerQueue[nPacksPerStack + 1]), ADR(aStackerQueue[1]),MAX(0,SIZEOF(aStackerQueue) -  F_SafeTo_UDINT(nPacksPerStack) * SIZEOF(aStackerQueue[1])));
+	MEMSET(ADR(aStackerQueue[1]), 16#00, F_SafeTo_UDINT(nPacksPerStack) *SIZEOF(aStackerQueue[1]));
+
+	IF stPackInFeedQueue.nIndex >=0 AND stPackInFeedQueue.nIndex <=20 THEN
+		aStackIndexDebug[stPackInFeedQueue.nIndex] := aStackIndexDebug[stPackInFeedQueue.nIndex] + 1;
+	ELSE
+		aStackIndexDebug[21] := aStackIndexDebug[21] + 1;
+	END_IF
+
+	IF  stPackInFeedQueue.nIndex =  nPacksPerStack  THEN
+
+		FOR nStackerIndex := nPacksPerStack TO 1 BY -1 DO
+			IF aStackerQueue[nStackerIndex + nPackInfeedOffset].sPackCode <> '' 	AND
+				aStackerQueue[nStackerIndex + nPackInfeedOffset].sPackCode <> stPackInFeedQueue.aPackQueue[nPackIndex].sPackCode THEN
+
+				aStackerQueue[nStackerIndex + nPackInfeedOffset].sPackCode := cCODE_OVERWIRTTEN;
+				aStackerQueue[nStackerIndex + nPackInfeedOffset].nPackStatus	:=	1;
+				aStackerQueue[nStackerIndex + nPackInfeedOffset].nPackRejectID:=  stPackRejectReasons.stPackCodesOverwritten.nRejectID;
+				aStackerQueue[nStackerIndex + nPackInfeedOffset].sPackRejectCode := stPackRejectReasons.stPackCodesOverwritten.sMetsDisplayCode;
+			ELSE
+				aStackerQueue[nStackerIndex + nPackInfeedOffset]  	:= stPackInFeedQueue.aPackQueue[nPackIndex];
+			END_IF
+
+			nPackIndex := nPackIndex + 1;
+		END_FOR
+
+	ELSIF stPackInFeedQueue.nIndex <  nPacksPerStack THEN
+
+		FOR nStackerIndex := 1TO nPacksPerStack DO
+			aStackerQueue[nStackerIndex + nPackInfeedOffset].sPackCode := cCODE_OVERWIRTTEN;
+			aStackerQueue[nStackerIndex + nPackInfeedOffset].nPackStatus	:=	1;
+			aStackerQueue[nStackerIndex + nPackInfeedOffset].nPackRejectID:=  stPackRejectReasons.stPackCodesOverwritten.nRejectID;
+			aStackerQueue[nStackerIndex + nPackInfeedOffset].sPackRejectCode := stPackRejectReasons.stPackCodesOverwritten.sMetsDisplayCode;
+		END_FOR
+
+		bOCVStackOutOfSequence		:= TRUE;
+		nDebugCounter1 := nDebugCounter1 +1;
+
+	ELSIF stPackInFeedQueue.nIndex >  nPacksPerStack THEN
+
+		FOR nStackerIndex := 1 TO cMAX_PACK_INFEED_QUEUE DO
+			aStackerQueue[nStackerIndex].sPackCode := cCODE_OVERWIRTTEN;
+			aStackerQueue[nStackerIndex].nPackStatus	:=	1;
+			aStackerQueue[nStackerIndex].nPackRejectID:=  stPackRejectReasons.stPackCodesOverwritten.nRejectID;
+			aStackerQueue[nStackerIndex].sPackRejectCode := stPackRejectReasons.stPackCodesOverwritten.sMetsDisplayCode;
+		END_FOR
+
+		bOCVStackOutOfSequence		:= TRUE;
+		nDebugCounter2 := nDebugCounter2 + 1;
+	END_IF
+
+
+	sStackerDataLog	:= F_CONCAT3('AGG ITEM [', INT_TO_STRING(stPackInFeedQueue.nIndex), ']:');
+	FOR nLogIndex :=nPackInfeedOffset +1 TO nPacksPerStack + nPackInfeedOffset  DO
+		//sStackerDataLog :=F_LongCONCAT(sStackerDataLog, '   ');
+		//sStackerDataLog :=F_LongCONCAT(sStackerDataLog, RIGHT(F_CODE_GetItem(aStackerQueue[nLogIndex].sPackCode, eCodeAIType.SerialCode, stCodeInfo), 7));
+	
+		CONCAT2(ADR(sStackerDataLog), ADR('   '), ADR(sStackerDataLog), SIZEOF(sStackerDataLog));
+		
+		sAppendedString := RIGHT(F_CODE_GetItem(aStackerQueue[nLogIndex].sPackCode, eCodeAIType.SerialCode, stCodeInfo), 7);
+		CONCAT2(ADR(sStackerDataLog), ADR(sAppendedString), ADR(sStackerDataLog), SIZEOF(sStackerDataLog));
+	END_FOR
+
+
+	MEMSET(ADR(stPackInFeedQueue), 16#00, SIZEOF(stPackInFeedQueue));
+
+	bDone := TRUE;
+ELSE
+
+	bOCVStackOutOfSequence		:= FALSE;
+	bDone := FALSE;
+
+END_IF
+
+
+
+fbAddOffsetPack(CLK := stPackInFeedQueue.nIndex = nPackInfeedOffset);
+
+IF fbAddOffsetPack.Q THEN
+
+	nPackOffsetIndex := 1;
+
+	FOR nStackerIndex := nPackInfeedOffset TO 1 BY -1 DO
+		aStackerQueue[nStackerIndex]  	:= stPackInFeedQueue.aPackQueue[nPackOffsetIndex];
+		nPackOffsetIndex := nPackOffsetIndex + 1;
+	END_FOR
+
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

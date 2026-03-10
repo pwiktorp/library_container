@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="E_HMI_DriveStatus" Id="{30a76562-a2f9-4391-ad18-830ee7c84e54}">
+    <Declaration><![CDATA[TYPE E_HMI_DriveStatus :
+(
+	E_DRIVE_UNKNOWN := 0,
+	E_DRIVE_SPOPPED := 1,
+	E_DRIVE_RUNING := 2,
+	E_DRIVE_ERROR := 3
+);
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

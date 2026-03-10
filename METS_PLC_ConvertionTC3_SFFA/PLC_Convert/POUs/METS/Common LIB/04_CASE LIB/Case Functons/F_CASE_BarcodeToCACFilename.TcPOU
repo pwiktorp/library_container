@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
+  <POU Name="F_CASE_BarcodeToCACFilename" Id="{9c2213ba-6a5a-440d-bfe8-ae5a8fe4a641}" SpecialFunc="None">
+    <Declaration><![CDATA[(* generates CAC filename from Case Barcode *)
+FUNCTION F_CASE_BarcodeToCACFilename : T_CAC_Filename
+VAR_INPUT
+	sCaseBarcode					: T_CASE_Barcode;
+	stDateTime					: TIMESTRUCT;
+	bCaseRejectedByCasePacker	: BOOL;
+END_VAR
+(*VAR
+	strDecryptedDate	: STRING(8);
+END_VAR*)
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[sCaseBarcode	:= F_ReplaceSingleChar(sCaseBarcode, '\','');
+sCaseBarcode	:= F_ReplaceSingleChar(sCaseBarcode, '/','');
+sCaseBarcode	:= F_ReplaceSingleChar(sCaseBarcode, ':','');
+sCaseBarcode	:= F_ReplaceSingleChar(sCaseBarcode, '*','');
+sCaseBarcode	:= F_ReplaceSingleChar(sCaseBarcode, '?','');
+sCaseBarcode	:= F_ReplaceSingleChar(sCaseBarcode, '<','');
+sCaseBarcode	:= F_ReplaceSingleChar(sCaseBarcode, '>','');
+sCaseBarcode	:= F_ReplaceSingleChar(sCaseBarcode, '|','');
+
+IF sCaseBarcode <> '' AND NOT bCaseRejectedByCasePacker THEN
+	F_CASE_BarcodeToCACFilename := F_SCANNER_RemoveAIBrackets(sCaseBarcode);
+ELSIF bCaseRejectedByCasePacker THEN
+	F_CASE_BarcodeToCACFilename := F_CONCAT3(sCaseBarcode,'_', F_SYSTEM_SystemTimeToCHM_Header(stDateTime));
+ELSE
+	F_CASE_BarcodeToCACFilename := CONCAT('NOCASELABEL_', F_SYSTEM_SystemTimeToCHM_Header(stDateTime));
+END_IF
+]]></ST>
+    </Implementation>
+    <LineIds Name="F_CASE_BarcodeToCACFilename">
+      <LineId Id="12" Count="16" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

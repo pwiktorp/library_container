@@ -1,0 +1,261 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_T02_Add2PackToInfeedQ" Id="{7a8ab906-aeee-416e-9378-ddec7e123864}" SpecialFunc="None">
+    <Declaration><![CDATA[(* add strOuterBarcode to sInfeedQueue, will not be added if strOuterBarcode already exists *)
+FUNCTION_BLOCK FB_T02_Add2PackToInfeedQ
+VAR_INPUT
+	bExecute			: BOOL;		(* set TRUE to add Outer barcode to buffer *)
+	eCameraPosition			: E_PACK_FilledInStatus;
+	stImageData01				: ST_SCANNER_ImageData;	(* image data structure *)
+	stImageData02				: ST_SCANNER_ImageData;	(* image data structure *)
+
+	stCTDateTime				: ST_SYSTEM_DateTime;	(* CaseTrace date/time structure *)
+	bDotCodeFormat			: BOOL;
+	bQRCodeFormat			: BOOL;
+	bEnableCodeAdjustment	: BOOL;
+	bDuplicateCheck			: BOOL;
+
+	bSwapPacks										: BOOL := FALSE; (* Bottom pack assumed to be newest produced hence lower in index in Master List, swap if this is now true*)
+	bClearPackInfeedQue										: BOOL;
+
+END_VAR
+VAR_IN_OUT
+	stProductInstruction		: ST_PCM_Status;
+	stCodeInfo					: ST_CodeInfo;
+	stPackRejectReasons		: ST_RejectReasonsForPack;
+	stPackInFeedQueue		: ST_PACK_InfeedQueue;
+	stPackLinearStatusHMI		: ST_HMI_PLAS_Queue;
+END_VAR
+
+VAR_OUTPUT
+	bDone			: BOOL;		(* TRUE = complete *)
+
+	bPackCode01Exists		: BOOL;		(* TRUE = Outer barcode already present in queue *)
+	bPackCode02Exists		: BOOL;		(* TRUE = Outer barcode already present in queue *)
+	bPackCode01Added: BOOL;
+	bPackCode02Added : BOOL;
+	sPackAggLogData		: T_MaxString;
+END_VAR
+VAR
+	fbExecute				: R_TRIG;
+	eCodeAIType				: E_CodeAIType;
+	
+	nPackIndex			: INT;
+	aFillInPackData		: ARRAY[1..2] OF FB_PLAS_FillInPackData;
+	aPackQueue			: ARRAY[1..2] OF ST_PACK_Data; (* Infeed queue *)
+
+	nDiagonosticError1			: INT;
+	nDiagonosticError2			: INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+IF bClearPackInfeedQue THEN
+	MEMSET(ADR(stPackInFeedQueue.aPackQueue), 16#00, SIZEOF(stPackInFeedQueue.aPackQueue));
+END_IF
+
+(* add Outer to sInfeedQueue *)
+IF fbExecute.Q = TRUE THEN
+
+	(* reset outputs *)
+	bDone := FALSE;
+
+	bPackCode01Exists := FALSE;
+	bPackCode02Exists := FALSE;
+
+	bPackCode01Added := FALSE;
+	bPackCode02Added := FALSE;
+
+	sPackAggLogData	:= '';
+
+	MEMSET(ADR(aPackQueue), 16#00, SIZEOF(aPackQueue));
+
+(******************************************************************************************************************************************)
+	(* sOuterBarcode contains data and is different to last Outer barcode added to queue *)
+
+	aFillInPackData[1](
+		(*IN*)
+			eCameraPosition			:= eCameraPosition,
+			stImageData				:= stImageData01,
+			stCTDateTime				:= stCTDateTime,
+			nCodeReadIndex				:= 1,
+			bUseCameraTrigerID		:= TRUE,
+			bDotCodeFormat			:= bDotCodeFormat,
+			bQRCodeFormat			:= bQRCodeFormat,
+			bEnableCodeAdjustment	:= bEnableCodeAdjustment,
+		(*IN_OUT*)
+			stProductInstruction		:= stProductInstruction,
+			stCodeInfo_Pack			:= stCodeInfo,
+			stPackRejectReasons		:= stPackRejectReasons,
+			stPackData					:= aPackQueue[1]
+	);
+
+	(* InfeedQueue contains Outers *)
+	IF stPackInFeedQueue.nIndex > 0 AND bDuplicateCheck THEN
+
+		(* scan all Outers in stInfeedQueue *)
+		FOR nPackIndex := 1 TO stPackInFeedQueue.nIndex   DO
+
+			IF  stPackInFeedQueue.aPackQueue[nPackIndex].sPackCode = aPackQueue[1].sPackCode 	AND
+					stPackInFeedQueue.aPackQueue[nPackIndex].sPackCode <> ''						THEN
+
+				bPackCode01Exists := TRUE;
+
+				nDiagonosticError1 := nDiagonosticError1 + 1;
+				EXIT;
+			END_IF
+		END_FOR
+	END_IF
+
+(******************************************************************************************************************************************)
+
+		aFillInPackData[2](
+		(*IN*)
+			eCameraPosition			:= eCameraPosition,
+			stImageData				:= stImageData02,
+			stCTDateTime				:= stCTDateTime,
+			nCodeReadIndex				:= 1,
+			bUseCameraTrigerID		:= TRUE,
+			bDotCodeFormat			:= bDotCodeFormat,
+			bQRCodeFormat			:= bQRCodeFormat,
+			bEnableCodeAdjustment	:= bEnableCodeAdjustment,
+		(*IN_OUT*)
+			stProductInstruction		:= stProductInstruction,
+			stCodeInfo_Pack			:= stCodeInfo,
+			stPackRejectReasons		:= stPackRejectReasons,
+			stPackData					:= aPackQueue[2]
+	);
+	(* InfeedQueue contains Outers *)
+	IF stPackInFeedQueue.nIndex > 0 AND bDuplicateCheck THEN
+
+		(* scan all Outers in stInfeedQueue *)
+		FOR nPackIndex := 1 TO stPackInFeedQueue.nIndex   DO
+
+			IF  stPackInFeedQueue.aPackQueue[nPackIndex].sPackCode = aPackQueue[2].sPackCode 	AND
+					stPackInFeedQueue.aPackQueue[nPackIndex].sPackCode <> ''						THEN
+
+				bPackCode02Exists := TRUE;
+
+				nDiagonosticError2 := nDiagonosticError2 + 1;
+				EXIT;
+			END_IF
+		END_FOR
+	END_IF
+
+
+(******************************************************************************************************************************************)
+
+(* list of Outers in stInfeedQueue is full *)
+	IF stPackInFeedQueue.nIndex >= cMAX_PACK_INFEED_QUEUE -1 THEN
+
+		(* remove 1st Outer from sInfeedQueue and clear data for last Outer *)
+		MEMMOVE(ADR(stPackInFeedQueue.aPackQueue[1]), ADR(stPackInFeedQueue.aPackQueue[3]), SIZEOF(stPackInFeedQueue.aPackQueue) -2* SIZEOF(stPackInFeedQueue.aPackQueue[1]));
+		MEMSET(ADR(stPackInFeedQueue.aPackQueue[cMAX_PACK_INFEED_QUEUE -2]), 16#00, 2*SIZEOF(stPackInFeedQueue.aPackQueue[1]));
+
+		(* update stInfeedQueue pointer *)
+		stPackInFeedQueue.nIndex:= cMAX_PACK_INFEED_QUEUE - 2;
+	END_IF
+
+	(* increment stInfeedQueue pointer and add sOuterBarcode *)
+
+	stPackInFeedQueue.nIndex := LIMIT(0,stPackInFeedQueue.nIndex + 1,cMAX_PACK_INFEED_QUEUE);
+
+(******************************************************************************************************************************************)
+
+	IF NOT bPackCode01Exists  THEN
+		(*IF bSwapPacks THEN*)
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex] := aPackQueue[1];
+		(*ELSE
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex + 1] := aPackQueue[1];
+		END_IF*)
+
+		bPackCode01Added := TRUE;
+	ELSE
+		(*IF bSwapPacks THEN*)
+			(*MEMSET(ADR(stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex]), 16#00, SIZEOF(stPackInFeedQueue.aPackQueue[1]));*)
+		(*TOCHECK*)
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex] := aPackQueue[1];
+
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex].sPackCode 				:= F_CONCAT3( aPackQueue[1].sPackCode, '-DUP-', aPackQueue[1].sPackTimeStamp );
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex].ePackCodeFilledIn 		:= E_PACK_CODEOVERWRITTEN;
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex].nPackStatus			:= 1;
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex].sPackRejectCode		:= stPackRejectReasons.stPackCodesOverwritten.sMetsDisplayCode;
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex].nPackRejectID			:= stPackRejectReasons.stPackCodesOverwritten.nRejectID;
+
+
+		(*ELSE
+			MEMSET(ADR(stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex + 1]), 16#00, SIZEOF(stPackInFeedQueue.aPackQueue[1]));
+		END_IF*)
+	END_IF
+
+	sPackAggLogData := F_CONCAT5('AGG ADDED: ', RIGHT(F_CODE_GetItem(stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex].sPackCode, eCodeAIType.SerialCode, stCodeInfo), 7),
+																			' [POS:', INT_TO_STRING(stPackInFeedQueue.nIndex),'] - ');
+(******************************************************************************************************************************************)
+	IF NOT bPackCode02Exists  THEN
+		(*IF bSwapPacks THEN*)
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex + 1] := aPackQueue[2];
+		(*ELSE
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex] := aPackQueue[2];
+		END_IF*)
+
+		bPackCode02Added := TRUE;
+	ELSE
+		(*IF bSwapPacks THEN*)
+			(*MEMSET(ADR(stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex+ 1]), 16#00, SIZEOF(stPackInFeedQueue.aPackQueue[1]));*)
+	(*TOCHECK*)
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex + 1] := aPackQueue[2];
+
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex + 1].sPackCode 			:= F_CONCAT3( aPackQueue[2].sPackCode, '-DUP-', aPackQueue[2].sPackTimeStamp );
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex + 1].ePackCodeFilledIn 		:= E_PACK_CODEOVERWRITTEN;
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex + 1].nPackStatus			:= 1;
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex + 1].sPackRejectCode		:= stPackRejectReasons.stPackCodesOverwritten.sMetsDisplayCode;
+			stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex + 1].nPackRejectID			:= stPackRejectReasons.stPackCodesOverwritten.nRejectID;
+		(*ELSE
+			MEMSET(ADR(stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex]), 16#00, SIZEOF(stPackInFeedQueue.aPackQueue[1]));
+		END_IF*)
+	END_IF
+
+	sPackAggLogData := F_CONCAT5(sPackAggLogData, RIGHT(F_CODE_GetItem(stPackInFeedQueue.aPackQueue[stPackInFeedQueue.nIndex + 1].sPackCode, eCodeAIType.SerialCode, stCodeInfo), 7),
+																		 ' [POS:', INT_TO_STRING(stPackInFeedQueue.nIndex + 1),']');
+(******************************************************************************************************************************************)
+
+	stPackInFeedQueue.nIndex := LIMIT(0,stPackInFeedQueue.nIndex + 1,cMAX_PACK_INFEED_QUEUE);
+
+	bDone := TRUE;
+
+(* bExecute has been reset *)
+ELSIF bExecute = FALSE THEN
+
+	(* reset outputs *)
+	bDone := FALSE;
+
+END_IF
+
+(******************************************************************************************************************************************)
+	(*Update PACK HMI Status*)
+	stPackLinearStatusHMI.nInfeedIndex := stPackInFeedQueue.nIndex;
+
+	FOR nPackIndex := 1 TO MIN(stPackInFeedQueue.nIndex ,cMAX_PACKS_PER_OUTER) BY 1 DO
+
+		IF stPackInFeedQueue.aPackQueue[nPackIndex].sPackRejectCode = 'OK' THEN
+
+			stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex]:= F_CONCAT3(stPackInFeedQueue.aPackQueue[nPackIndex].sPackCode,'(999)','1');
+
+			IF stPackInFeedQueue.aPackQueue[nPackIndex].ePackCodeFilledIn = E_PACK_PRIMARYMASTERLISTRESTORED  THEN
+
+				stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex] := CONCAT(stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex],'1');
+			ELSE
+				stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex] := CONCAT(stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex],'0');
+			END_IF
+		ELSE
+			IF stPackInFeedQueue.aPackQueue[nPackIndex].sPackCode = '' THEN
+				stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex]:= 'NOK(999)00';
+			ELSE
+				stPackLinearStatusHMI.aPackInfeedQueue[nPackIndex]:= F_CONCAT3(stPackInFeedQueue.aPackQueue[nPackIndex].sPackCode,'(999)','00');
+			END_IF
+		END_IF
+	END_FOR]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>
