@@ -1,7 +1,0 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.15">
-  <DUT Name="T_CAC_Filename" Id="{75a0a9d8-d187-4638-8390-6c6705edac90}">
-    <Declaration><![CDATA[TYPE T_CAC_Filename : T_MaxString;
-END_TYPE]]></Declaration>
-  </DUT>
-</TcPlcObject>
