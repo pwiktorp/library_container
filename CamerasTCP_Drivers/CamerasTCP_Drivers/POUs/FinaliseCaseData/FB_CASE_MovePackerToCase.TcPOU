@@ -1,0 +1,87 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_CASE_MovePackerToCase" Id="{0ff4ce38-46e9-4025-ab36-d0f070304276}" SpecialFunc="None">
+    <Declaration><![CDATA[(* move Outers up to and including strOuterBarcode from aPackerQueue  to stCACData *)
+FUNCTION_BLOCK FB_CASE_MovePackerToCase
+VAR_INPUT
+	bExecute 				: BOOL;		(* set TRUE to move Outers *)
+	stDoorGuardReject		: ST_RejectItems;
+END_VAR
+VAR_IN_OUT
+	stProductInstruction	: ST_PCM_Status;
+	aPackerQueue			: ARRAY [0..1] OF ST_CASE_InfeedQueue;
+	stCACData 				: ST_CAC_Data;	(* Case Queue *)
+END_VAR
+VAR_OUTPUT
+	bDone 					: BOOL;		(* TRUE = complete *)
+	bDoorReject				: BOOL;
+	nNumberOfOuters			: INT;
+	sFirstBarcodeInCase		: T_OUTER_Barcode;
+	sLastBarcodeInCase		: T_OUTER_Barcode;
+END_VAR
+VAR
+	fbExecute				: R_TRIG;
+	nOuterIndex				: INT;
+
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* rising edge of bExecute *)
+fbExecute(CLK:= bExecute);
+
+(* move CaseData *)
+IF fbExecute.Q = TRUE THEN
+
+	//nMaxOuterIndex := UDINT_TO_INT(SIZEOF(stCaseQueue.aCACData[1].Outer) / SIZEOF(stCaseQueue.aCACData[1].Outer[1]));
+
+	(* clear data *)
+	bDoorReject	:= FALSE;
+	MEMSET(ADR(stCACData.Outer), 16#00, SIZEOF(stCACData.Outer));
+
+	stCACData.NumberOfOuters:= aPackerQueue[0].nIndex + aPackerQueue[1].nIndex;
+
+	IF stCACData.NumberOfOuters <= cMAX_OUTERS_PER_CASE THEN
+	(* shift specified*)
+		MEMMOVE(ADR(stCACData.Outer[1]), ADR(aPackerQueue[1].aOuter), SIZEOF(aPackerQueue[1].aOuter[1]) * F_SafeTo_UDINT(aPackerQueue[1].nIndex));
+		MEMMOVE(ADR(stCACData.Outer[aPackerQueue[1].nIndex + 1]), ADR(aPackerQueue[0].aOuter), SIZEOF(aPackerQueue[0].aOuter[1]) * F_SafeTo_UDINT(aPackerQueue[0].nIndex));
+
+		nNumberOfOuters	:= 	stCACData.NumberOfOuters;
+		sFirstBarcodeInCase	:=	stCACData.Outer[1].Barcode;
+		sLastBarcodeInCase 	:=	stCACData.Outer[nNumberOfOuters].Barcode;
+		
+		IF stCACData.NumberOfOuters = stProductInstruction.nOutersPerCase THEN
+			FOR nOuterIndex := 1 TO stCACData.NumberOfOuters DO
+				IF stCACData.Outer[nOuterIndex].OuterCodeStatus.5 THEN
+					stCACData.NumberOfOuters := -3;		//b5		Outer Code - Val Index error found
+				END_IF
+			END_FOR
+		END_IF
+		
+	ELSE
+		stCACData.NumberOfOuters := -1;			// Outers number exceed cMAX_OUTERS_PER_CASE 
+
+		nNumberOfOuters	:= 	stCACData.NumberOfOuters;
+		sFirstBarcodeInCase	:=	'';
+		sLastBarcodeInCase 	:=	'';
+	END_IF
+
+	IF aPackerQueue[0].bDoorReject OR aPackerQueue[1].bDoorReject THEN
+		
+		stCACData.CaseRejectCode := stDoorGuardReject.sMetsDisplayCode;
+		stCACData.CaseRejectID := stDoorGuardReject.nRejectID;
+		bDoorReject	:= TRUE;
+	END_IF
+
+	(* clear data *)
+	MEMSET(ADR(aPackerQueue), 16#00, SIZEOF(aPackerQueue));
+	
+	bDone := TRUE;
+
+(* bExecute has been reset *)
+ELSIF bExecute = FALSE THEN
+	bDone := FALSE;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_TimersTEST" Id="{170a98dc-72aa-41ee-b056-1f311026d0ec}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_TimersTEST
+VAR_INPUT
+	bStartTON	: BOOL;
+	bStartTOF	: BOOL;
+	tTime		: TIME;
+END_VAR
+
+VAR_IN_OUT	
+	tTON			: TON;
+	tTOF			: TOF;
+END_VAR
+
+VAR_OUTPUT
+	tTON_Q		: BOOL;
+	tTOF_Q		: BOOL;
+END_VAR
+VAR
+	tPTton			: TIME;
+	tPTtof			: TIME;
+	
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+tPTtof := tTime;
+tPTton := tTime;
+
+tTON(IN := bStartTON, PT := tPTton, Q => tTON_Q);
+tTOF(IN := bStartTOF, PT := tPTtof, Q => tTOF_Q);
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

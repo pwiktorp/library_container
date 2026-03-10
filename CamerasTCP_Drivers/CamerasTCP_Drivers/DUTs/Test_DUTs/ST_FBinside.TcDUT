@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_FBinside" Id="{6c698f2a-4604-4f17-8603-5c59f16dbb7b}">
+    <Declaration><![CDATA[TYPE ST_FBinside :
+STRUCT
+	aTONs		: ARRAY[1..10] OF TON;
+	aTOFs		: ARRAY[1..10] OF TOF;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

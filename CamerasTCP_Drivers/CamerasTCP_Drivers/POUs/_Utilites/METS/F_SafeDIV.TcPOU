@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_SafeDIV" Id="{c3155e39-92b7-40fb-ad66-5ceabc992fea}" SpecialFunc="None">
+    <Declaration><![CDATA[(* F_SafeDiv prevents PLC crash with DIV0 error by pre-checking that the denominator <> 0 *)
+(* Value of 0 is returned if denominator = 0 *)
+FUNCTION F_SafeDIV : LREAL
+VAR_INPUT
+	fNumerator		: LREAL;
+	fDenominator	: LREAL;
+END_VAR
+(*
+-------------------------------------------------------------------------------------------------
+Date		Version	Author	Comments
+-------------------------------------------------------------------------------------------------
+30/01/2015	3.00.00	PB		LREAL now used in place of REAL
+
+-------------------------------------------------------------------------------------------------
+05/02/10	1.00.00	PB		Initial release
+
+-------------------------------------------------------------------------------------------------
+*)
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(* do not perform DIV if Denominator = 0 *)
+IF fDenominator = 0 THEN
+
+	F_SafeDIV := 0;
+
+(* safe to perform DIV *)
+ELSE
+
+	F_SafeDIV := fNumerator / fDenominator;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

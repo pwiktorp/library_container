@@ -1,0 +1,654 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_GS1_ValidateExplicitCode" Id="{e64bcaeb-a4f2-4c3e-8531-7dc6c7211b5a}" SpecialFunc="None">
+    <Declaration><![CDATA[ FUNCTION_BLOCK FB_GS1_ValidateExplicitCode
+VAR_INPUT
+	sFullCode					: T_MaxString;
+	stCodeInfo				: ST_GS1_CodeInfo;
+	stGS1_AI_Definition			: ST_GS1_AI_Definition;
+END_VAR
+VAR_OUTPUT
+	bValidationOK				: BOOL;
+	bEntireCodeLengthOK		: BOOL;
+
+	(*bGS1_01_OK	: BOOL;
+	bGS1_10_OK	: BOOL;
+	bGS1_11_OK	: BOOL;
+	bGS1_15_OK	: BOOL;
+	bGS1_17_OK	: BOOL;
+	bGS1_21_OK	: BOOL;
+	bGS1_91_OK	: BOOL;
+	bGS1_92_OK	: BOOL;
+	bGS1_93_OK	: BOOL;
+	bGS1_94_OK	: BOOL;
+	bGS1_240_OK	: BOOL;
+	bGS1_8005_OK	: BOOL;
+
+	(*Fixed string lenght according to max string lenght form GS1*)
+	sGS1_01		:STRING(14);
+	sGS1_10		:STRING(20);
+	sGS1_11		:STRING(6);
+	sGS1_15		:STRING(6);
+	sGS1_17		:STRING(6);
+	sGS1_21		:STRING(21);
+	sGS1_91		:STRING(90);
+	sGS1_92		:STRING(90);
+	sGS1_93		:STRING(90);
+	sGS1_94		:STRING(90);
+	sGS1_240		:STRING(30);
+	sGS1_8005	:STRING(6);*)
+
+END_VAR
+VAR
+	stItem			: ST_GS1_CodeValidation;
+	nItemIndex		: INT;
+
+	sAI_01ToValidateAgainst		: STRING(14);
+
+	bGS1_01_OK	: BOOL;
+	bGS1_10_OK	: BOOL;
+	bGS1_11_OK	: BOOL;
+	bGS1_15_OK	: BOOL;
+	bGS1_17_OK	: BOOL;
+	bGS1_21_OK	: BOOL;
+	bGS1_240_OK	: BOOL;
+	bGS1_8005_OK	: BOOL;
+	bGS1_8006_OK	: BOOL;
+	bGS1_8008_OK	: BOOL;
+	bGS1_91_OK	: BOOL;
+	bGS1_92_OK	: BOOL;
+	bGS1_93_OK	: BOOL;
+	bGS1_94_OK	: BOOL;
+
+	bNON_GS1_01_OK	: BOOL;
+	bNON_GS1_02_OK	: BOOL;
+	bNON_GS1_03_OK	: BOOL;
+	bNON_GS1_04_OK	: BOOL;
+	bNON_GS1_05_OK	: BOOL;
+	bNON_GS1_06_OK	: BOOL;
+	bNON_GS1_07_OK	: BOOL;
+	bNON_GS1_08_OK	: BOOL;
+	bNON_GS1_09_OK	: BOOL;
+	bNON_GS1_10_OK	: BOOL;
+
+	(*Fixed string lenght according to max string lenght form GS1*)
+	sGS1_01		:STRING(14);
+	sGS1_10		:STRING(20);
+	sGS1_11		:STRING(6);
+	sGS1_15		:STRING(6);
+	sGS1_17		:STRING(6);
+	sGS1_21		:STRING(20);
+	sGS1_240		:STRING(30);
+	sGS1_8005	:STRING(6);
+	sGS1_8006	:STRING(18);
+	sGS1_8008	:STRING(12);
+	sGS1_91		:STRING(90);
+	sGS1_92		:STRING(90);
+	sGS1_93		:STRING(90);
+	sGS1_94		:STRING(90);
+
+	sNON_GS1_01		:STRING(255);
+	sNON_GS1_02		:STRING(255);
+	sNON_GS1_03		:STRING(255);
+	sNON_GS1_04		:STRING(255);
+	sNON_GS1_05		:STRING(255);
+	sNON_GS1_06		:STRING(255);
+	sNON_GS1_07		:STRING(255);
+	sNON_GS1_08		:STRING(255);
+	sNON_GS1_09		:STRING(255);
+	sNON_GS1_10		:STRING(255);
+
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF	stCodeInfo.nEntireLength = 0 THEN
+	bEntireCodeLengthOK := FALSE;
+	RETURN;
+ELSIF	stCodeInfo.nEntireLength = stCodeInfo.nMinLength THEN
+	bEntireCodeLengthOK := (LEN(sFullCode) = stCodeInfo.nEntireLength) OR NOT stCodeInfo.bValidateEntireLength;
+ELSE
+	bEntireCodeLengthOK := (LEN(sFullCode) >= stCodeInfo.nMinLength  AND   LEN(sFullCode) <= stCodeInfo.nEntireLength) OR NOT stCodeInfo.bValidateEntireLength;
+END_IF
+
+CASE stCodeInfo.eCodeLvlType OF
+
+	E_LEVEL1:
+		sAI_01ToValidateAgainst := stGS1_AI_Definition.stAI_01_Lvl1.sDataField;
+	E_LEVEL2:
+		sAI_01ToValidateAgainst := stGS1_AI_Definition.stAI_01_Lvl2.sDataField;
+	E_LEVEL3:
+		sAI_01ToValidateAgainst := stGS1_AI_Definition.stAI_01_Lvl3.sDataField;
+ELSE
+		sAI_01ToValidateAgainst := '';
+END_CASE
+
+sGS1_01		:='';
+sGS1_10		:='';
+sGS1_11		:='';
+sGS1_15		:='';
+sGS1_17		:='';
+sGS1_21		:='';
+sGS1_91		:='';
+sGS1_92		:='';
+sGS1_93		:='';
+sGS1_94		:='';
+sGS1_240		:='';
+sGS1_8005	:='';
+
+(*********************** GS1_01**************************************)
+bGS1_01_OK := FALSE;
+sGS1_01 := F_GS1_GetItem(sFullCode, GS1_01, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_01 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sGS1_01) =  stItem.nCodeLength OR stItem.nCodeLength = 0)  AND  (sGS1_01 = sAI_01ToValidateAgainst OR sAI_01ToValidateAgainst = '') THEN
+				bGS1_01_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_01_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_10**************************************)
+bGS1_10_OK := FALSE;
+sGS1_10 := F_GS1_GetItem(sFullCode, GS1_10, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_10 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sGS1_10) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND ( sGS1_10 =  stGS1_AI_Definition.stAI_10.sDataField OR stGS1_AI_Definition.stAI_10.sDataField = '') THEN
+				bGS1_10_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_10_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_11**************************************)
+bGS1_11_OK := FALSE;
+sGS1_11 := F_GS1_GetItem(sFullCode, GS1_11, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_11 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sGS1_11) = stItem.nCodeLength OR stItem.nCodeLength = 0)  AND  ( sGS1_11 =  stGS1_AI_Definition.stAI_11.sDataField OR stGS1_AI_Definition.stAI_11.sDataField = '')  THEN
+				bGS1_11_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_11_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_15**************************************)
+bGS1_15_OK := FALSE;
+sGS1_15 := F_GS1_GetItem(sFullCode, GS1_15, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_15 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF( LEN(sGS1_15) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sGS1_15 =  stGS1_AI_Definition.stAI_15.sDataField OR stGS1_AI_Definition.stAI_15.sDataField = '')  THEN
+				bGS1_15_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_15_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_17**************************************)
+bGS1_17_OK := FALSE;
+sGS1_17 := F_GS1_GetItem(sFullCode, GS1_17, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_17 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF( LEN(sGS1_17) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sGS1_17 =  stGS1_AI_Definition.stAI_17.sDataField OR stGS1_AI_Definition.stAI_17.sDataField = '')  THEN
+				bGS1_17_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_17_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_21**************************************)
+bGS1_21_OK := FALSE;
+sGS1_21 := F_GS1_GetItem(sFullCode, GS1_21, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_21 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF( LEN(sGS1_21) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sGS1_21 =  stGS1_AI_Definition.stAI_21.sDataField OR stGS1_AI_Definition.stAI_21.sDataField = '')THEN
+				bGS1_21_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_21_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_240**************************************)
+bGS1_240_OK := FALSE;
+sGS1_240 := F_GS1_GetItem(sFullCode, GS1_240, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_240 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sGS1_240) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sGS1_240 =  stGS1_AI_Definition.stAI_240.sDataField OR stGS1_AI_Definition.stAI_240.sDataField = '') THEN
+				bGS1_240_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_240_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_8005************************************)
+bGS1_8005_OK := FALSE;
+sGS1_8005 := F_GS1_GetItem(sFullCode, GS1_8005, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_8005 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sGS1_8005) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sGS1_8005 =  stGS1_AI_Definition.stAI_8005.sDataField OR stGS1_AI_Definition.stAI_8005.sDataField = '') THEN
+				bGS1_8005_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_8005_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_8006************************************)
+bGS1_8006_OK := FALSE;
+sGS1_8006 := F_GS1_GetItem(sFullCode, GS1_8006, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_8006 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sGS1_8006) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sGS1_8006 =  stGS1_AI_Definition.stAI_8006.sDataField OR stGS1_AI_Definition.stAI_8006.sDataField = '') THEN
+				bGS1_8006_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_8006_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_8008************************************)
+bGS1_8008_OK := FALSE;
+sGS1_8008 := F_GS1_GetItem(sFullCode, GS1_8008, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_8008 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sGS1_8008) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sGS1_8008 =  stGS1_AI_Definition.stAI_8008.sDataField OR stGS1_AI_Definition.stAI_8008.sDataField = '') THEN
+				bGS1_8008_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_8008_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_91**************************************)
+bGS1_91_OK := FALSE;
+sGS1_91 := F_GS1_GetItem(sFullCode, GS1_91, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_91 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sGS1_91) = stItem.nCodeLength OR stItem.nCodeLength = 0)  AND  ( sGS1_91 =  stGS1_AI_Definition.stAI_91.sDataField OR stGS1_AI_Definition.stAI_91.sDataField = '') THEN
+				bGS1_91_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_91_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_92**************************************)
+bGS1_92_OK := FALSE;
+sGS1_92 := F_GS1_GetItem(sFullCode, GS1_92, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_92 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sGS1_92) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND   ( sGS1_92 =  stGS1_AI_Definition.stAI_92.sDataField OR stGS1_AI_Definition.stAI_92.sDataField = '') THEN
+				bGS1_92_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_92_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_93**************************************)
+bGS1_93_OK := FALSE;
+sGS1_93 := F_GS1_GetItem(sFullCode, GS1_93, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_93 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sGS1_93) = stItem.nCodeLength OR stItem.nCodeLength = 0)  AND  ( sGS1_93 =  stGS1_AI_Definition.stAI_93.sDataField OR stGS1_AI_Definition.stAI_93.sDataField = '') THEN
+				bGS1_93_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_93_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** GS1_94**************************************)
+bGS1_94_OK := FALSE;
+sGS1_94 := F_GS1_GetItem(sFullCode, GS1_94, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  GS1_94 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sGS1_94) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sGS1_94 =  stGS1_AI_Definition.stAI_94.sDataField OR stGS1_AI_Definition.stAI_94.sDataField = '') THEN
+				bGS1_94_OK := TRUE;
+			END_IF
+		ELSE
+			bGS1_94_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+
+(*********************** NON_GS1_01**************************************)
+bNON_GS1_01_OK := FALSE;
+sNON_GS1_01 := F_GS1_GetItem(sFullCode, NON_GS1_01, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  NON_GS1_01 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sNON_GS1_01) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sNON_GS1_01 =  stGS1_AI_Definition.stNON_GS1_01.sDataField OR stGS1_AI_Definition.stNON_GS1_01.sDataField = '') THEN
+				bNON_GS1_01_OK := TRUE;
+			END_IF
+		ELSE
+			bNON_GS1_01_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** NON_GS1_02**************************************)
+bNON_GS1_02_OK := FALSE;
+sNON_GS1_02 := F_GS1_GetItem(sFullCode, NON_GS1_02, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  NON_GS1_02 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sNON_GS1_02) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sNON_GS1_02 =  stGS1_AI_Definition.stNON_GS1_02.sDataField OR stGS1_AI_Definition.stNON_GS1_02.sDataField = '') THEN
+				bNON_GS1_02_OK := TRUE;
+			END_IF
+		ELSE
+			bNON_GS1_02_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** NON_GS1_03**************************************)
+bNON_GS1_03_OK := FALSE;
+sNON_GS1_03 := F_GS1_GetItem(sFullCode, NON_GS1_03, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  NON_GS1_03 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sNON_GS1_03) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sNON_GS1_03 =  stGS1_AI_Definition.stNON_GS1_03.sDataField OR stGS1_AI_Definition.stNON_GS1_03.sDataField = '') THEN
+				bNON_GS1_03_OK := TRUE;
+			END_IF
+		ELSE
+			bNON_GS1_03_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** NON_GS1_04**************************************)
+bNON_GS1_04_OK := FALSE;
+sNON_GS1_04 := F_GS1_GetItem(sFullCode, NON_GS1_04, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  NON_GS1_04 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sNON_GS1_04) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sNON_GS1_04 =  stGS1_AI_Definition.stNON_GS1_04.sDataField OR stGS1_AI_Definition.stNON_GS1_04.sDataField = '') THEN
+				bNON_GS1_04_OK := TRUE;
+			END_IF
+		ELSE
+			bNON_GS1_04_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** NON_GS1_05**************************************)
+bNON_GS1_05_OK := FALSE;
+sNON_GS1_05 := F_GS1_GetItem(sFullCode, NON_GS1_05, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  NON_GS1_05 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sNON_GS1_05) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sNON_GS1_05 =  stGS1_AI_Definition.stNON_GS1_05.sDataField OR stGS1_AI_Definition.stNON_GS1_05.sDataField = '') THEN
+				bNON_GS1_05_OK := TRUE;
+			END_IF
+		ELSE
+			bNON_GS1_05_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** NON_GS1_06**************************************)
+bNON_GS1_06_OK := FALSE;
+sNON_GS1_06 := F_GS1_GetItem(sFullCode, NON_GS1_06, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  NON_GS1_06 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sNON_GS1_06) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sNON_GS1_06 =  stGS1_AI_Definition.stNON_GS1_06.sDataField OR stGS1_AI_Definition.stNON_GS1_06.sDataField = '') THEN
+				bNON_GS1_06_OK := TRUE;
+			END_IF
+		ELSE
+			bNON_GS1_06_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** NON_GS1_07**************************************)
+bNON_GS1_07_OK := FALSE;
+sNON_GS1_07 := F_GS1_GetItem(sFullCode, NON_GS1_07, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  NON_GS1_07 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sNON_GS1_07) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sNON_GS1_07 =  stGS1_AI_Definition.stNON_GS1_07.sDataField OR stGS1_AI_Definition.stNON_GS1_07.sDataField = '') THEN
+				bNON_GS1_07_OK := TRUE;
+			END_IF
+		ELSE
+			bNON_GS1_07_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** NON_GS1_08**************************************)
+bNON_GS1_08_OK := FALSE;
+sNON_GS1_08 := F_GS1_GetItem(sFullCode, NON_GS1_08, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  NON_GS1_08 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sNON_GS1_08) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sNON_GS1_08 =  stGS1_AI_Definition.stNON_GS1_08.sDataField OR stGS1_AI_Definition.stNON_GS1_08.sDataField = '') THEN
+				bNON_GS1_08_OK := TRUE;
+			END_IF
+		ELSE
+			bNON_GS1_08_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** NON_GS1_09**************************************)
+bNON_GS1_09_OK := FALSE;
+sNON_GS1_09 := F_GS1_GetItem(sFullCode, NON_GS1_09, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  NON_GS1_09 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sNON_GS1_09) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sNON_GS1_09 =  stGS1_AI_Definition.stNON_GS1_09.sDataField OR stGS1_AI_Definition.stNON_GS1_09.sDataField = '') THEN
+				bNON_GS1_09_OK := TRUE;
+			END_IF
+		ELSE
+			bNON_GS1_09_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+(*********************** NON_GS1_10**************************************)
+bNON_GS1_10_OK := FALSE;
+sNON_GS1_10 := F_GS1_GetItem(sFullCode, NON_GS1_10, stCodeInfo);
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	IF stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType =  NON_GS1_10 THEN
+		stItem := stCodeInfo.stGS1_Field[nItemIndex];
+		IF stItem.bValidate THEN
+			IF (LEN(sNON_GS1_10) = stItem.nCodeLength OR stItem.nCodeLength = 0) AND  ( sNON_GS1_10 =  stGS1_AI_Definition.stNON_GS1_10.sDataField OR stGS1_AI_Definition.stNON_GS1_10.sDataField = '') THEN
+				bNON_GS1_10_OK := TRUE;
+			END_IF
+		ELSE
+			bNON_GS1_10_OK := TRUE;
+		END_IF
+		EXIT;
+	END_IF
+END_FOR
+
+(*********************** ********************************************)
+
+
+bValidationOK	:= bEntireCodeLengthOK;
+
+FOR nItemIndex :=1 TO cMAX_VALIDATION_ITEMS DO
+	CASE stCodeInfo.stGS1_Field[nItemIndex].eGS1_AIType OF
+	GS1_01:
+		bValidationOK := bValidationOK AND bGS1_01_OK;
+	GS1_10:
+		bValidationOK := bValidationOK AND bGS1_10_OK;
+	GS1_11:
+		bValidationOK := bValidationOK AND bGS1_11_OK;
+	GS1_15:
+		bValidationOK := bValidationOK AND bGS1_15_OK;
+	GS1_17:
+		bValidationOK := bValidationOK AND bGS1_17_OK;
+	GS1_21:
+		bValidationOK := bValidationOK AND bGS1_21_OK;
+	GS1_240:
+		bValidationOK := bValidationOK AND bGS1_240_OK;
+	GS1_8005:
+		bValidationOK := bValidationOK AND bGS1_8005_OK;
+	GS1_8006:
+		bValidationOK := bValidationOK AND bGS1_8006_OK;
+	GS1_8008:
+		bValidationOK := bValidationOK AND bGS1_8008_OK;
+	GS1_91:
+		bValidationOK := bValidationOK AND bGS1_91_OK;
+	GS1_92:
+		bValidationOK := bValidationOK AND bGS1_92_OK;
+	GS1_93:
+		bValidationOK := bValidationOK AND bGS1_93_OK;
+	GS1_94:
+		bValidationOK := bValidationOK AND bGS1_94_OK;
+	NON_GS1_01:
+		bValidationOK := bValidationOK AND bNON_GS1_01_OK;
+	NON_GS1_02:
+		bValidationOK := bValidationOK AND bNON_GS1_02_OK;
+	NON_GS1_03:
+		bValidationOK := bValidationOK AND bNON_GS1_03_OK;
+	NON_GS1_04:
+		bValidationOK := bValidationOK AND bNON_GS1_04_OK;
+	NON_GS1_05:
+		bValidationOK := bValidationOK AND bNON_GS1_05_OK;
+	NON_GS1_06:
+		bValidationOK := bValidationOK AND bNON_GS1_06_OK;
+	NON_GS1_07:
+		bValidationOK := bValidationOK AND bNON_GS1_07_OK;
+	NON_GS1_08:
+		bValidationOK := bValidationOK AND bNON_GS1_08_OK;
+	NON_GS1_09:
+		bValidationOK := bValidationOK AND bNON_GS1_09_OK;
+	NON_GS1_10:
+		bValidationOK := bValidationOK AND bNON_GS1_10_OK;
+	END_CASE
+END_FOR]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

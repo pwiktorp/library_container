@@ -1312,9 +1312,6 @@
     <Compile Include="POUs\_Utilites\METS\F_InvalidateASCIIChar.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="POUs\_Utilites\METS\F_ReplaceSingleChar.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="POUs\_Utilites\METS\F_SafeDIV.TcPOU">
       <SubType>Code</SubType>
     </Compile>

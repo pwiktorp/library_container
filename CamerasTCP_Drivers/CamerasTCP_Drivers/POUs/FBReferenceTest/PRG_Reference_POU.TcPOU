@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="PRG_Reference_POU" Id="{79c550d0-418d-4bc2-9d62-dc1d499218cc}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM PRG_Reference_POU
+VAR
+	
+	fbTimersTEST	: FB_TimersTEST;
+	
+	tTON_Q			: BOOL;
+	tTOF_Q			: BOOL;
+	
+	tTimer			: TIME := T#4S;
+	
+	bStartTON		: BOOL;
+	bStartTOF		: BOOL;
+	
+	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+fbTimersTEST(
+	bStartTON:= bStartTON, 
+	bStartTOF:= bStartTOF, 
+	tTime:= tTimer, 
+	tTON:= GVL_test.stFBinside.aTONs[1],
+	tTOF:= GVL_test.stFBinside.aTOFs[1],
+	tTON_Q=> tTON_Q, 
+	tTOF_Q=> tTOF_Q
+);
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>
