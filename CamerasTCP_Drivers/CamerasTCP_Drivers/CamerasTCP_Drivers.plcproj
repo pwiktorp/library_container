@@ -1297,9 +1297,6 @@
     <Compile Include="POUs\_Utilites\METS\F_CASE_GetSKUFromHex.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="POUs\_Utilites\METS\F_CodeToHex.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="POUs\_Utilites\METS\F_CODE_BATSerializator.TcPOU">
       <SubType>Code</SubType>
     </Compile>
